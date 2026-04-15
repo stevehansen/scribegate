@@ -58,7 +58,8 @@ export class SgFileTree extends LitElement {
 
   private _renderNode(node: TreeNode): unknown {
     if (node.path) {
-      return html`<li class="file"><a href="/${this.repoSlug}/${node.path}">${node.name}</a></li>`;
+      const urlPath = node.path.replace(/\.md$/, '');
+      return html`<li class="file"><a href="/${this.repoSlug}/${urlPath}">${node.name}</a></li>`;
     }
     return html`
       <li class="folder">

@@ -100,7 +100,7 @@ export class SgEditorPage extends LitElement {
           this._content,
           this._message || 'Initial content',
         );
-        window.location.href = `/${this._slug}/${doc.path}`;
+        window.location.href = `/${this._slug}/${doc.path.replace(/\.md$/, '')}`;
       } else {
         await docApi.update(
           this._slug,
@@ -108,7 +108,7 @@ export class SgEditorPage extends LitElement {
           this._content,
           this._message || 'Update content',
         );
-        window.location.href = `/${this._slug}/${this._path}`;
+        window.location.href = `/${this._slug}/${this._path.replace(/\.md$/, '')}`;
       }
     } catch (err) {
       this._error = err instanceof ApiException

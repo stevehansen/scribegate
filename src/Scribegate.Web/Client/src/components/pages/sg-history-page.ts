@@ -76,7 +76,7 @@ export class SgHistoryPage extends LitElement {
         path=${this._path}
       ></sg-breadcrumb>
 
-      <a class="back" href="/${this._slug}/${this._path}">Back to document</a>
+      <a class="back" href="/${this._slug}/${this._path.replace(/\.md$/, '')}">Back to document</a>
       <h1>History: ${this._path}</h1>
 
       ${this._revisions.length === 0

@@ -77,9 +77,9 @@ export class SgDocumentPage extends LitElement {
       <div class="meta">
         ${this._doc.updatedAt ? html`Updated <sg-time-ago datetime=${this._doc.updatedAt}></sg-time-ago>` : ''}
         ${authState.isAuthenticated
-          ? html`<a href="/${this._slug}/edit/${this._doc.path}">Edit</a>`
+          ? html`<a href="/${this._slug}/edit/${this._doc.path.replace(/\.md$/, '')}">Edit</a>`
           : ''}
-        <a href="/${this._slug}/history/${this._doc.path}">History</a>
+        <a href="/${this._slug}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
       </div>
 
       <div class="content">

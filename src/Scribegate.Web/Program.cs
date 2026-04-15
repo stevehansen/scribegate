@@ -111,6 +111,28 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
 }
 
+// SPA fallback: intercept 404s for non-API paths and serve index.html
+// Must be early in the pipeline to wrap the response
+app.Use(async (context, next) =>
+{
+    await next();
+
+    if (context.Response.StatusCode == 404
+        && !context.Response.HasStarted
+        && !context.Request.Path.StartsWithSegments("/api")
+        && !context.Request.Path.StartsWithSegments("/healthz")
+        && !context.Request.Path.StartsWithSegments("/swagger"))
+    {
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "text/html";
+        var indexPath = Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "index.html");
+        if (File.Exists(indexPath))
+        {
+            await context.Response.SendFileAsync(indexPath);
+        }
+    }
+});
+
 // Swagger UI
 app.UseSwagger();
 app.UseSwaggerUI(options =>
@@ -118,6 +140,9 @@ app.UseSwaggerUI(options =>
     options.SwaggerEndpoint("/swagger/v1/swagger.json", "Scribegate API v1");
     options.RoutePrefix = "swagger";
 });
+
+// Static files
+app.UseStaticFiles();
 
 // Auth middleware
 app.UseAuthentication();
@@ -131,9 +156,5 @@ app.MapAuthEndpoints();
 app.MapRepositoryEndpoints();
 app.MapDocumentEndpoints();
 app.MapRevisionRoutes();
-
-// Static files and SPA fallback
-app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
 
 app.Run();
