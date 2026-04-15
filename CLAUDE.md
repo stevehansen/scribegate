@@ -106,7 +106,7 @@ docs/
 - [ ] CLI tool (`sg`) — dotnet global tool
 - [ ] Client libraries (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
 - [ ] GitHub Actions CI/CD with trusted publishing/OIDC (no keys)
-- [ ] Frontend (TypeScript + Lit + SASS)
+- [x] Frontend SPA (TypeScript + Lit + Vite + SASS, @vaadin/router, marked)
 - [ ] Dockerfile
 
 ## API Endpoints (implemented)
