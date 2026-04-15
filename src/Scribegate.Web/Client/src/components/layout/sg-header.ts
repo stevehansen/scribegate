@@ -56,24 +56,36 @@ export class SgHeader extends LitElement {
     }
   `;
 
-  @state() private _isAuth = authState.isAuthenticated;
-  @state() private _username = authState.user?.username ?? '';
-  @state() private _isAdmin = authState.user?.isAdmin ?? false;
+  @state() private _isAuth = false;
+  @state() private _username = '';
+  @state() private _isAdmin = false;
 
   private _unsub?: () => void;
 
-  connectedCallback() {
+  async connectedCallback() {
     super.connectedCallback();
-    this._unsub = authState.subscribe(() => {
-      this._isAuth = authState.isAuthenticated;
-      this._username = authState.user?.username ?? '';
-      this._isAdmin = authState.user?.isAdmin ?? false;
-    });
+    this._unsub = authState.subscribe(() => this._sync());
+
+    // If we have a token but no user data yet, load it directly
+    if (authState.isAuthenticated) {
+      if (!authState.user) {
+        await authState.loadUser();
+      }
+      this._sync();
+    }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
+  }
+
+  private _sync() {
+    this._isAuth = authState.isAuthenticated;
+    const user = authState.user;
+    this._username = user?.username ?? '';
+    this._isAdmin = user?.isAdmin === true;
+    this.requestUpdate();
   }
 
   render() {

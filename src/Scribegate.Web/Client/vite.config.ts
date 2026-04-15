@@ -9,9 +9,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:5210',
-      '/healthz': 'http://localhost:5210',
-      '/swagger': 'http://localhost:5210',
+      '/api': 'http://localhost:5199',
+      '/healthz': 'http://localhost:5199',
+      '/swagger': 'http://localhost:5199',
     },
   },
 });

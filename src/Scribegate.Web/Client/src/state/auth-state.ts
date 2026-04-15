@@ -55,9 +55,10 @@ class AuthState {
     if (!this.token) return;
     try {
       this._user = await authApi.getMe();
+      console.log('[auth] loadUser:', JSON.stringify(this._user));
       this.notify();
-    } catch {
-      // Token expired or invalid
+    } catch (err) {
+      console.error('[auth] loadUser failed:', err);
       localStorage.removeItem('sg_token');
       this._user = null;
       this.notify();
