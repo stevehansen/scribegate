@@ -4,25 +4,27 @@ import type { RepositoryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-repository-list')
 export class SgRepositoryList extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     h1 { font-size: var(--sg-font-size-2xl); color: var(--sg-text); }
     .repos { display: flex; flex-direction: column; gap: 0.75rem; }
     .repo {
       border: 1px solid var(--sg-border);
+      border-left: 3px solid var(--sg-border);
       border-radius: var(--sg-radius-lg);
       padding: 1rem 1.25rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
       background: var(--sg-bg-elevated);
-      transition: border-color var(--sg-transition-fast), box-shadow var(--sg-transition-fast);
+      transition: border-color var(--sg-transition-fast), box-shadow var(--sg-transition-fast), border-left-color var(--sg-transition-fast);
     }
-    .repo:hover { border-color: var(--sg-border-hover); box-shadow: var(--sg-shadow-sm); }
+    .repo:hover { border-color: var(--sg-border-hover); border-left-color: var(--sg-primary); box-shadow: var(--sg-shadow-md); }
     .repo a { text-decoration: none; color: inherit; display: block; flex: 1; }
     .repo-name { font-weight: 600; color: var(--sg-primary); }
     .repo-desc { font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); margin-top: 0.25rem; }
@@ -34,8 +36,22 @@ export class SgRepositoryList extends LitElement {
       background: var(--sg-bg-tertiary);
       color: var(--sg-text-secondary);
     }
-    .empty { text-align: center; padding: 3rem; color: var(--sg-text-secondary); }
+    .empty {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--sg-text-secondary);
+      border: 1px dashed var(--sg-border);
+      border-radius: var(--sg-radius-lg);
+      background: var(--sg-bg-secondary);
+    }
     .empty h2 { font-size: var(--sg-font-size-xl); margin-bottom: 0.5rem; color: var(--sg-text); }
+    .empty-icon {
+      display: inline-block;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 1rem;
+      opacity: 0.4;
+    }
 
     dialog {
       border: 1px solid var(--sg-border);
@@ -73,7 +89,7 @@ export class SgRepositoryList extends LitElement {
       background: var(--sg-danger-light); border: 1px solid var(--sg-danger-border);
       color: var(--sg-danger); padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
     }
-  `;
+  `];
 
   @state() private _repos: RepositoryResponse[] = [];
   @state() private _loading = true;
@@ -139,6 +155,13 @@ export class SgRepositoryList extends LitElement {
       ${this._repos.length === 0
         ? html`
           <div class="empty">
+            <svg class="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="8" y="6" width="24" height="32" rx="2" stroke="currentColor" stroke-width="2"/>
+              <rect x="16" y="10" width="24" height="32" rx="2" stroke="currentColor" stroke-width="2" fill="var(--sg-bg-elevated)"/>
+              <line x1="21" y1="18" x2="35" y2="18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="21" y1="24" x2="33" y2="24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="21" y1="30" x2="30" y2="30" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
             <h2>No repositories yet</h2>
             <p>${authState.isAuthenticated ? 'Create your first repository to get started.' : 'Sign in to create a repository.'}</p>
           </div>`

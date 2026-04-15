@@ -4,12 +4,13 @@ import type { RepositoryResponse, ProposalSummary } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as proposalApi from '../../api/proposals.js';
 import { authState } from '../../state/auth-state.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
 
 @customElement('sg-proposal-list')
 export class SgProposalList extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     h1 { font-size: var(--sg-font-size-xl); color: var(--sg-text); }
@@ -55,7 +56,7 @@ export class SgProposalList extends LitElement {
     .btn-primary:hover { background: var(--sg-primary-hover); }
     .error { color: var(--sg-danger); }
     .right { display: flex; align-items: center; gap: 0.75rem; }
-  `;
+  `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;

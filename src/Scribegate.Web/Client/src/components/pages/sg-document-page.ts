@@ -4,13 +4,14 @@ import type { DocumentResponse, RepositoryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import { authState } from '../../state/auth-state.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
 
 @customElement('sg-document-page')
 export class SgDocumentPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     .meta {
       display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
@@ -25,7 +26,7 @@ export class SgDocumentPage extends LitElement {
     .content { max-width: var(--sg-content-width); }
     .error { color: var(--sg-danger); }
     .not-found { text-align: center; padding: 3rem; color: var(--sg-text-secondary); }
-  `;
+  `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;

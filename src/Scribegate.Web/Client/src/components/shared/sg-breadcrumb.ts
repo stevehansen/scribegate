@@ -1,15 +1,16 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-breadcrumb')
 export class SgBreadcrumb extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); margin-bottom: 1rem; }
     a { color: var(--sg-primary); text-decoration: none; transition: color var(--sg-transition-fast); }
     a:hover { text-decoration: underline; }
     .sep { margin: 0 0.375rem; }
     .current { color: var(--sg-text); font-weight: 500; }
-  `;
+  `];
 
   @property() repoSlug = '';
   @property() repoName = '';

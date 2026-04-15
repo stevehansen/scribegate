@@ -2,11 +2,12 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import * as proposalApi from '../../api/proposals.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 
 @customElement('sg-proposal-create')
 export class SgProposalCreate extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-xl); margin-bottom: 1rem; color: var(--sg-text); }
     .fields { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
@@ -40,7 +41,7 @@ export class SgProposalCreate extends LitElement {
       padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm); margin-bottom: 1rem;
     }
     @media (max-width: 768px) { .editor-layout { grid-template-columns: 1fr; } }
-  `;
+  `];
 
   @property() location: any;
   @state() private _title = '';

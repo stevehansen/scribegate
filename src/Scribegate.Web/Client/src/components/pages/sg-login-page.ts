@@ -2,11 +2,32 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-login-page')
 export class SgLoginPage extends LitElement {
-  static styles = css`
-    :host { display: block; max-width: 24rem; margin: 3rem auto; }
+  static styles = [boxReset, css`
+    :host {
+      display: block;
+      max-width: 24rem;
+      margin: 4rem auto;
+      padding: 2rem;
+      border: 1px solid var(--sg-border);
+      border-radius: var(--sg-radius-lg);
+      background: var(--sg-bg-elevated);
+      box-shadow: var(--sg-shadow-md);
+      position: relative;
+      overflow: hidden;
+    }
+    :host::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--sg-accent-gradient);
+    }
     h1 { font-size: var(--sg-font-size-2xl); margin-bottom: 1.5rem; color: var(--sg-text); }
     form { display: flex; flex-direction: column; gap: 1rem; }
     label { font-size: var(--sg-font-size-sm); font-weight: 500; display: flex; flex-direction: column; gap: 0.25rem; color: var(--sg-text); }
@@ -15,7 +36,7 @@ export class SgLoginPage extends LitElement {
       border: 1px solid var(--sg-border);
       border-radius: var(--sg-radius);
       font-size: var(--sg-font-size-sm);
-      background: var(--sg-bg-elevated);
+      background: var(--sg-bg);
       color: var(--sg-text);
       transition: border-color var(--sg-transition-fast);
     }
@@ -44,7 +65,7 @@ export class SgLoginPage extends LitElement {
     .link { text-align: center; font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); }
     .link a { color: var(--sg-primary); text-decoration: none; }
     .link a:hover { text-decoration: underline; }
-  `;
+  `];
 
   @state() private _error = '';
   @state() private _loading = false;

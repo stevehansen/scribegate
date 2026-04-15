@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Archway/gate -->
+  <path d="M7 28V12a9 9 0 0 1 18 0v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Pen nib — diagonal stroke through the gate -->
+  <line x1="20" y1="8" x2="13" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <path d="M13 24l-1.5 3.5 3.5-1.5z" fill="currentColor"/>
+</svg>

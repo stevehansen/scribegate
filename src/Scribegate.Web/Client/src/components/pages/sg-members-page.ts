@@ -5,11 +5,12 @@ import * as repoApi from '../../api/repositories.js';
 import * as memberApi from '../../api/members.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 
 @customElement('sg-members-page')
 export class SgMembersPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-xl); margin-bottom: 1rem; color: var(--sg-text); }
     .members { display: flex; flex-direction: column; gap: 0; }
@@ -47,7 +48,7 @@ export class SgMembersPage extends LitElement {
     }
     .empty { text-align: center; padding: 2rem; color: var(--sg-text-secondary); }
     .right { display: flex; gap: 0.5rem; align-items: center; }
-  `;
+  `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;

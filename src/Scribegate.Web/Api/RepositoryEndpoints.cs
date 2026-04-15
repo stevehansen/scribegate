@@ -24,13 +24,18 @@ public static class RepositoryEndpoints
 
     private static async Task<IResult> ListRepositories(
         IRepositoryStore store,
+        IDocumentStore documentStore,
         CancellationToken ct)
     {
         var repos = await store.ListAsync(ct);
+        var counts = await documentStore.CountByRepositoriesAsync(repos.Select(r => r.Id), ct);
 
         return Results.Ok(new RepositoryListResponse
         {
-            Items = repos.Select(MapToResponse).ToList(),
+            Items = repos.Select(r => MapToResponse(r) with
+            {
+                DocumentCount = counts.GetValueOrDefault(r.Id),
+            }).ToList(),
             Total = repos.Count,
         });
     }

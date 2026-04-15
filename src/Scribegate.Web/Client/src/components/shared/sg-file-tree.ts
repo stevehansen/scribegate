@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import type { DocumentSummary } from '../../api/types.js';
+import { boxReset } from '../../styles/shared.js';
 
 interface TreeNode {
   name: string;
@@ -37,7 +38,7 @@ function buildTree(docs: DocumentSummary[]): TreeNode[] {
 
 @customElement('sg-file-tree')
 export class SgFileTree extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; font-size: var(--sg-font-size-sm); }
     ul { list-style: none; padding-left: 1rem; margin: 0; }
     :host > ul { padding-left: 0; }
@@ -52,7 +53,7 @@ export class SgFileTree extends LitElement {
       transition: background var(--sg-transition-fast);
     }
     .file a:hover { background: var(--sg-primary-light); text-decoration: underline; }
-  `;
+  `];
 
   @property({ attribute: false }) documents: DocumentSummary[] = [];
   @property() repoSlug = '';

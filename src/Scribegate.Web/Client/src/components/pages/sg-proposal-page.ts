@@ -6,12 +6,13 @@ import * as reviewApi from '../../api/reviews.js';
 import * as commentApi from '../../api/comments.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-time-ago.js';
 
 @customElement('sg-proposal-page')
 export class SgProposalPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-xl); margin-bottom: 0.5rem; color: var(--sg-text); }
     .meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); margin-bottom: 1rem; }
@@ -76,7 +77,7 @@ export class SgProposalPage extends LitElement {
       padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm); margin-bottom: 1rem;
     }
     a.back { font-size: var(--sg-font-size-sm); color: var(--sg-primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
-  `;
+  `];
 
   @property() location: any;
   @state() private _proposal: ProposalResponse | null = null;

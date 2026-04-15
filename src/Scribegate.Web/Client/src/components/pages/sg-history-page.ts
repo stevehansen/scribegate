@@ -3,12 +3,13 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { RepositoryResponse, RevisionSummary } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as revisionApi from '../../api/revisions.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
 
 @customElement('sg-history-page')
 export class SgHistoryPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-xl); margin-bottom: 1rem; color: var(--sg-text); }
     .revisions { display: flex; flex-direction: column; gap: 0; }
@@ -34,7 +35,7 @@ export class SgHistoryPage extends LitElement {
     .error { color: var(--sg-danger); }
     a.back { font-size: var(--sg-font-size-sm); color: var(--sg-primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
     a.back:hover { text-decoration: underline; }
-  `;
+  `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;

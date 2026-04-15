@@ -3,6 +3,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { boxReset } from '../../styles/shared.js';
 
 // marked v15 has GFM enabled by default (tables, strikethrough, task lists, autolinks).
 // Configure sanitization for safe rendering.
@@ -57,7 +58,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 @customElement('sg-markdown-view')
 export class SgMarkdownView extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; line-height: 1.7; color: var(--sg-text); }
     h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; line-height: 1.3; color: var(--sg-text); }
     h1 { font-size: 1.875rem; border-bottom: 1px solid var(--sg-border); padding-bottom: 0.375rem; }
@@ -99,7 +100,7 @@ export class SgMarkdownView extends LitElement {
     hr { border: none; border-top: 1px solid var(--sg-border); margin: 1.5em 0; }
     img { max-width: 100%; border-radius: var(--sg-radius); }
     del { text-decoration: line-through; color: var(--sg-text-secondary); }
-  `;
+  `];
 
   @property() content = '';
 

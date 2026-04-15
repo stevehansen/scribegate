@@ -3,11 +3,12 @@ import { customElement, state } from 'lit/decorators.js';
 import type { SettingResponse, AuditEventResponse } from '../../api/types.js';
 import * as adminApi from '../../api/admin.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-time-ago.js';
 
 @customElement('sg-admin-page')
 export class SgAdminPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-2xl); margin-bottom: 1rem; color: var(--sg-text); }
     h2 { font-size: var(--sg-font-size-lg); margin-top: 1.5rem; margin-bottom: 0.75rem; color: var(--sg-text); }
@@ -44,7 +45,7 @@ export class SgAdminPage extends LitElement {
       transition: color var(--sg-transition-fast);
     }
     .tab.active { color: var(--sg-primary); border-bottom-color: var(--sg-primary); font-weight: 500; }
-  `;
+  `];
 
   @state() private _settings: SettingResponse[] = [];
   @state() private _auditEvents: AuditEventResponse[] = [];

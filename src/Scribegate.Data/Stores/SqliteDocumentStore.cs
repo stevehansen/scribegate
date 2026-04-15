@@ -17,6 +17,15 @@ public class SqliteDocumentStore(ScribegateDbContext db) : IDocumentStore
             .OrderBy(d => d.Path)
             .ToListAsync(ct);
 
+    public async Task<Dictionary<Guid, int>> CountByRepositoriesAsync(IEnumerable<Guid> repositoryIds, CancellationToken ct = default)
+    {
+        var ids = repositoryIds.ToList();
+        return await db.Documents
+            .Where(d => ids.Contains(d.RepositoryId))
+            .GroupBy(d => d.RepositoryId)
+            .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
+    }
+
     public async Task<Document?> GetByPathAsync(Guid repositoryId, string path, CancellationToken ct = default)
         => await db.Documents
             .Include(d => d.CurrentRevision)

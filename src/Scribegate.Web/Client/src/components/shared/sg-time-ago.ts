@@ -1,5 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
+import { boxReset } from '../../styles/shared.js';
 
 const MINUTE = 60;
 const HOUR = 3600;
@@ -35,9 +36,9 @@ function timeAgo(dateStr: string): string {
 
 @customElement('sg-time-ago')
 export class SgTimeAgo extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
-  `;
+  `];
 
   @property() datetime = '';
 

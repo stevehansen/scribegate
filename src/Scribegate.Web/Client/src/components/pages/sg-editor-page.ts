@@ -4,12 +4,13 @@ import type { RepositoryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import { ApiException } from '../../api/client.js';
+import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-breadcrumb.js';
 
 @customElement('sg-editor-page')
 export class SgEditorPage extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host { display: block; }
     .editor-layout {
       display: grid;
@@ -58,7 +59,7 @@ export class SgEditorPage extends LitElement {
     @media (max-width: 768px) {
       .editor-layout { grid-template-columns: 1fr; }
     }
-  `;
+  `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;

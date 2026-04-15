@@ -10,6 +10,7 @@ html {
   -webkit-text-size-adjust: 100%;
   tab-size: 4;
   color-scheme: light dark;
+  overflow-x: hidden;
 }
 
 body {
@@ -20,6 +21,19 @@ body {
   background-image: var(--sg-pattern);
   color: var(--sg-text);
   transition: background-color var(--sg-transition-base), color var(--sg-transition-base);
+
+  // Accent gradient stripe at top of viewport
+  &::before {
+    content: '';
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--sg-accent-gradient);
+    z-index: 9999;
+  }
 }
 
 img, svg {

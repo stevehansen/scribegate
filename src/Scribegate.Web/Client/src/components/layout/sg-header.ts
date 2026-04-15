@@ -2,15 +2,21 @@ import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { authState } from '../../state/auth-state.js';
 import { themeManager } from '../../state/theme.js';
+import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-header')
 export class SgHeader extends LitElement {
-  static styles = css`
+  static styles = [boxReset, css`
     :host {
       display: block;
       border-bottom: 1px solid var(--sg-border);
-      background: var(--sg-bg-elevated);
+      background: color-mix(in srgb, var(--sg-bg-elevated) 85%, transparent);
       transition: background var(--sg-transition-base), border-color var(--sg-transition-base);
+      position: sticky;
+      top: 3px; /* below accent stripe */
+      z-index: 100;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     nav {
       display: flex;
@@ -22,12 +28,21 @@ export class SgHeader extends LitElement {
       height: var(--sg-header-height);
     }
     .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: var(--sg-font-size-lg);
       font-weight: 700;
       color: var(--sg-text);
       transition: opacity var(--sg-transition-fast);
     }
     .logo:hover { opacity: 0.8; }
+    .logo svg {
+      width: 24px;
+      height: 24px;
+      color: var(--sg-primary);
+      flex-shrink: 0;
+    }
     .actions {
       display: flex;
       align-items: center;
@@ -70,7 +85,7 @@ export class SgHeader extends LitElement {
       font-size: 1rem;
       line-height: 1;
     }
-  `;
+  `];
 
   @state() private _isAuth = false;
   @state() private _username = '';
@@ -113,7 +128,14 @@ export class SgHeader extends LitElement {
   render() {
     return html`
       <nav>
-        <a class="logo" href="/">Scribegate</a>
+        <a class="logo" href="/">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 28V12a9 9 0 0 1 18 0v16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <line x1="20" y1="8" x2="13" y2="24" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M13 24l-1.5 3.5 3.5-1.5z" fill="currentColor"/>
+          </svg>
+          Scribegate
+        </a>
         <div class="actions">
           ${this._isAuth
             ? html`
