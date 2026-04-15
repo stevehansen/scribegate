@@ -98,9 +98,41 @@ docs/
 - [x] EF Core DbContext with entity configurations and initial migration
 - [x] Health check endpoint (`/healthz`)
 - [x] Documentation (README, CONTRIBUTING, SECURITY, architecture, self-hosting, design decisions)
-- [ ] API endpoints for repositories and documents
-- [ ] Authentication (ASP.NET Core Identity)
+- [x] API endpoints for repositories, documents, and revisions (with Swagger at /swagger)
+- [ ] Authentication (extensible: local accounts + SSO/OIDC for all tiers)
 - [ ] Frontmatter parsing and storage
-- [ ] CLI tool (`sg`)
+- [ ] CLI tool (`sg`) — dotnet global tool
+- [ ] Client libraries (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
+- [ ] GitHub Actions CI/CD with trusted publishing/OIDC (no keys)
 - [ ] Frontend (TypeScript + Lit + SASS)
 - [ ] Dockerfile
+
+## API Endpoints (implemented)
+
+```
+GET    /healthz                                              # Health check
+GET    /swagger                                              # Interactive API docs
+
+GET    /api/v1/repositories                                  # List all repositories
+POST   /api/v1/repositories                                  # Create repository (auto-generates slug)
+GET    /api/v1/repositories/{slug}                           # Get repository by slug
+PUT    /api/v1/repositories/{slug}                           # Update repository
+DELETE /api/v1/repositories/{slug}                           # Delete repository
+
+GET    /api/v1/repositories/{slug}/documents                 # List documents (file tree)
+POST   /api/v1/repositories/{slug}/documents                 # Create document (auto-creates revision)
+GET    /api/v1/repositories/{slug}/documents/{path}          # Get document with content
+PUT    /api/v1/repositories/{slug}/documents/{path}          # Update document (creates new revision)
+DELETE /api/v1/repositories/{slug}/documents/{path}          # Delete document
+
+GET    /api/v1/repositories/{slug}/revisions/{path}          # List revision history
+GET    /api/v1/repositories/{slug}/revisions/{docId}/{revId} # Get specific revision
+```
+
+## Design Principles
+
+- **Auth:** Simple, extensible. Local accounts + SSO/OIDC available to ALL tiers (no enterprise paywall). Easy to add new auth providers.
+- **API-first:** REST API is the source of truth. CLI, web UI, and client libraries all consume it.
+- **Client libraries:** Auto-generated from OpenAPI spec. TypeScript/JS, C#, Python. Publish to npm, NuGet, PyPI.
+- **CI/CD:** GitHub Actions with trusted publishing (OIDC, no stored keys). See P:\eidet for reference configs.
+- **Errors:** Structured, actionable. Every error has a code, message, details with fix suggestion, and field reference.
