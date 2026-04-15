@@ -316,111 +316,29 @@ Configuration via environment variables or `appsettings.json`:
 
 ---
 
-## 6. Hosting Strategy & Pricing Model
+## 6. Hosting & Architecture
 
-This section is critical for adoption. Scribegate must be trivially cheap (or free) for small teams, whether they self-host or use a managed tier we provide. The design of the application must support both paths from day one.
+Scribegate supports both self-hosted and managed (scribegate.dev) deployment from day one.
 
-### 6.1 The Database Decision: RavenDB vs. SQLite
+### 6.1 Database: SQLite-First
 
-The original spec chose RavenDB for its document-centric model and full-text search. However, the hosting constraints force a hard look at this choice:
+SQLite via EF Core is the primary storage engine — zero-config, file-based, runs anywhere .NET runs. A RavenDB storage adapter is planned for teams that already run RavenDB.
 
-| Factor | RavenDB Embedded | SQLite |
-|---|---|---|
-| Self-host simplicity | Good — single binary, embeds in .NET app | Excellent — zero config, file-based, ships with .NET |
-| Free tier hosting (Azure F1, fly.io, etc.) | Problematic — RavenDB embedded needs ~200-500MB RAM at minimum, community license requires staying on latest major version | Trivial — runs anywhere .NET runs, negligible memory |
-| Licensing for hosted free tier | Community license has limits (12 static indexes, 2 revisions max, forced upgrades). Running our own hosted instances cheaply requires careful license management | MIT licensed, no restrictions whatsoever |
-| Full-text search | Built in | Requires FTS5 extension (available, needs explicit setup) |
-| Document model fit | Natural — schema-less JSON documents | Requires EF Core or Dapper with relational tables, but the domain is simple enough that this works fine |
-| Cloud hosting cost for us | Higher — memory hungry | Minimal — file-based DB on persistent disk |
+### 6.2 Self-Hosting Options
 
-**Recommendation: dual-track approach.**
+See [self-hosting.md](self-hosting.md) for detailed deployment guides covering Docker, Azure, fly.io, and bare metal.
 
-- **MVP (Milestone 1-2):** Build on SQLite via EF Core. This unlocks free-tier hosting everywhere, keeps self-hosting trivial, and the domain model is relational enough (documents, revisions, proposals) that we don't actually need a document database.
-- **Optional RavenDB adapter (Milestone 3+):** For teams that already run RavenDB, offer a storage adapter that uses `IDocumentSession`. This is a familiar pattern in Vidyano.
+### 6.3 Managed Hosting (scribegate.dev)
 
-The domain entities are clean enough that swapping the storage backend is straightforward if we use a repository/service layer.
+A managed tier at scribegate.dev provides hosted workspaces for teams that don't want to self-host. Multi-tenant architecture with per-tenant SQLite databases. Free and paid tiers available — see [scribegate.dev](https://scribegate.dev) for current plans.
 
-### 6.2 Self-Hosting Options (for users)
-
-The goal: a dev team of <20 should be able to run Scribegate for $0-5/month.
-
-**Option A: Docker (recommended for teams)**
-
-```
-docker run -d \
-  -p 8080:8080 \
-  -v scribegate-data:/data \
-  ghcr.io/scribegate/scribegate:latest
-```
-
-Runs on any $5/month VPS (Hetzner, DigitalOcean, fly.io, Railway), a Raspberry Pi, or an internal server. SQLite data lives on a persistent volume.
-
-**Option B: Azure App Service Free Tier (F1)**
-
-ASP.NET Core with SQLite runs on the free F1 tier. Constraints: 60 CPU-minutes/day, 1GB RAM, 1GB storage, no custom domain. Plenty for a small team's internal docs. Deploy via GitHub Actions.
-
-**Option C: Azure App Service Basic (B1) ~$13/month**
-
-For teams that want custom domains and always-on. SQLite on the persistent `/home` storage. Still very cheap.
-
-**Option D: fly.io Free Tier**
-
-3 shared-cpu VMs free. An ASP.NET Core + SQLite app fits easily. Persistent volume for the database file.
-
-**Option E: Any .NET host / bare metal**
-
-`dotnet publish` + run. Works on Windows, Linux, macOS. Point it at a data directory. No external dependencies.
-
-### 6.3 Managed Hosting (by us, at scribegate.dev)
-
-For teams that don't want to self-host at all. This is where we control the experience and can offer a free tier to drive adoption.
-
-**Architecture for managed hosting:**
-
-Each free-tier workspace is a tenant in a multi-tenant setup. The application is a single ASP.NET Core instance serving multiple tenants, with per-tenant SQLite databases (one file per workspace). This keeps isolation simple and costs minimal.
-
-**Free Tier — "Community"**
-
-| Limit | Value | Rationale |
-|---|---|---|
-| Repositories | 1 | Enough to evaluate the product |
-| Documents per repository | 25 | Enough for a small handbook or team docs |
-| Max document size | 100 KB per document | Prevents abuse, plenty for markdown |
-| Total storage | 50 MB | Covers 25 docs with revisions and images |
-| Collaborators | 5 users | Small team |
-| Proposals | Unlimited (auto-archive after 90 days if not resolved) | Don't gate the core workflow |
-| Revision history | 30 most recent per document | Keeps storage bounded |
-| Auth | Email/password only | OIDC/LDAP is a paid feature |
-| Custom domain | No | scribegate.dev/team-slug |
-| SLA | None (best effort) | |
-
-**Paid Tier — "Team" ~$9/month per workspace**
-
-| Feature | Value |
-|---|---|
-| Repositories | 10 |
-| Documents per repository | Unlimited |
-| Max document size | 1 MB |
-| Total storage | 5 GB |
-| Collaborators | 20 users |
-| Revision history | Unlimited |
-| OIDC/LDAP auth | Yes |
-| Custom domain | Yes |
-| Email notifications | Yes |
-| Priority support | Email |
-| Export | Full markdown zip export |
-
-**Cost model for us (managed hosting):**
-
-A single $20/month VPS (4GB RAM, 80GB SSD) on Hetzner or similar can comfortably serve hundreds of free-tier workspaces and dozens of paid workspaces. Each tenant's SQLite file is tiny. The main costs are bandwidth (minimal for markdown) and compute (ASP.NET Core is efficient). At $9/month per paid workspace, we break even at ~3 paying teams per server with very comfortable margins above that.
-
-### 6.4 What This Means for Architecture
+### 6.4 Architecture Requirements
 
 To support both self-hosted and managed hosting, the codebase needs:
 
 1. **Tenant isolation layer.** In self-hosted mode, there's one implicit tenant (the whole instance). In managed mode, requests are routed by subdomain or path prefix to the correct tenant context.
 
-2. **Storage abstraction.** A `IDocumentStore` (not the RavenDB one — our own interface) that wraps EF Core + SQLite by default, with a RavenDB implementation available for teams that prefer it.
+2. **Storage abstraction.** A service interface that wraps EF Core + SQLite by default, with a RavenDB implementation available for teams that prefer it.
 
 3. **Limit enforcement.** Configurable limits (max documents, max users, max storage) that are enforced in managed mode and set to "unlimited" (or very high) in self-hosted mode.
 
@@ -428,31 +346,29 @@ To support both self-hosted and managed hosting, the codebase needs:
 
 ## 7. Scope & Milestones
 
-### Milestone 1 — "Read & Write" (MVP)
+### Milestone 1 — "Read & Write" (MVP) ✓
 
 Core reading and editing loop without review workflow.
 
-- [ ] Repository CRUD
-- [ ] Document CRUD (create, edit, view rendered markdown)
-- [ ] Revision history (automatic on every save)
-- [ ] File tree navigation
-- [ ] Markdown editor with live preview
-- [ ] Basic authentication (local accounts)
-- [ ] Single-container deployment
+- [x] Repository CRUD
+- [x] Document CRUD (create, edit, view rendered markdown)
+- [x] Revision history (automatic on every save)
+- [x] File tree navigation
+- [x] Markdown editor with live preview
+- [x] Basic authentication (local accounts)
+- [x] Single-container deployment
 
-**At this point, Scribegate works like a simple self-hosted wiki with version history.**
-
-### Milestone 2 — "Propose & Review"
+### Milestone 2 — "Propose & Review" ✓
 
 The differentiating feature: editorial workflow.
 
-- [ ] Proposal creation (from existing document or new)
-- [ ] Proposal states (Draft → Open → Approved/Rejected/Withdrawn)
-- [ ] Side-by-side diff view
-- [ ] Review submission (Approve / Request Changes / Comment)
-- [ ] Automatic revision creation on approval
-- [ ] Staleness detection and rebase flow
-- [ ] Role-based access (Reader / Contributor / Reviewer / Admin)
+- [x] Proposal creation (from existing document or new)
+- [x] Proposal states (Draft → Open → Approved/Rejected/Withdrawn)
+- [x] Side-by-side diff view
+- [x] Review submission (Approve / Request Changes / Comment)
+- [x] Automatic revision creation on approval
+- [x] Staleness detection and rebase flow
+- [x] Role-based access (Reader / Contributor / Reviewer / Admin)
 
 **At this point, Scribegate delivers its core value proposition.**
 
