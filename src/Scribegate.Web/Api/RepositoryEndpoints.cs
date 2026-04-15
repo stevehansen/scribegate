@@ -12,11 +12,11 @@ public static class RepositoryEndpoints
         var group = routes.MapGroup("/api/v1/repositories")
             .WithTags("Repositories");
 
-        group.MapGet("/", ListRepositories);
-        group.MapGet("/{slug}", GetRepository);
-        group.MapPost("/", CreateRepository);
-        group.MapPut("/{slug}", UpdateRepository);
-        group.MapDelete("/{slug}", DeleteRepository);
+        group.MapGet("/", ListRepositories).AllowAnonymous();
+        group.MapGet("/{slug}", GetRepository).AllowAnonymous();
+        group.MapPost("/", CreateRepository).RequireAuthorization();
+        group.MapPut("/{slug}", UpdateRepository).RequireAuthorization();
+        group.MapDelete("/{slug}", DeleteRepository).RequireAuthorization();
 
         return group;
     }

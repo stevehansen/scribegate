@@ -11,11 +11,11 @@ public static class DocumentEndpoints
         var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/documents")
             .WithTags("Documents");
 
-        group.MapGet("/", ListDocuments);
-        group.MapGet("/{*path}", GetDocument);
-        group.MapPost("/", CreateDocument);
-        group.MapPut("/{*path}", UpdateDocument);
-        group.MapDelete("/{*path}", DeleteDocument);
+        group.MapGet("/", ListDocuments).AllowAnonymous();
+        group.MapGet("/{*path}", GetDocument).AllowAnonymous();
+        group.MapPost("/", CreateDocument).RequireAuthorization();
+        group.MapPut("/{*path}", UpdateDocument).RequireAuthorization();
+        group.MapDelete("/{*path}", DeleteDocument).RequireAuthorization();
 
         return group;
     }

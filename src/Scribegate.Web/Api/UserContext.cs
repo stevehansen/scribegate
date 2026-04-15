@@ -1,35 +1,31 @@
-using Scribegate.Core.Entities;
-using Scribegate.Data;
-using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Scribegate.Web.Api;
 
 /// <summary>
-/// Provides the current user context for API operations.
-/// This is a temporary implementation that uses a system seed user until
-/// proper authentication is added in a later milestone.
+/// Resolves the current authenticated user from HttpContext claims.
+/// Injected into endpoint handlers that need to know who is making the request.
 /// </summary>
-public class UserContext(ScribegateDbContext db)
+public class UserContext(IHttpContextAccessor httpContextAccessor)
 {
-    private static readonly Guid SystemUserId = new("00000000-0000-0000-0000-000000000001");
-
-    public async Task<Guid> GetCurrentUserIdAsync(CancellationToken ct = default)
+    public Task<Guid> GetCurrentUserIdAsync(CancellationToken ct = default)
     {
-        // TODO: Replace with real auth - resolve from HttpContext.User claims
-        var user = await db.Users.FindAsync([SystemUserId], ct);
-        if (user is null)
-        {
-            user = new User
-            {
-                Id = SystemUserId,
-                Username = "system",
-                Email = "system@scribegate.local",
-                PasswordHash = "!locked", // Not a real hash, account cannot log in
-            };
-            db.Users.Add(user);
-            await db.SaveChangesAsync(ct);
-        }
+        var principal = httpContextAccessor.HttpContext?.User;
+        if (principal is null)
+            throw new UnauthorizedAccessException("No authenticated user.");
 
-        return SystemUserId;
+        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                  ?? principal.FindFirstValue("sub");
+
+        if (!Guid.TryParse(sub, out var userId))
+            throw new UnauthorizedAccessException("Invalid user identity.");
+
+        return Task.FromResult(userId);
+    }
+
+    public string? GetUsername()
+    {
+        var principal = httpContextAccessor.HttpContext?.User;
+        return principal?.FindFirstValue("username");
     }
 }

@@ -19,10 +19,10 @@ public static class RevisionEndpoints
     public static void MapRevisionRoutes(this IEndpointRouteBuilder routes)
     {
         routes.MapGet("/api/v1/repositories/{repoSlug}/revisions/{*path}", ListRevisions)
-            .WithTags("Revisions");
+            .WithTags("Revisions").AllowAnonymous();
 
         routes.MapGet("/api/v1/repositories/{repoSlug}/revisions/{documentId:guid}/{revisionId:guid}", GetRevision)
-            .WithTags("Revisions");
+            .WithTags("Revisions").AllowAnonymous();
     }
 
     private static async Task<IResult> ListRevisions(
