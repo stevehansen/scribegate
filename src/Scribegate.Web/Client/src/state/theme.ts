@@ -63,11 +63,13 @@ class ThemeManager {
   }
 
   private _apply() {
-    const resolved = this.resolved;
-    if (resolved === 'dark') {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
+    const theme = this.current;
+    if (theme === 'system') {
+      // Let the CSS @media (prefers-color-scheme) rule handle it
       document.documentElement.removeAttribute('data-theme');
+    } else {
+      // Explicit light/dark overrides the OS preference
+      document.documentElement.setAttribute('data-theme', theme);
     }
   }
 

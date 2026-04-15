@@ -78,6 +78,7 @@ export class SgRepositoryList extends LitElement {
   @state() private _repos: RepositoryResponse[] = [];
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _dialogError = '';
 
   async connectedCallback() {
     super.connectedCallback();
@@ -96,6 +97,7 @@ export class SgRepositoryList extends LitElement {
   }
 
   private _openCreate() {
+    this._dialogError = '';
     const dialog = this.renderRoot.querySelector('dialog') as HTMLDialogElement;
     dialog?.showModal();
   }
@@ -104,7 +106,7 @@ export class SgRepositoryList extends LitElement {
     e.preventDefault();
     const form = e.target as HTMLFormElement;
     const data = new FormData(form);
-    this._error = '';
+    this._dialogError = '';
 
     try {
       await repoApi.create(
@@ -117,7 +119,7 @@ export class SgRepositoryList extends LitElement {
       form.reset();
       await this._load();
     } catch (err) {
-      this._error = err instanceof ApiException ? err.error.message : 'Failed to create repository.';
+      this._dialogError = err instanceof ApiException ? err.error.message : 'Failed to create repository.';
     }
   }
 
@@ -156,6 +158,7 @@ export class SgRepositoryList extends LitElement {
 
       <dialog>
         <h2>New repository</h2>
+        ${this._dialogError ? html`<div class="error">${this._dialogError}</div>` : ''}
         <form @submit=${this._onCreate}>
           <label>Name <input type="text" name="name" required maxlength="200" /></label>
           <label>Description <textarea name="description" maxlength="1000"></textarea></label>
