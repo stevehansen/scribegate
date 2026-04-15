@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Scribegate.Core/Scribegate.Core.csproj" />
+    <Project Path="src/Scribegate.Data/Scribegate.Data.csproj" />
+    <Project Path="src/Scribegate.Web/Scribegate.Web.csproj" />
+  </Folder>
+</Solution>

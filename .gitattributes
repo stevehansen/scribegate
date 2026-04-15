@@ -1,0 +1,13 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Windows-specific files
+*.sln text eol=crlf
+*.slnx text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.db binary
