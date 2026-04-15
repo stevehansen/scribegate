@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '*.md']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '*.md']
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Scribegate.Web/Client/package-lock.json
+
+      - name: Restore .NET dependencies
+        run: dotnet restore
+
+      - name: Build .NET
+        run: dotnet build --no-restore
+
+      - name: Install frontend dependencies
+        working-directory: src/Scribegate.Web/Client
+        run: npm ci --ignore-scripts
+
+      - name: TypeScript check
+        working-directory: src/Scribegate.Web/Client
+        run: npx tsc --noEmit
+
+      - name: Build frontend
+        working-directory: src/Scribegate.Web/Client
+        run: npm run build
+
+      - name: .NET publish (integration check)
+        run: |
+          mkdir -p src/Scribegate.Web/wwwroot
+          cp -r src/Scribegate.Web/Client/dist/* src/Scribegate.Web/wwwroot/
+          dotnet publish src/Scribegate.Web -c Release -o ./publish --no-restore
+        shell: bash

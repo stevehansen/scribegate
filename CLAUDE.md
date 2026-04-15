@@ -105,9 +105,9 @@ docs/
 - [ ] Frontmatter parsing and storage
 - [ ] CLI tool (`sg`) — dotnet global tool
 - [ ] Client libraries (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
-- [ ] GitHub Actions CI/CD with trusted publishing/OIDC (no keys)
+- [x] GitHub Actions CI/CD (ci.yml for build/test, release.yml with Docker + GHCR)
 - [x] Frontend SPA (TypeScript + Lit + Vite + SASS, @vaadin/router, marked)
-- [ ] Dockerfile
+- [x] Dockerfile (multi-stage: Node + .NET SDK + aspnet runtime, non-root user)
 
 ## API Endpoints (implemented)
 

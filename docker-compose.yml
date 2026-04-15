@@ -1,0 +1,13 @@
+services:
+  scribegate:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - scribegate-data:/data
+    environment:
+      - Scribegate__BaseUrl=http://localhost:8080
+    restart: unless-stopped
+
+volumes:
+  scribegate-data:

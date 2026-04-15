@@ -1,0 +1,17 @@
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/data
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/wwwroot
+.dockerignore
+Dockerfile
+*.md
+!src/**/*.md
+docs/
