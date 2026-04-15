@@ -95,6 +95,60 @@ A reviewer's verdict on a proposal: Approve, Request Changes, or Comment. One ap
 
 Adding users is straightforward: invite by email, they set a password, and they're in. Admins assign roles per repository. The complexity of permissions is handled internally; users just see what they're allowed to do.
 
+## Document Frontmatter
+
+Documents support optional YAML frontmatter for structured metadata:
+
+```markdown
+---
+title: Vacation Policy 2026
+description: Guidelines for requesting and approving time off
+tags: [hr, policy, benefits]
+audit:
+  review-interval: 90d
+---
+
+# Vacation Policy
+...
+```
+
+Frontmatter enables:
+- **Search and filtering** by tags, status, and dates
+- **Audit trails** with review cadences and accountability
+- **Custom fields** for team-specific workflows (unknown keys are preserved)
+
+Some fields are auto-managed by the system (`created`, `updated`, `audit.next-review`). See [docs/design-decisions.md](docs/design-decisions.md) for the full schema.
+
+## URL Structure
+
+URLs follow the familiar GitHub pattern:
+
+```
+scribegate.dev/acme-corp/handbook/hr/vacation.md
+             └─ owner ──┘└─ repo ┘└── path ────┘
+```
+
+Self-hosted instances use implicit single-owner mode: `docs.example.com/handbook/hr/vacation.md`
+
+## Sharing
+
+- **Public repositories** allow unauthenticated read access to all documents
+- **Share links** let you share individual documents from private repositories via time-limited, revocable URLs
+- **API tokens** enable programmatic access for CI/CD pipelines and AI agents
+
+## CLI (`sg`)
+
+A command-line tool for power users and AI agents. Mirrors the full API with human-friendly and JSON output:
+
+```bash
+sg doc view acme-corp/handbook hr/vacation.md    # View a document
+sg proposal create acme-corp/handbook hr/vacation.md \
+  --title "Update vacation days"                  # Create a proposal
+sg review approve acme-corp/handbook 42           # Approve a proposal
+```
+
+AI agents use the same CLI to propose edits and participate in reviews, keeping humans in the approval loop. See [docs/design-decisions.md](docs/design-decisions.md) for the full command reference.
+
 ## API
 
 All interactions go through a REST API. Every endpoint is:
@@ -202,6 +256,7 @@ MIT
 ## Links
 
 - [Product Spec](docs/spec.md)
+- [Design Decisions](docs/design-decisions.md) — frontmatter, URL structure, sharing, CLI
 - [Architecture](docs/architecture.md)
 - [Self-Hosting Guide](docs/self-hosting.md)
 - [Security](SECURITY.md)
