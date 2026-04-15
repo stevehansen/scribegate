@@ -1,52 +1,211 @@
-// Colors
-$color-bg: #ffffff;
-$color-bg-secondary: #f8f9fa;
-$color-bg-tertiary: #e9ecef;
-$color-text: #212529;
-$color-text-secondary: #6c757d;
-$color-text-muted: #adb5bd;
-$color-border: #dee2e6;
-$color-primary: #2563eb;
-$color-primary-hover: #1d4ed8;
-$color-primary-light: #dbeafe;
-$color-danger: #dc2626;
-$color-danger-hover: #b91c1c;
-$color-success: #16a34a;
-$color-warning: #d97706;
+// ============================================================
+// Scribegate Design Tokens — CSS Custom Properties
+// These pierce Shadow DOM so Lit components can use them.
+// ============================================================
 
-// Typography
-$font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-$font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
-$font-size-xs: 0.75rem;
-$font-size-sm: 0.875rem;
-$font-size-base: 1rem;
-$font-size-lg: 1.125rem;
-$font-size-xl: 1.25rem;
-$font-size-2xl: 1.5rem;
-$font-size-3xl: 1.875rem;
-$line-height-tight: 1.25;
-$line-height-base: 1.6;
-$line-height-relaxed: 1.75;
+:root {
+  // --- Color palette (light) ---
+  --sg-bg: #ffffff;
+  --sg-bg-secondary: #f8f9fa;
+  --sg-bg-tertiary: #e9ecef;
+  --sg-bg-elevated: #ffffff;
+  --sg-text: #212529;
+  --sg-text-secondary: #6c757d;
+  --sg-text-muted: #adb5bd;
+  --sg-border: #dee2e6;
+  --sg-border-hover: #adb5bd;
 
-// Spacing
-$space-1: 0.25rem;
-$space-2: 0.5rem;
-$space-3: 0.75rem;
-$space-4: 1rem;
-$space-5: 1.25rem;
-$space-6: 1.5rem;
-$space-8: 2rem;
-$space-10: 2.5rem;
-$space-12: 3rem;
-$space-16: 4rem;
+  // Primary
+  --sg-primary: #2563eb;
+  --sg-primary-hover: #1d4ed8;
+  --sg-primary-light: #dbeafe;
+  --sg-primary-text: #ffffff;
 
-// Layout
-$content-width: 52rem;
-$sidebar-width: 16rem;
-$header-height: 3.5rem;
-$border-radius: 6px;
-$border-radius-lg: 8px;
+  // Semantic
+  --sg-danger: #dc2626;
+  --sg-danger-hover: #b91c1c;
+  --sg-danger-light: #fee2e2;
+  --sg-danger-border: #fecaca;
+  --sg-success: #059669;
+  --sg-success-hover: #047857;
+  --sg-success-light: #d1fae5;
+  --sg-success-border: #a7f3d0;
+  --sg-warning: #d97706;
+  --sg-warning-light: #fef3c7;
 
-// Shadows
-$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-$shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  // Diff
+  --sg-diff-added: #d1fae5;
+  --sg-diff-removed: #fee2e2;
+
+  // Status badges
+  --sg-status-open-bg: #dbeafe;
+  --sg-status-open-text: #2563eb;
+  --sg-status-approved-bg: #d1fae5;
+  --sg-status-approved-text: #059669;
+  --sg-status-rejected-bg: #fee2e2;
+  --sg-status-rejected-text: #dc2626;
+  --sg-status-withdrawn-bg: #e5e7eb;
+  --sg-status-withdrawn-text: #6b7280;
+  --sg-status-draft-bg: #fef3c7;
+  --sg-status-draft-text: #d97706;
+
+  // Code / markdown
+  --sg-code-bg: #f1f3f5;
+  --sg-pre-bg: #f8f9fa;
+
+  // Shadows
+  --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --sg-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+
+  // Overlay
+  --sg-overlay: rgba(0, 0, 0, 0.3);
+
+  // --- Typography ---
+  --sg-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --sg-font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+  --sg-font-size-xs: 0.75rem;
+  --sg-font-size-sm: 0.875rem;
+  --sg-font-size-base: 1rem;
+  --sg-font-size-lg: 1.125rem;
+  --sg-font-size-xl: 1.25rem;
+  --sg-font-size-2xl: 1.5rem;
+  --sg-font-size-3xl: 1.875rem;
+  --sg-line-height-tight: 1.25;
+  --sg-line-height-base: 1.6;
+  --sg-line-height-relaxed: 1.75;
+
+  // --- Layout ---
+  --sg-content-width: 52rem;
+  --sg-content-width-wide: 72rem;
+  --sg-sidebar-width: 16rem;
+  --sg-header-height: 3.5rem;
+  --sg-radius: 6px;
+  --sg-radius-lg: 8px;
+
+  // --- Geometric background ---
+  --sg-pattern-color: rgba(0, 0, 0, 0.018);
+  --sg-pattern: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000000' fill-opacity='0.018'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+
+  // --- Transitions ---
+  --sg-transition-fast: 0.15s ease;
+  --sg-transition-base: 0.2s ease;
+}
+
+// ============================================================
+// Dark theme
+// ============================================================
+[data-theme="dark"] {
+  --sg-bg: #0d1117;
+  --sg-bg-secondary: #161b22;
+  --sg-bg-tertiary: #21262d;
+  --sg-bg-elevated: #1c2128;
+  --sg-text: #e6edf3;
+  --sg-text-secondary: #8b949e;
+  --sg-text-muted: #6e7681;
+  --sg-border: #30363d;
+  --sg-border-hover: #484f58;
+
+  --sg-primary: #58a6ff;
+  --sg-primary-hover: #79c0ff;
+  --sg-primary-light: #0d2240;
+  --sg-primary-text: #0d1117;
+
+  --sg-danger: #f85149;
+  --sg-danger-hover: #da3633;
+  --sg-danger-light: #3d1214;
+  --sg-danger-border: #5c2122;
+  --sg-success: #3fb950;
+  --sg-success-hover: #2ea043;
+  --sg-success-light: #12261e;
+  --sg-success-border: #1b4a2a;
+  --sg-warning: #d29922;
+  --sg-warning-light: #2e2210;
+
+  --sg-diff-added: #12261e;
+  --sg-diff-removed: #3d1214;
+
+  --sg-status-open-bg: #0d2240;
+  --sg-status-open-text: #58a6ff;
+  --sg-status-approved-bg: #12261e;
+  --sg-status-approved-text: #3fb950;
+  --sg-status-rejected-bg: #3d1214;
+  --sg-status-rejected-text: #f85149;
+  --sg-status-withdrawn-bg: #21262d;
+  --sg-status-withdrawn-text: #8b949e;
+  --sg-status-draft-bg: #2e2210;
+  --sg-status-draft-text: #d29922;
+
+  --sg-code-bg: #161b22;
+  --sg-pre-bg: #161b22;
+
+  --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --sg-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+
+  --sg-overlay: rgba(0, 0, 0, 0.6);
+
+  --sg-pattern-color: rgba(255, 255, 255, 0.015);
+  --sg-pattern: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+// Auto-detect system preference when no explicit theme set
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --sg-bg: #0d1117;
+    --sg-bg-secondary: #161b22;
+    --sg-bg-tertiary: #21262d;
+    --sg-bg-elevated: #1c2128;
+    --sg-text: #e6edf3;
+    --sg-text-secondary: #8b949e;
+    --sg-text-muted: #6e7681;
+    --sg-border: #30363d;
+    --sg-border-hover: #484f58;
+
+    --sg-primary: #58a6ff;
+    --sg-primary-hover: #79c0ff;
+    --sg-primary-light: #0d2240;
+    --sg-primary-text: #0d1117;
+
+    --sg-danger: #f85149;
+    --sg-danger-hover: #da3633;
+    --sg-danger-light: #3d1214;
+    --sg-danger-border: #5c2122;
+    --sg-success: #3fb950;
+    --sg-success-hover: #2ea043;
+    --sg-success-light: #12261e;
+    --sg-success-border: #1b4a2a;
+    --sg-warning: #d29922;
+    --sg-warning-light: #2e2210;
+
+    --sg-diff-added: #12261e;
+    --sg-diff-removed: #3d1214;
+
+    --sg-status-open-bg: #0d2240;
+    --sg-status-open-text: #58a6ff;
+    --sg-status-approved-bg: #12261e;
+    --sg-status-approved-text: #3fb950;
+    --sg-status-rejected-bg: #3d1214;
+    --sg-status-rejected-text: #f85149;
+    --sg-status-withdrawn-bg: #21262d;
+    --sg-status-withdrawn-text: #8b949e;
+    --sg-status-draft-bg: #2e2210;
+    --sg-status-draft-text: #d29922;
+
+    --sg-code-bg: #161b22;
+    --sg-pre-bg: #161b22;
+
+    --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+    --sg-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+
+    --sg-overlay: rgba(0, 0, 0, 0.6);
+
+    --sg-pattern-color: rgba(255, 255, 255, 0.015);
+    --sg-pattern: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.015'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+
+// Keep SCSS variables for the few places that still need them (reset, typography)
+$font-sans: var(--sg-font-sans);
+$font-mono: var(--sg-font-mono);

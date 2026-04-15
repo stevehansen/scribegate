@@ -15,36 +15,46 @@ export class SgEditorPage extends LitElement {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 1px;
-      background: #dee2e6;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
+      background: var(--sg-border);
+      border: 1px solid var(--sg-border);
+      border-radius: var(--sg-radius-lg);
       overflow: hidden;
       min-height: 28rem;
     }
-    .pane { background: #fff; }
+    .pane { background: var(--sg-bg-elevated); }
     textarea {
       width: 100%; height: 100%; min-height: 28rem;
-      border: none; padding: 1rem; font-family: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
-      font-size: 0.875rem; line-height: 1.6; resize: none; outline: none;
+      border: none; padding: 1rem;
+      font-family: var(--sg-font-mono);
+      font-size: var(--sg-font-size-sm); line-height: 1.6; resize: none; outline: none;
+      background: var(--sg-bg-elevated);
+      color: var(--sg-text);
     }
     .preview { padding: 1rem; overflow-y: auto; max-height: 32rem; }
     .fields { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
-    label { font-size: 0.875rem; font-weight: 500; display: flex; flex-direction: column; gap: 0.25rem; }
+    label { font-size: var(--sg-font-size-sm); font-weight: 500; display: flex; flex-direction: column; gap: 0.25rem; color: var(--sg-text); }
     input {
-      padding: 0.5rem 0.75rem; border: 1px solid #dee2e6; border-radius: 6px; font-size: 0.875rem;
+      padding: 0.5rem 0.75rem; border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
+      font-size: var(--sg-font-size-sm); background: var(--sg-bg-elevated); color: var(--sg-text);
     }
-    input:focus, textarea:focus { outline: 2px solid #2563eb; outline-offset: -1px; }
+    input:focus, textarea:focus { outline: 2px solid var(--sg-primary); outline-offset: -1px; }
     .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
     .btn {
-      padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem;
-      font-weight: 500; cursor: pointer; border: none;
+      padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
+      font-weight: 500; cursor: pointer; border: none; transition: background var(--sg-transition-fast);
     }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-secondary { background: #fff; color: #6c757d; border: 1px solid #dee2e6; text-decoration: none; display: inline-flex; align-items: center; }
-    .btn-secondary:hover { background: #f8f9fa; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; }
-    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); }
+    .btn-primary:hover { background: var(--sg-primary-hover); }
+    .btn-secondary {
+      background: var(--sg-bg-elevated); color: var(--sg-text-secondary); border: 1px solid var(--sg-border);
+      text-decoration: none; display: inline-flex; align-items: center;
+    }
+    .btn-secondary:hover { background: var(--sg-bg-secondary); }
+    .error {
+      background: var(--sg-danger-light); border: 1px solid var(--sg-danger-border); color: var(--sg-danger);
+      padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm); margin-bottom: 1rem;
+    }
+    h1 { font-size: var(--sg-font-size-xl); margin-bottom: 1rem; color: var(--sg-text); }
     @media (max-width: 768px) {
       .editor-layout { grid-template-columns: 1fr; }
     }

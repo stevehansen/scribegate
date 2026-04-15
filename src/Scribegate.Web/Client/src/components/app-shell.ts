@@ -14,7 +14,7 @@ export class SgApp extends LitElement {
     main {
       flex: 1;
       padding: 1.5rem;
-      max-width: 72rem;
+      max-width: var(--sg-content-width-wide);
       margin: 0 auto;
       width: 100%;
     }

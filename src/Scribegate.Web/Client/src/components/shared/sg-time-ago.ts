@@ -36,7 +36,7 @@ function timeAgo(dateStr: string): string {
 @customElement('sg-time-ago')
 export class SgTimeAgo extends LitElement {
   static styles = css`
-    :host { font-size: 0.75rem; color: #6c757d; }
+    :host { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
   `;
 
   @property() datetime = '';

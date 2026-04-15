@@ -122,6 +122,53 @@ using (var scope = app.Services.CreateScope())
         await settings.SetAsync(SystemSettingKeys.InstanceName, "Scribegate");
 }
 
+// Security headers
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+
+    // Prevent MIME-type sniffing
+    headers["X-Content-Type-Options"] = "nosniff";
+
+    // Clickjacking protection
+    headers["X-Frame-Options"] = "DENY";
+
+    // XSS filter (legacy browsers)
+    headers["X-XSS-Protection"] = "1; mode=block";
+
+    // Referrer policy: send origin for same-origin, nothing for cross-origin
+    headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
+
+    // Permissions policy: disable unnecessary browser features
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
+
+    // Content Security Policy
+    // - self for scripts/styles (Lit components, SCSS)
+    // - unsafe-inline for Lit's css`` tagged templates (required by Lit Shadow DOM)
+    // - data: for SVG favicon and inline data URIs
+    // - blob: for potential editor previews
+    headers["Content-Security-Policy"] = string.Join("; ",
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self'",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'"
+    );
+
+    // HSTS: enforce HTTPS (1 year, include subdomains)
+    if (context.Request.IsHttps)
+    {
+        headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+    }
+
+    await next();
+});
+
 // SPA fallback: intercept 404s for non-API paths and serve index.html
 app.Use(async (context, next) =>
 {

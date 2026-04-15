@@ -26,6 +26,7 @@ export interface UserInfo {
   username: string;
   email: string;
   isAdmin: boolean;
+  themePreference: 'light' | 'dark' | 'system';
   createdAt: string;
 }
 

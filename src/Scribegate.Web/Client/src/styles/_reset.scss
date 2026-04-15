@@ -9,6 +9,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   tab-size: 4;
+  color-scheme: light dark;
 }
 
 body {
@@ -16,6 +17,10 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--sg-bg);
+  background-image: var(--sg-pattern);
+  color: var(--sg-text);
+  transition: background-color var(--sg-transition-base), color var(--sg-transition-base);
 }
 
 img, svg {
@@ -31,4 +36,9 @@ button, input, select, textarea {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: var(--sg-primary);
+  color: var(--sg-primary-text);
 }

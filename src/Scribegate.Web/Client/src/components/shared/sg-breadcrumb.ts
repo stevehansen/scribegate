@@ -4,11 +4,11 @@ import { customElement, property } from 'lit/decorators.js';
 @customElement('sg-breadcrumb')
 export class SgBreadcrumb extends LitElement {
   static styles = css`
-    :host { display: block; font-size: 0.875rem; color: #6c757d; margin-bottom: 1rem; }
-    a { color: #2563eb; text-decoration: none; }
+    :host { display: block; font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); margin-bottom: 1rem; }
+    a { color: var(--sg-primary); text-decoration: none; transition: color var(--sg-transition-fast); }
     a:hover { text-decoration: underline; }
     .sep { margin: 0 0.375rem; }
-    .current { color: #212529; font-weight: 500; }
+    .current { color: var(--sg-text); font-weight: 500; }
   `;
 
   @property() repoSlug = '';

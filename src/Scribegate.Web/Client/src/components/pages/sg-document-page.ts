@@ -14,16 +14,17 @@ export class SgDocumentPage extends LitElement {
     :host { display: block; }
     .meta {
       display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
-      font-size: 0.75rem; color: #6c757d;
-      padding: 0.75rem 0; border-bottom: 1px solid #e9ecef; margin-bottom: 1.5rem;
+      font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary);
+      padding: 0.75rem 0; border-bottom: 1px solid var(--sg-border); margin-bottom: 1.5rem;
     }
     .meta a {
-      color: #2563eb; text-decoration: none; font-weight: 500;
+      color: var(--sg-primary); text-decoration: none; font-weight: 500;
+      transition: color var(--sg-transition-fast);
     }
     .meta a:hover { text-decoration: underline; }
-    .content { max-width: 52rem; }
-    .error { color: #dc2626; }
-    .not-found { text-align: center; padding: 3rem; color: #6c757d; }
+    .content { max-width: var(--sg-content-width); }
+    .error { color: var(--sg-danger); }
+    .not-found { text-align: center; padding: 3rem; color: var(--sg-text-secondary); }
   `;
 
   @property() location: any;
@@ -37,7 +38,6 @@ export class SgDocumentPage extends LitElement {
   }
 
   private get _path(): string {
-    // Vaadin router catch-all puts it in __dynamicGroup
     const raw = this.location?.params?.[0] ?? '';
     return raw.endsWith('.md') ? raw : raw + '.md';
   }

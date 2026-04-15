@@ -19,6 +19,13 @@ export function getMe() {
   return apiFetch<UserInfo>('/api/v1/auth/me');
 }
 
+export function updatePreferences(prefs: { themePreference?: string }) {
+  return apiFetch<UserInfo>('/api/v1/auth/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(prefs),
+  });
+}
+
 export function createApiToken(name: string, expiresInDays?: number) {
   return apiFetch<ApiTokenCreatedResponse>('/api/v1/auth/tokens', {
     method: 'POST',

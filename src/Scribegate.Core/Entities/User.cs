@@ -10,5 +10,6 @@ public class User
     public bool EmailVerified { get; set; }
     public string? ExternalProvider { get; set; }
     public string? ExternalId { get; set; }
+    public string ThemePreference { get; set; } = "system"; // "light", "dark", or "system"
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

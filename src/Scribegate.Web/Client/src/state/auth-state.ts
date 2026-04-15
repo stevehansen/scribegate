@@ -1,5 +1,6 @@
 import type { UserInfo } from '../api/types.js';
 import * as authApi from '../api/auth.js';
+import { themeManager } from './theme.js';
 
 type AuthListener = () => void;
 
@@ -55,10 +56,12 @@ class AuthState {
     if (!this.token) return;
     try {
       this._user = await authApi.getMe();
-      console.log('[auth] loadUser:', JSON.stringify(this._user));
+      // Sync theme preference from server
+      if (this._user.themePreference) {
+        themeManager.setFromServer(this._user.themePreference);
+      }
       this.notify();
-    } catch (err) {
-      console.error('[auth] loadUser failed:', err);
+    } catch {
       localStorage.removeItem('sg_token');
       this._user = null;
       this.notify();

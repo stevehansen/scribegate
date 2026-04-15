@@ -12,40 +12,48 @@ export class SgProposalList extends LitElement {
   static styles = css`
     :host { display: block; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    h1 { font-size: 1.25rem; }
-    .tabs { display: flex; gap: 0; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
+    h1 { font-size: var(--sg-font-size-xl); color: var(--sg-text); }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--sg-border); margin-bottom: 1rem; }
     .tab {
-      padding: 0.5rem 1rem; cursor: pointer; font-size: 0.875rem;
-      border-bottom: 2px solid transparent; color: #6c757d;
+      padding: 0.5rem 1rem; cursor: pointer; font-size: var(--sg-font-size-sm);
+      border-bottom: 2px solid transparent; color: var(--sg-text-secondary);
+      transition: color var(--sg-transition-fast);
     }
-    .tab:hover { color: #212529; }
-    .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+    .tab:hover { color: var(--sg-text); }
+    .tab.active { color: var(--sg-primary); border-bottom-color: var(--sg-primary); font-weight: 500; }
     .proposals { display: flex; flex-direction: column; gap: 0; }
     .proposal {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 0.75rem 1rem; border: 1px solid #dee2e6; border-bottom: none;
+      padding: 0.75rem 1rem; border: 1px solid var(--sg-border); border-bottom: none;
+      background: var(--sg-bg-elevated);
+      transition: background var(--sg-transition-fast);
     }
-    .proposal:first-child { border-radius: 8px 8px 0 0; }
-    .proposal:last-child { border-bottom: 1px solid #dee2e6; border-radius: 0 0 8px 8px; }
-    .proposal:only-child { border-radius: 8px; border-bottom: 1px solid #dee2e6; }
+    .proposal:hover { background: var(--sg-bg-secondary); }
+    .proposal:first-child { border-radius: var(--sg-radius-lg) var(--sg-radius-lg) 0 0; }
+    .proposal:last-child { border-bottom: 1px solid var(--sg-border); border-radius: 0 0 var(--sg-radius-lg) var(--sg-radius-lg); }
+    .proposal:only-child { border-radius: var(--sg-radius-lg); border-bottom: 1px solid var(--sg-border); }
     .proposal a { text-decoration: none; color: inherit; }
-    .proposal-title { font-weight: 500; font-size: 0.875rem; color: #2563eb; }
+    .proposal-title { font-weight: 500; font-size: var(--sg-font-size-sm); color: var(--sg-primary); }
     .proposal-title:hover { text-decoration: underline; }
-    .proposal-meta { font-size: 0.75rem; color: #6c757d; margin-top: 0.125rem; }
+    .proposal-meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); margin-top: 0.125rem; }
     .status {
       font-size: 0.625rem; padding: 0.125rem 0.375rem; border-radius: 999px;
       font-weight: 600; text-transform: uppercase;
     }
-    .status-open { background: #dbeafe; color: #2563eb; }
-    .status-approved { background: #d1fae5; color: #059669; }
-    .status-rejected { background: #fee2e2; color: #dc2626; }
-    .status-withdrawn { background: #e5e7eb; color: #6b7280; }
-    .status-draft { background: #fef3c7; color: #d97706; }
-    .empty { text-align: center; padding: 2rem; color: #6c757d; }
-    .btn { padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; }
-    .btn-primary { background: #2563eb; color: #fff; display: inline-block; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .error { color: #dc2626; }
+    .status-open { background: var(--sg-status-open-bg); color: var(--sg-status-open-text); }
+    .status-approved { background: var(--sg-status-approved-bg); color: var(--sg-status-approved-text); }
+    .status-rejected { background: var(--sg-status-rejected-bg); color: var(--sg-status-rejected-text); }
+    .status-withdrawn { background: var(--sg-status-withdrawn-bg); color: var(--sg-status-withdrawn-text); }
+    .status-draft { background: var(--sg-status-draft-bg); color: var(--sg-status-draft-text); }
+    .empty { text-align: center; padding: 2rem; color: var(--sg-text-secondary); }
+    .btn {
+      padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
+      font-weight: 500; cursor: pointer; border: none; text-decoration: none;
+      transition: background var(--sg-transition-fast);
+    }
+    .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); display: inline-block; }
+    .btn-primary:hover { background: var(--sg-primary-hover); }
+    .error { color: var(--sg-danger); }
     .right { display: flex; align-items: center; gap: 0.75rem; }
   `;
 

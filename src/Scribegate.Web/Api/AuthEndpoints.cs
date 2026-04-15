@@ -17,6 +17,7 @@ public static class AuthEndpoints
         group.MapPost("/register", Register).AllowAnonymous();
         group.MapPost("/login", Login).AllowAnonymous();
         group.MapGet("/me", GetMe).RequireAuthorization();
+        group.MapPut("/preferences", UpdatePreferences).RequireAuthorization();
         group.MapPost("/tokens", CreateApiToken).RequireAuthorization();
         group.MapGet("/tokens", ListApiTokens).RequireAuthorization();
         group.MapDelete("/tokens/{id:guid}", DeleteApiToken).RequireAuthorization();
@@ -231,6 +232,34 @@ public static class AuthEndpoints
         return Results.Ok(MapToUserInfo(user));
     }
 
+    private static readonly HashSet<string> ValidThemes = ["light", "dark", "system"];
+
+    private static async Task<IResult> UpdatePreferences(
+        UpdatePreferencesRequest request,
+        ClaimsPrincipal principal,
+        ScribegateDbContext db,
+        CancellationToken ct)
+    {
+        var userId = GetUserId(principal);
+        if (userId is null)
+            return Unauthorized();
+
+        var user = await db.Users.FindAsync([userId.Value], ct);
+        if (user is null)
+            return Unauthorized();
+
+        if (request.ThemePreference is not null)
+        {
+            if (!ValidThemes.Contains(request.ThemePreference))
+                return ApiResults.ValidationError("themePreference", ApiErrorCodes.InvalidFormat,
+                    "Theme must be 'light', 'dark', or 'system'.");
+            user.ThemePreference = request.ThemePreference;
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(MapToUserInfo(user));
+    }
+
     private static async Task<IResult> CreateApiToken(
         CreateApiTokenRequest request,
         ClaimsPrincipal principal,
@@ -363,6 +392,7 @@ public static class AuthEndpoints
         Username = user.Username,
         Email = user.Email,
         IsAdmin = user.IsAdmin,
+        ThemePreference = user.ThemePreference,
         CreatedAt = user.CreatedAt,
     };
 }

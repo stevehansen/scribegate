@@ -1,24 +1,21 @@
-@use 'variables' as *;
-
 body {
-  font-family: $font-sans;
-  font-size: $font-size-base;
-  line-height: $line-height-base;
-  color: $color-text;
-  background: $color-bg;
+  font-family: var(--sg-font-sans);
+  font-size: var(--sg-font-size-base);
+  line-height: var(--sg-line-height-base);
+  color: var(--sg-text);
 }
 
 h1, h2, h3, h4, h5, h6 {
-  line-height: $line-height-tight;
+  line-height: var(--sg-line-height-tight);
   font-weight: 600;
 }
 
-h1 { font-size: $font-size-3xl; }
-h2 { font-size: $font-size-2xl; }
-h3 { font-size: $font-size-xl; }
-h4 { font-size: $font-size-lg; }
+h1 { font-size: var(--sg-font-size-3xl); }
+h2 { font-size: var(--sg-font-size-2xl); }
+h3 { font-size: var(--sg-font-size-xl); }
+h4 { font-size: var(--sg-font-size-lg); }
 
 code, pre {
-  font-family: $font-mono;
-  font-size: $font-size-sm;
+  font-family: var(--sg-font-mono);
+  font-size: var(--sg-font-size-sm);
 }

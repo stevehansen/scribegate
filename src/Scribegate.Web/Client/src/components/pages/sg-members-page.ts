@@ -11,26 +11,41 @@ import '../shared/sg-breadcrumb.js';
 export class SgMembersPage extends LitElement {
   static styles = css`
     :host { display: block; }
-    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    h1 { font-size: var(--sg-font-size-xl); margin-bottom: 1rem; color: var(--sg-text); }
     .members { display: flex; flex-direction: column; gap: 0; }
     .member {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 0.75rem 1rem; border: 1px solid #dee2e6; border-bottom: none;
+      padding: 0.75rem 1rem; border: 1px solid var(--sg-border); border-bottom: none;
+      background: var(--sg-bg-elevated);
+      transition: background var(--sg-transition-fast);
     }
-    .member:first-child { border-radius: 8px 8px 0 0; }
-    .member:last-child { border-bottom: 1px solid #dee2e6; border-radius: 0 0 8px 8px; }
-    .member:only-child { border-radius: 8px; border-bottom: 1px solid #dee2e6; }
-    .member-name { font-weight: 500; font-size: 0.875rem; }
-    .member-email { font-size: 0.75rem; color: #6c757d; }
-    .role-badge { font-size: 0.625rem; padding: 0.125rem 0.375rem; border-radius: 999px; background: #e9ecef; color: #6c757d; font-weight: 600; }
+    .member:hover { background: var(--sg-bg-secondary); }
+    .member:first-child { border-radius: var(--sg-radius-lg) var(--sg-radius-lg) 0 0; }
+    .member:last-child { border-bottom: 1px solid var(--sg-border); border-radius: 0 0 var(--sg-radius-lg) var(--sg-radius-lg); }
+    .member:only-child { border-radius: var(--sg-radius-lg); border-bottom: 1px solid var(--sg-border); }
+    .member-name { font-weight: 500; font-size: var(--sg-font-size-sm); color: var(--sg-text); }
+    .member-email { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
+    .role-badge {
+      font-size: 0.625rem; padding: 0.125rem 0.375rem; border-radius: 999px;
+      background: var(--sg-bg-tertiary); color: var(--sg-text-secondary); font-weight: 600;
+    }
     .add-form { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
-    .add-form input, .add-form select { padding: 0.5rem 0.75rem; border: 1px solid #dee2e6; border-radius: 6px; font-size: 0.875rem; }
-    .btn { padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; }
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
-    .btn-danger { background: #dc2626; color: #fff; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; }
-    .empty { text-align: center; padding: 2rem; color: #6c757d; }
+    .add-form input, .add-form select {
+      padding: 0.5rem 0.75rem; border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
+      font-size: var(--sg-font-size-sm); background: var(--sg-bg-elevated); color: var(--sg-text);
+    }
+    .btn {
+      padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
+      font-weight: 500; cursor: pointer; border: none; transition: background var(--sg-transition-fast);
+    }
+    .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); }
+    .btn-sm { padding: 0.25rem 0.5rem; font-size: var(--sg-font-size-xs); }
+    .btn-danger { background: var(--sg-danger); color: #fff; }
+    .error {
+      background: var(--sg-danger-light); border: 1px solid var(--sg-danger-border); color: var(--sg-danger);
+      padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm); margin-bottom: 1rem;
+    }
+    .empty { text-align: center; padding: 2rem; color: var(--sg-text-secondary); }
     .right { display: flex; gap: 0.5rem; align-items: center; }
   `;
 

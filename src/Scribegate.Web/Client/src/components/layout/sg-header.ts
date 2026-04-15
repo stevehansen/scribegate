@@ -1,28 +1,31 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { authState } from '../../state/auth-state.js';
+import { themeManager } from '../../state/theme.js';
 
 @customElement('sg-header')
 export class SgHeader extends LitElement {
   static styles = css`
     :host {
       display: block;
-      border-bottom: 1px solid #dee2e6;
-      background: #fff;
+      border-bottom: 1px solid var(--sg-border);
+      background: var(--sg-bg-elevated);
+      transition: background var(--sg-transition-base), border-color var(--sg-transition-base);
     }
     nav {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      max-width: 72rem;
+      max-width: var(--sg-content-width-wide);
       margin: 0 auto;
       padding: 0 1.5rem;
-      height: 3.5rem;
+      height: var(--sg-header-height);
     }
     .logo {
-      font-size: 1.125rem;
+      font-size: var(--sg-font-size-lg);
       font-weight: 700;
-      color: #212529;
+      color: var(--sg-text);
+      transition: opacity var(--sg-transition-fast);
     }
     .logo:hover { opacity: 0.8; }
     .actions {
@@ -31,42 +34,60 @@ export class SgHeader extends LitElement {
       gap: 1rem;
     }
     a {
-      color: #6c757d;
+      color: var(--sg-text-secondary);
       text-decoration: none;
-      font-size: 0.875rem;
+      font-size: var(--sg-font-size-sm);
+      transition: color var(--sg-transition-fast);
     }
-    a:hover { color: #212529; }
+    a:hover { color: var(--sg-text); }
     .user-info {
-      font-size: 0.875rem;
-      color: #212529;
+      font-size: var(--sg-font-size-sm);
+      color: var(--sg-text);
       font-weight: 500;
     }
     button {
       background: none;
-      border: 1px solid #dee2e6;
-      border-radius: 6px;
+      border: 1px solid var(--sg-border);
+      border-radius: var(--sg-radius);
       padding: 0.375rem 0.75rem;
-      font-size: 0.875rem;
+      font-size: var(--sg-font-size-sm);
       cursor: pointer;
-      color: #6c757d;
+      color: var(--sg-text-secondary);
+      transition: background var(--sg-transition-fast), color var(--sg-transition-fast), border-color var(--sg-transition-fast);
     }
     button:hover {
-      background: #f8f9fa;
-      color: #212529;
+      background: var(--sg-bg-secondary);
+      color: var(--sg-text);
+    }
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 1rem;
+      line-height: 1;
     }
   `;
 
   @state() private _isAuth = false;
   @state() private _username = '';
   @state() private _isAdmin = false;
+  @state() private _theme: 'light' | 'dark' | 'system' = 'system';
 
   private _unsub?: () => void;
+  private _themeUnsub?: () => void;
 
   async connectedCallback() {
     super.connectedCallback();
     this._unsub = authState.subscribe(() => this._sync());
+    this._themeUnsub = themeManager.subscribe(() => {
+      this._theme = themeManager.current;
+    });
+    this._theme = themeManager.current;
 
-    // If we have a token but no user data yet, load it directly
     if (authState.isAuthenticated) {
       if (!authState.user) {
         await authState.loadUser();
@@ -78,6 +99,7 @@ export class SgHeader extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsub?.();
+    this._themeUnsub?.();
   }
 
   private _sync() {
@@ -103,6 +125,9 @@ export class SgHeader extends LitElement {
                 <a href="/login">Sign in</a>
                 <a href="/register">Register</a>
               `}
+          <button class="theme-toggle" @click=${() => themeManager.toggle()} title=${`Theme: ${this._theme}`}>
+            ${this._theme === 'light' ? '\u2600\uFE0F' : this._theme === 'dark' ? '\uD83C\uDF19' : '\uD83D\uDCBB'}
+          </button>
         </div>
       </nav>
     `;

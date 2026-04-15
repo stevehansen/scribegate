@@ -13,42 +13,69 @@ import '../shared/sg-time-ago.js';
 export class SgProposalPage extends LitElement {
   static styles = css`
     :host { display: block; }
-    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
-    .meta { font-size: 0.75rem; color: #6c757d; margin-bottom: 1rem; }
+    h1 { font-size: var(--sg-font-size-xl); margin-bottom: 0.5rem; color: var(--sg-text); }
+    .meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); margin-bottom: 1rem; }
     .status { font-size: 0.625rem; padding: 0.125rem 0.375rem; border-radius: 999px; font-weight: 600; }
-    .status-open { background: #dbeafe; color: #2563eb; }
-    .status-approved { background: #d1fae5; color: #059669; }
-    .status-rejected { background: #fee2e2; color: #dc2626; }
-    .status-withdrawn { background: #e5e7eb; color: #6b7280; }
-    .tabs { display: flex; gap: 0; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
-    .tab { padding: 0.5rem 1rem; cursor: pointer; font-size: 0.875rem; border-bottom: 2px solid transparent; color: #6c757d; }
-    .tab:hover { color: #212529; }
-    .tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
-    .diff { font-family: 'SF Mono', Consolas, monospace; font-size: 0.8125rem; border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; }
+    .status-open { background: var(--sg-status-open-bg); color: var(--sg-status-open-text); }
+    .status-approved { background: var(--sg-status-approved-bg); color: var(--sg-status-approved-text); }
+    .status-rejected { background: var(--sg-status-rejected-bg); color: var(--sg-status-rejected-text); }
+    .status-withdrawn { background: var(--sg-status-withdrawn-bg); color: var(--sg-status-withdrawn-text); }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--sg-border); margin-bottom: 1rem; }
+    .tab {
+      padding: 0.5rem 1rem; cursor: pointer; font-size: var(--sg-font-size-sm);
+      border-bottom: 2px solid transparent; color: var(--sg-text-secondary);
+      transition: color var(--sg-transition-fast);
+    }
+    .tab:hover { color: var(--sg-text); }
+    .tab.active { color: var(--sg-primary); border-bottom-color: var(--sg-primary); font-weight: 500; }
+    .diff {
+      font-family: var(--sg-font-mono); font-size: 0.8125rem;
+      border: 1px solid var(--sg-border); border-radius: var(--sg-radius-lg); overflow: hidden;
+    }
     .diff-line { padding: 0.125rem 0.75rem; white-space: pre-wrap; }
-    .diff-added { background: #d1fae5; }
-    .diff-removed { background: #fee2e2; }
+    .diff-added { background: var(--sg-diff-added); }
+    .diff-removed { background: var(--sg-diff-removed); }
     .actions { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-    .btn { padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; }
-    .btn-approve { background: #059669; color: #fff; }
-    .btn-approve:hover { background: #047857; }
-    .btn-reject { background: #dc2626; color: #fff; }
-    .btn-reject:hover { background: #b91c1c; }
-    .btn-withdraw { background: #6b7280; color: #fff; }
-    .btn-withdraw:hover { background: #4b5563; }
-    .btn-secondary { background: #fff; color: #6c757d; border: 1px solid #dee2e6; }
+    .btn {
+      padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
+      font-weight: 500; cursor: pointer; border: none; transition: background var(--sg-transition-fast);
+    }
+    .btn-approve { background: var(--sg-success); color: #fff; }
+    .btn-approve:hover { background: var(--sg-success-hover); }
+    .btn-reject { background: var(--sg-danger); color: #fff; }
+    .btn-reject:hover { background: var(--sg-danger-hover); }
+    .btn-withdraw { background: var(--sg-status-withdrawn-text); color: #fff; }
+    .btn-withdraw:hover { opacity: 0.85; }
+    .btn-secondary { background: var(--sg-bg-elevated); color: var(--sg-text-secondary); border: 1px solid var(--sg-border); }
     .section { margin-top: 1.5rem; }
-    .section h2 { font-size: 1rem; margin-bottom: 0.75rem; }
-    .review { border: 1px solid #dee2e6; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
-    .review-verdict { font-weight: 600; font-size: 0.8125rem; }
-    .review-meta { font-size: 0.75rem; color: #6c757d; }
-    .comment { border-left: 3px solid #dee2e6; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; }
-    .comment-meta { font-size: 0.75rem; color: #6c757d; }
-    textarea { width: 100%; min-height: 4rem; padding: 0.5rem; border: 1px solid #dee2e6; border-radius: 6px; font-size: 0.875rem; resize: vertical; }
-    select { padding: 0.375rem 0.75rem; border: 1px solid #dee2e6; border-radius: 6px; font-size: 0.875rem; }
+    .section h2 { font-size: var(--sg-font-size-base); margin-bottom: 0.75rem; color: var(--sg-text); }
+    .review {
+      border: 1px solid var(--sg-border); border-radius: var(--sg-radius-lg);
+      padding: 0.75rem 1rem; margin-bottom: 0.5rem; background: var(--sg-bg-elevated);
+    }
+    .review-verdict { font-weight: 600; font-size: 0.8125rem; color: var(--sg-text); }
+    .review-meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
+    .comment {
+      border-left: 3px solid var(--sg-border); padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
+      color: var(--sg-text);
+    }
+    .comment-meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
+    textarea {
+      width: 100%; min-height: 4rem; padding: 0.5rem;
+      border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
+      font-size: var(--sg-font-size-sm); resize: vertical;
+      background: var(--sg-bg-elevated); color: var(--sg-text);
+    }
+    select {
+      padding: 0.375rem 0.75rem; border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
+      font-size: var(--sg-font-size-sm); background: var(--sg-bg-elevated); color: var(--sg-text);
+    }
     .form-row { display: flex; gap: 0.5rem; align-items: flex-start; margin-top: 0.5rem; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 0.75rem; border-radius: 6px; font-size: 0.875rem; margin-bottom: 1rem; }
-    a.back { font-size: 0.875rem; color: #2563eb; text-decoration: none; display: inline-block; margin-bottom: 1rem; }
+    .error {
+      background: var(--sg-danger-light); border: 1px solid var(--sg-danger-border); color: var(--sg-danger);
+      padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm); margin-bottom: 1rem;
+    }
+    a.back { font-size: var(--sg-font-size-sm); color: var(--sg-primary); text-decoration: none; display: inline-block; margin-bottom: 1rem; }
   `;
 
   @property() location: any;
@@ -215,7 +242,7 @@ export class SgProposalPage extends LitElement {
         `)}
         ${authState.isAuthenticated ? html`
           <textarea .value=${this._commentBody} @input=${(e: Event) => this._commentBody = (e.target as HTMLTextAreaElement).value} placeholder="Write a comment..."></textarea>
-          <button class="btn btn-secondary" @click=${this._submitComment} style="margin-top:0.5rem;border:1px solid #dee2e6">Post Comment</button>
+          <button class="btn btn-secondary" @click=${this._submitComment} style="margin-top:0.5rem">Post Comment</button>
         ` : ''}
       </div>
     `;

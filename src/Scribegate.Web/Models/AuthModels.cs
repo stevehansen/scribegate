@@ -26,7 +26,13 @@ public sealed class UserInfo
     public required string Username { get; init; }
     public required string Email { get; init; }
     public bool IsAdmin { get; init; }
+    public string ThemePreference { get; init; } = "system";
     public required DateTime CreatedAt { get; init; }
+}
+
+public sealed class UpdatePreferencesRequest
+{
+    public string? ThemePreference { get; init; }
 }
 
 public sealed class CreateApiTokenRequest
