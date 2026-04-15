@@ -1,0 +1,23 @@
+{
+  "name": "@scribegate/client",
+  "version": "0.1.0",
+  "description": "TypeScript/JavaScript client for the Scribegate API",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "openapi-ts --input ../openapi.json --output src/generated --client fetch",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.45.0",
+    "typescript": "~5.7.0"
+  },
+  "files": ["dist"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stevehansen/scribegate"
+  }
+}

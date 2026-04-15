@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Scribegate.Core.Entities;
+using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Api;
 
@@ -16,6 +18,9 @@ builder.Services.AddScribegateData(connectionString);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<UserContext>();
 builder.Services.AddSingleton<JwtService>();
+builder.Services.AddSingleton<SignatureService>();
+builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<AuthorizationHelper>();
 
 // Authentication: JWT + API token (dual scheme)
 var jwtService = new JwtService(builder.Configuration);
@@ -90,9 +95,6 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Markdown collaboration platform with editorial review workflows.",
     });
-
-    // Security scheme configured via Swashbuckle's document filter
-    // Auth: use Bearer <jwt> or Bearer sg_<token> in the Authorization header
 });
 
 // JSON options
@@ -109,10 +111,18 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ScribegateDbContext>();
     await db.Database.MigrateAsync();
+
+    // Seed default settings if not present
+    var settings = scope.ServiceProvider.GetRequiredService<ISystemSettingStore>();
+    if (await settings.GetAsync(SystemSettingKeys.RegistrationEnabled) is null)
+        await settings.SetAsync(SystemSettingKeys.RegistrationEnabled, "true");
+    if (await settings.GetAsync(SystemSettingKeys.EmailValidationRequired) is null)
+        await settings.SetAsync(SystemSettingKeys.EmailValidationRequired, "false");
+    if (await settings.GetAsync(SystemSettingKeys.InstanceName) is null)
+        await settings.SetAsync(SystemSettingKeys.InstanceName, "Scribegate");
 }
 
 // SPA fallback: intercept 404s for non-API paths and serve index.html
-// Must be early in the pipeline to wrap the response
 app.Use(async (context, next) =>
 {
     await next();
@@ -156,5 +166,11 @@ app.MapAuthEndpoints();
 app.MapRepositoryEndpoints();
 app.MapDocumentEndpoints();
 app.MapRevisionRoutes();
+app.MapAdminEndpoints();
+app.MapAuditEndpoints();
+app.MapProposalEndpoints();
+app.MapReviewEndpoints();
+app.MapCommentEndpoints();
+app.MapMembershipEndpoints();
 
 app.Run();

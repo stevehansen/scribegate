@@ -100,11 +100,17 @@ docs/
 - [x] Documentation (README, CONTRIBUTING, SECURITY, architecture, self-hosting, design decisions)
 - [x] API endpoints for repositories, documents, and revisions (with Swagger at /swagger)
 - [x] Authentication (JWT + API tokens, BCrypt passwords, dual-scheme auth pipeline)
+- [x] Registration controls (admin toggle, first-user-is-admin)
+- [x] Frontmatter parsing (YAML frontmatter → JSON storage)
+- [x] Audit/tracing system (event log for all mutations, IP tracking)
+- [x] EC cryptographic signatures (ECDSA P-256 on all revisions)
+- [x] Proposals & Reviews workflow (create, submit, review, approve, reject, withdraw)
+- [x] Comments (threaded comments on proposals)
+- [x] Repository membership & roles (Reader, Contributor, Reviewer, Admin)
+- [x] Admin panel (settings management, audit log viewer)
+- [x] CLI tool (`sg`) — dotnet global tool with auth, repo, doc, proposal, review commands
+- [x] Client library scaffolding (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
 - [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
-- [ ] Audit/tracing system (event log with signatures, EC crypto preferred)
-- [ ] Frontmatter parsing and storage
-- [ ] CLI tool (`sg`) — dotnet global tool
-- [ ] Client libraries (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
 - [x] GitHub Actions CI/CD (ci.yml for build/test, release.yml with Docker + GHCR)
 - [x] Frontend SPA (TypeScript + Lit + Vite + SASS, @vaadin/router, marked)
 - [x] Dockerfile (multi-stage: Node + .NET SDK + aspnet runtime, non-root user)
@@ -136,6 +142,34 @@ DELETE /api/v1/auth/tokens/{id}                              # Revoke API token 
 
 GET    /api/v1/repositories/{slug}/revisions/{path}          # List revision history
 GET    /api/v1/repositories/{slug}/revisions/{docId}/{revId} # Get specific revision
+
+GET    /api/v1/admin/settings/registration                   # Registration status (anonymous)
+GET    /api/v1/admin/settings                                # List all settings [admin]
+PUT    /api/v1/admin/settings/{key}                          # Update setting [admin]
+GET    /api/v1/admin/audit                                   # Audit event log [admin]
+GET    /api/v1/admin/audit/{id}                              # Get audit event [admin]
+
+GET    /api/v1/repositories/{slug}/proposals                 # List proposals
+POST   /api/v1/repositories/{slug}/proposals                 # Create proposal [auth]
+GET    /api/v1/repositories/{slug}/proposals/{id}            # Get proposal with diff
+PUT    /api/v1/repositories/{slug}/proposals/{id}            # Update draft proposal [auth]
+POST   /api/v1/repositories/{slug}/proposals/{id}/submit     # Submit draft → open [auth]
+POST   /api/v1/repositories/{slug}/proposals/{id}/withdraw   # Withdraw proposal [auth]
+POST   /api/v1/repositories/{slug}/proposals/{id}/approve    # Approve (creates revision) [reviewer+]
+POST   /api/v1/repositories/{slug}/proposals/{id}/reject     # Reject proposal [reviewer+]
+
+GET    /api/v1/repositories/{slug}/proposals/{id}/reviews    # List reviews
+POST   /api/v1/repositories/{slug}/proposals/{id}/reviews    # Submit review [auth]
+
+GET    /api/v1/repositories/{slug}/proposals/{id}/comments   # List comments
+POST   /api/v1/repositories/{slug}/proposals/{id}/comments   # Add comment [auth]
+PUT    /api/v1/repositories/{slug}/proposals/{id}/comments/{cid}    # Edit comment [owner]
+DELETE /api/v1/repositories/{slug}/proposals/{id}/comments/{cid}    # Delete comment [owner/admin]
+
+GET    /api/v1/repositories/{slug}/members                   # List members
+POST   /api/v1/repositories/{slug}/members                   # Add member [admin]
+PUT    /api/v1/repositories/{slug}/members/{userId}          # Update role [admin]
+DELETE /api/v1/repositories/{slug}/members/{userId}          # Remove member [admin]
 ```
 
 ## Design Principles
@@ -145,4 +179,4 @@ GET    /api/v1/repositories/{slug}/revisions/{docId}/{revId} # Get specific revi
 - **Client libraries:** Auto-generated from OpenAPI spec. TypeScript/JS, C#, Python. Publish to npm, NuGet, PyPI.
 - **CI/CD:** GitHub Actions with trusted publishing (OIDC, no stored keys). See P:\eidet for reference configs.
 - **Errors:** Structured, actionable. Every error has a code, message, details with fix suggestion, and field reference.
-- **Audit/Tracing:** Every mutation is traceable (who, what, when). Revisions are immutable and append-only. Future: cryptographic signatures on revisions (EC preferred, similar to signed git commits), event audit log for admin actions, token usage tracking.
+- **Audit/Tracing:** Every mutation is traced (who, what, when, IP). Revisions are immutable, append-only, and signed with ECDSA P-256. Audit events logged for all mutations with actor, target, and JSON details. Admin audit log viewer in the UI.

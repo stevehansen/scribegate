@@ -15,13 +15,16 @@ public class JwtService(IConfiguration configuration)
         var key = GetSigningKey();
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim("username", user.Username),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new(JwtRegisteredClaimNames.Email, user.Email),
+            new("username", user.Username),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
+
+        if (user.IsAdmin)
+            claims.Add(new Claim("is_admin", "true"));
 
         var expiration = DateTime.UtcNow.AddHours(
             configuration.GetValue("Scribegate:Jwt:ExpirationHours", DefaultExpirationHours));

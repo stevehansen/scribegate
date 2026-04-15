@@ -58,6 +58,93 @@ namespace Scribegate.Data.Migrations
                     b.ToTable("ApiTokens");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.AuditEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorUsername")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(8000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("EventType");
+
+                    b.HasIndex("TargetType", "TargetId");
+
+                    b.ToTable("AuditEvents");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.Comment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LineReference")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("ParentCommentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ProposalId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("ParentCommentId");
+
+                    b.HasIndex("ProposalId");
+
+                    b.ToTable("Comments");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.Document", b =>
                 {
                     b.Property<Guid>("Id")
@@ -71,6 +158,10 @@ namespace Scribegate.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("CurrentRevisionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FrontmatterJson")
+                        .HasMaxLength(8000)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Path")
@@ -92,6 +183,70 @@ namespace Scribegate.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.Proposal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("BaseRevisionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProposedContent")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProposedPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RepositoryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ResolvedById")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BaseRevisionId");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("DocumentId");
+
+                    b.HasIndex("ResolvedById");
+
+                    b.HasIndex("RepositoryId", "Status");
+
+                    b.ToTable("Proposals");
                 });
 
             modelBuilder.Entity("Scribegate.Core.Entities.Repository", b =>
@@ -150,6 +305,39 @@ namespace Scribegate.Data.Migrations
                     b.ToTable("RepositoryMemberships");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.Review", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Body")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CreatedById")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ProposalId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Verdict")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedById");
+
+                    b.HasIndex("ProposalId");
+
+                    b.ToTable("Reviews");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.Revision", b =>
                 {
                     b.Property<Guid>("Id")
@@ -188,6 +376,65 @@ namespace Scribegate.Data.Migrations
                     b.ToTable("Revisions");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.RevisionSignature", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Algorithm")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PublicKeyId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("RevisionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Signature")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RevisionId")
+                        .IsUnique();
+
+                    b.ToTable("RevisionSignatures");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.SystemSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("SystemSettings");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -202,8 +449,21 @@ namespace Scribegate.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExternalProvider")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsAdmin")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Username")
@@ -233,6 +493,32 @@ namespace Scribegate.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.Comment", b =>
+                {
+                    b.HasOne("Scribegate.Core.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Scribegate.Core.Entities.Comment", "ParentComment")
+                        .WithMany("Replies")
+                        .HasForeignKey("ParentCommentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Scribegate.Core.Entities.Proposal", "Proposal")
+                        .WithMany("Comments")
+                        .HasForeignKey("ProposalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("ParentComment");
+
+                    b.Navigation("Proposal");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.Document", b =>
                 {
                     b.HasOne("Scribegate.Core.Entities.User", "CreatedBy")
@@ -259,6 +545,46 @@ namespace Scribegate.Data.Migrations
                     b.Navigation("Repository");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.Proposal", b =>
+                {
+                    b.HasOne("Scribegate.Core.Entities.Revision", "BaseRevision")
+                        .WithMany()
+                        .HasForeignKey("BaseRevisionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Scribegate.Core.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Scribegate.Core.Entities.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Scribegate.Core.Entities.Repository", "Repository")
+                        .WithMany()
+                        .HasForeignKey("RepositoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Scribegate.Core.Entities.User", "ResolvedBy")
+                        .WithMany()
+                        .HasForeignKey("ResolvedById")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("BaseRevision");
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Repository");
+
+                    b.Navigation("ResolvedBy");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.RepositoryMembership", b =>
                 {
                     b.HasOne("Scribegate.Core.Entities.Repository", "Repository")
@@ -276,6 +602,25 @@ namespace Scribegate.Data.Migrations
                     b.Navigation("Repository");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.Review", b =>
+                {
+                    b.HasOne("Scribegate.Core.Entities.User", "CreatedBy")
+                        .WithMany()
+                        .HasForeignKey("CreatedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Scribegate.Core.Entities.Proposal", "Proposal")
+                        .WithMany("Reviews")
+                        .HasForeignKey("ProposalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CreatedBy");
+
+                    b.Navigation("Proposal");
                 });
 
             modelBuilder.Entity("Scribegate.Core.Entities.Revision", b =>
@@ -304,9 +649,32 @@ namespace Scribegate.Data.Migrations
                     b.Navigation("ParentRevision");
                 });
 
+            modelBuilder.Entity("Scribegate.Core.Entities.RevisionSignature", b =>
+                {
+                    b.HasOne("Scribegate.Core.Entities.Revision", "Revision")
+                        .WithOne()
+                        .HasForeignKey("Scribegate.Core.Entities.RevisionSignature", "RevisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Revision");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.Comment", b =>
+                {
+                    b.Navigation("Replies");
+                });
+
             modelBuilder.Entity("Scribegate.Core.Entities.Document", b =>
                 {
                     b.Navigation("Revisions");
+                });
+
+            modelBuilder.Entity("Scribegate.Core.Entities.Proposal", b =>
+                {
+                    b.Navigation("Comments");
+
+                    b.Navigation("Reviews");
                 });
 
             modelBuilder.Entity("Scribegate.Core.Entities.Repository", b =>

@@ -77,6 +77,8 @@ export class SgRepositoryPage extends LitElement {
           ${this._repo.description ? html`<p>${this._repo.description}</p>` : ''}
         </div>
         <div class="actions">
+          <a class="btn btn-primary" style="background:#6c757d" href="/${this._slug}/proposals">Proposals</a>
+          <a class="btn btn-primary" style="background:#6c757d" href="/${this._slug}/members">Members</a>
           ${authState.isAuthenticated
             ? html`<a class="btn btn-primary" href="/${this._slug}/edit/new">New document</a>`
             : ''}

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
 
@@ -27,8 +28,25 @@ public static class AuthEndpoints
         RegisterRequest request,
         ScribegateDbContext db,
         JwtService jwt,
+        ISystemSettingStore settings,
+        AuditService audit,
         CancellationToken ct)
     {
+        // Check if registration is enabled
+        var regEnabled = await settings.GetAsync(SystemSettingKeys.RegistrationEnabled, ct);
+        if (regEnabled == "false")
+        {
+            return Results.Json(new
+            {
+                error = new ApiError
+                {
+                    Code = "REGISTRATION_DISABLED",
+                    Message = "Registration is currently disabled.",
+                    Details = "Contact an administrator to request access, or ask them to enable registration in the admin settings.",
+                }
+            }, statusCode: 403);
+        }
+
         var errors = new List<ApiFieldError>();
 
         if (string.IsNullOrWhiteSpace(request.Username))
@@ -113,16 +131,26 @@ public static class AuthEndpoints
                 "Try logging in instead, or use a different email address.",
                 "email");
 
+        // First user becomes admin
+        var isFirstUser = !await db.Users.AnyAsync(ct);
+
         var user = new User
         {
             Id = Guid.CreateVersion7(),
             Username = username,
             Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            IsAdmin = isFirstUser,
+            EmailVerified = true, // No email validation yet; auto-verified
         };
 
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.UserRegistered, user.Id, user.Username,
+            "User", user.Id,
+            new { isFirstUser, isAdmin = user.IsAdmin }, ct);
 
         var token = jwt.GenerateToken(user);
 
@@ -138,6 +166,7 @@ public static class AuthEndpoints
         LoginRequest request,
         ScribegateDbContext db,
         JwtService jwt,
+        AuditService audit,
         CancellationToken ct)
     {
         var errors = new List<ApiFieldError>();
@@ -154,8 +183,13 @@ public static class AuthEndpoints
         var email = request.Email!.Trim().ToLowerInvariant();
 
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
-        if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user is null || user.PasswordHash is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
+            await audit.LogAsync(
+                AuditEventTypes.UserLoginFailed, null, null,
+                "User", null,
+                new { email }, ct);
+
             return Results.Json(new
             {
                 error = new ApiError
@@ -166,6 +200,10 @@ public static class AuthEndpoints
                 }
             }, statusCode: 401);
         }
+
+        await audit.LogAsync(
+            AuditEventTypes.UserLoggedIn, user.Id, user.Username,
+            "User", user.Id, null, ct);
 
         var token = jwt.GenerateToken(user);
 
@@ -197,6 +235,7 @@ public static class AuthEndpoints
         CreateApiTokenRequest request,
         ClaimsPrincipal principal,
         ScribegateDbContext db,
+        AuditService audit,
         CancellationToken ct)
     {
         var userId = GetUserId(principal);
@@ -229,6 +268,11 @@ public static class AuthEndpoints
 
         db.ApiTokens.Add(apiToken);
         await db.SaveChangesAsync(ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.ApiTokenCreated, userId, principal.FindFirstValue("username"),
+            "ApiToken", apiToken.Id,
+            new { name = apiToken.Name }, ct);
 
         return Results.Created($"/api/v1/auth/tokens", new ApiTokenCreatedResponse
         {
@@ -271,6 +315,7 @@ public static class AuthEndpoints
         Guid id,
         ClaimsPrincipal principal,
         ScribegateDbContext db,
+        AuditService audit,
         CancellationToken ct)
     {
         var userId = GetUserId(principal);
@@ -285,6 +330,11 @@ public static class AuthEndpoints
 
         db.ApiTokens.Remove(token);
         await db.SaveChangesAsync(ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.ApiTokenRevoked, userId, principal.FindFirstValue("username"),
+            "ApiToken", id,
+            new { name = token.Name }, ct);
 
         return Results.NoContent();
     }
@@ -312,6 +362,7 @@ public static class AuthEndpoints
         Id = user.Id,
         Username = user.Username,
         Email = user.Email,
+        IsAdmin = user.IsAdmin,
         CreatedAt = user.CreatedAt,
     };
 }

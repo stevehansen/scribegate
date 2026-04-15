@@ -25,6 +25,7 @@ export interface UserInfo {
   id: string;
   username: string;
   email: string;
+  isAdmin: boolean;
   createdAt: string;
 }
 
@@ -105,4 +106,124 @@ export interface ApiTokenCreatedResponse {
   scopes?: string;
   createdAt: string;
   expiresAt?: string;
+}
+
+// Proposals & Reviews
+
+export interface ProposalSummary {
+  id: string;
+  title: string;
+  status: string;
+  documentPath?: string;
+  createdBy: string;
+  createdAt: string;
+  reviewCount: number;
+  commentCount: number;
+}
+
+export interface ProposalResponse {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  proposedContent: string;
+  proposedPath?: string;
+  documentId?: string;
+  documentPath?: string;
+  baseRevisionId?: string;
+  createdBy: string;
+  createdAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  reviewCount: number;
+  commentCount: number;
+  diff?: DiffResult;
+}
+
+export interface ProposalListResponse {
+  items: ProposalSummary[];
+  total: number;
+}
+
+export interface DiffResult {
+  lines: DiffLine[];
+  hasChanges: boolean;
+}
+
+export interface DiffLine {
+  type: string;
+  text: string;
+  position?: number;
+}
+
+export interface ReviewResponse {
+  id: string;
+  verdict: string;
+  body?: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ReviewListResponse {
+  items: ReviewResponse[];
+  total: number;
+}
+
+export interface CommentResponse {
+  id: string;
+  body: string;
+  parentCommentId?: string;
+  lineReference?: number;
+  createdBy: string;
+  createdById: string;
+  createdAt: string;
+}
+
+export interface CommentListResponse {
+  items: CommentResponse[];
+  total: number;
+}
+
+export interface MemberResponse {
+  userId: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+export interface MemberListResponse {
+  items: MemberResponse[];
+  total: number;
+}
+
+export interface SettingResponse {
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
+export interface AuditEventResponse {
+  id: string;
+  eventType: string;
+  actorId?: string;
+  actorUsername?: string;
+  targetType: string;
+  targetId?: string;
+  details?: string;
+  ipAddress?: string;
+  createdAt: string;
+}
+
+export interface AuditEventListResponse {
+  items: AuditEventResponse[];
+  total: number;
+}
+
+export interface SignatureResponse {
+  algorithm: string;
+  publicKeyId: string;
+  signature: string;
+  contentHash: string;
+  verified: boolean;
+  createdAt: string;
 }

@@ -32,4 +32,6 @@ public static class ApiErrorCodes
     public const string TooLong = "TOO_LONG";
     public const string InternalError = "INTERNAL_ERROR";
     public const string HasDependents = "HAS_DEPENDENTS";
+    public const string Forbidden = "FORBIDDEN";
+    public const string RegistrationDisabled = "REGISTRATION_DISABLED";
 }

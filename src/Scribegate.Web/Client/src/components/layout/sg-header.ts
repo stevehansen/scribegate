@@ -58,6 +58,7 @@ export class SgHeader extends LitElement {
 
   @state() private _isAuth = authState.isAuthenticated;
   @state() private _username = authState.user?.username ?? '';
+  @state() private _isAdmin = authState.user?.isAdmin ?? false;
 
   private _unsub?: () => void;
 
@@ -66,6 +67,7 @@ export class SgHeader extends LitElement {
     this._unsub = authState.subscribe(() => {
       this._isAuth = authState.isAuthenticated;
       this._username = authState.user?.username ?? '';
+      this._isAdmin = authState.user?.isAdmin ?? false;
     });
   }
 
@@ -81,6 +83,7 @@ export class SgHeader extends LitElement {
         <div class="actions">
           ${this._isAuth
             ? html`
+                ${this._isAdmin ? html`<a href="/admin">Admin</a>` : ''}
                 <span class="user-info">${this._username}</span>
                 <button @click=${() => authState.logout()}>Sign out</button>
               `

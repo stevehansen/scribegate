@@ -15,6 +15,12 @@ public static class DependencyInjection
         services.AddScoped<IRepositoryStore, SqliteRepositoryStore>();
         services.AddScoped<IDocumentStore, SqliteDocumentStore>();
         services.AddScoped<IRevisionStore, SqliteRevisionStore>();
+        services.AddScoped<ISystemSettingStore, SqliteSystemSettingStore>();
+        services.AddScoped<IAuditEventStore, SqliteAuditEventStore>();
+        services.AddScoped<IProposalStore, SqliteProposalStore>();
+        services.AddScoped<IReviewStore, SqliteReviewStore>();
+        services.AddScoped<ICommentStore, SqliteCommentStore>();
+        services.AddScoped<IMembershipStore, SqliteMembershipStore>();
 
         return services;
     }

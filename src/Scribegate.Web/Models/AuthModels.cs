@@ -25,6 +25,7 @@ public sealed class UserInfo
     public required Guid Id { get; init; }
     public required string Username { get; init; }
     public required string Email { get; init; }
+    public bool IsAdmin { get; init; }
     public required DateTime CreatedAt { get; init; }
 }
 

@@ -12,6 +12,8 @@ public class DocumentConfiguration : IEntityTypeConfiguration<Document>
 
         builder.Property(d => d.Path).HasMaxLength(500).IsRequired();
 
+        builder.Property(d => d.FrontmatterJson).HasMaxLength(8000);
+
         builder.HasIndex(d => new { d.RepositoryId, d.Path }).IsUnique();
 
         builder.HasOne(d => d.CurrentRevision)

@@ -11,6 +11,12 @@ public class ScribegateDbContext(DbContextOptions<ScribegateDbContext> options) 
     public DbSet<User> Users => Set<User>();
     public DbSet<RepositoryMembership> RepositoryMemberships => Set<RepositoryMembership>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<RevisionSignature> RevisionSignatures => Set<RevisionSignature>();
+    public DbSet<Proposal> Proposals => Set<Proposal>();
+    public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<Comment> Comments => Set<Comment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -80,6 +80,7 @@ export class SgDocumentPage extends LitElement {
           ? html`<a href="/${this._slug}/edit/${this._doc.path.replace(/\.md$/, '')}">Edit</a>`
           : ''}
         <a href="/${this._slug}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
+        <a href="/${this._slug}/proposals">Proposals</a>
       </div>
 
       <div class="content">

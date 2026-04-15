@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
+using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -86,6 +87,9 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
         UserContext userContext,
+        AuditService audit,
+        SignatureService signatureService,
+        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -112,6 +116,10 @@ public static class DocumentEndpoints
                 "path");
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var username = userContext.GetUsername();
+
+        // Parse frontmatter
+        var frontmatterJson = request.Content is not null ? FrontmatterService.ToJson(request.Content) : null;
 
         var doc = new Document
         {
@@ -119,11 +127,11 @@ public static class DocumentEndpoints
             RepositoryId = repo.Id,
             Path = normalizedPath,
             CreatedById = userId,
+            FrontmatterJson = frontmatterJson,
         };
 
         await documentStore.CreateAsync(doc, ct);
 
-        // Create initial revision if content is provided
         string? content = null;
         DateTime? updatedAt = null;
         if (!string.IsNullOrEmpty(request.Content))
@@ -140,12 +148,22 @@ public static class DocumentEndpoints
 
             await revisionStore.CreateAsync(revision, ct);
 
+            // Sign the revision
+            var signature = signatureService.SignRevision(revision);
+            db.RevisionSignatures.Add(signature);
+            await db.SaveChangesAsync(ct);
+
             doc.CurrentRevisionId = revision.Id;
             await documentStore.UpdateAsync(doc, ct);
 
             content = revision.Content;
             updatedAt = revision.CreatedAt;
         }
+
+        await audit.LogAsync(
+            AuditEventTypes.DocumentCreated, userId, username,
+            "Document", doc.Id,
+            new { path = doc.Path, repositorySlug = repoSlug }, ct);
 
         return Results.Created($"/api/v1/repositories/{repoSlug}/documents/{normalizedPath}", new DocumentResponse
         {
@@ -154,7 +172,7 @@ public static class DocumentEndpoints
             Content = content,
             CurrentRevisionId = doc.CurrentRevisionId,
             CreatedAt = doc.CreatedAt,
-            CreatedBy = "system", // TODO: resolve from auth
+            CreatedBy = username ?? userId.ToString(),
             UpdatedAt = updatedAt,
         });
     }
@@ -167,6 +185,9 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
         UserContext userContext,
+        AuditService audit,
+        SignatureService signatureService,
+        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -211,6 +232,7 @@ public static class DocumentEndpoints
             return ApiResults.ValidationError(errors);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var username = userContext.GetUsername();
 
         var revision = new Revision
         {
@@ -224,8 +246,19 @@ public static class DocumentEndpoints
 
         await revisionStore.CreateAsync(revision, ct);
 
+        // Sign the revision
+        var signature = signatureService.SignRevision(revision);
+        db.RevisionSignatures.Add(signature);
+        await db.SaveChangesAsync(ct);
+
         doc.CurrentRevisionId = revision.Id;
+        doc.FrontmatterJson = FrontmatterService.ToJson(request.Content!);
         await documentStore.UpdateAsync(doc, ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.DocumentUpdated, userId, username,
+            "Document", doc.Id,
+            new { path = doc.Path, revisionId = revision.Id, message = revision.Message }, ct);
 
         return Results.Ok(new DocumentResponse
         {
@@ -234,7 +267,7 @@ public static class DocumentEndpoints
             Content = revision.Content,
             CurrentRevisionId = revision.Id,
             CreatedAt = doc.CreatedAt,
-            CreatedBy = "system", // TODO: resolve from auth
+            CreatedBy = username ?? userId.ToString(),
             UpdatedAt = revision.CreatedAt,
         });
     }
@@ -244,6 +277,8 @@ public static class DocumentEndpoints
         string path,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
+        UserContext userContext,
+        AuditService audit,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -256,7 +291,14 @@ public static class DocumentEndpoints
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
 
+        var userId = await userContext.GetCurrentUserIdAsync(ct);
+
         await documentStore.DeleteAsync(doc.Id, ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.DocumentDeleted, userId, userContext.GetUsername(),
+            "Document", doc.Id,
+            new { path = normalizedPath, repositorySlug = repoSlug }, ct);
 
         return Results.NoContent();
     }
@@ -284,6 +326,6 @@ public static class DocumentEndpoints
         CurrentRevisionId = doc.CurrentRevisionId,
         CreatedAt = doc.CreatedAt,
         CreatedBy = doc.CreatedBy?.Username ?? doc.CreatedById.ToString(),
-        UpdatedAt = null, // Populated when we load revisions
+        UpdatedAt = null,
     };
 }

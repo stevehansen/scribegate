@@ -8,6 +8,7 @@ public class Document
     public Guid? CurrentRevisionId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public Guid CreatedById { get; set; }
+    public string? FrontmatterJson { get; set; }
 
     public Repository Repository { get; set; } = null!;
     public Revision? CurrentRevision { get; set; }

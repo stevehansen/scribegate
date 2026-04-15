@@ -1,6 +1,7 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
+using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -53,6 +54,9 @@ public static class RepositoryEndpoints
     private static async Task<IResult> CreateRepository(
         CreateRepositoryRequest request,
         IRepositoryStore store,
+        IMembershipStore membershipStore,
+        UserContext userContext,
+        AuditService audit,
         CancellationToken ct)
     {
         var errors = ValidateCreateRequest(request);
@@ -95,6 +99,21 @@ public static class RepositoryEndpoints
 
         await store.CreateAsync(repo, ct);
 
+        // Auto-add creator as admin of the repository
+        var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var membership = new RepositoryMembership
+        {
+            UserId = userId,
+            RepositoryId = repo.Id,
+            Role = RepositoryRole.Admin,
+        };
+        await membershipStore.CreateAsync(membership, ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.RepositoryCreated, userId, userContext.GetUsername(),
+            "Repository", repo.Id,
+            new { name = repo.Name, slug = repo.Slug, visibility = repo.Visibility.ToString() }, ct);
+
         return Results.Created($"/api/v1/repositories/{repo.Slug}", MapToResponse(repo));
     }
 
@@ -102,6 +121,8 @@ public static class RepositoryEndpoints
         string slug,
         UpdateRepositoryRequest request,
         IRepositoryStore store,
+        UserContext userContext,
+        AuditService audit,
         CancellationToken ct)
     {
         var repo = await store.GetBySlugAsync(slug, ct);
@@ -143,19 +164,34 @@ public static class RepositoryEndpoints
 
         await store.UpdateAsync(repo, ct);
 
+        var updateUserId = await userContext.GetCurrentUserIdAsync(ct);
+        await audit.LogAsync(
+            AuditEventTypes.RepositoryUpdated, updateUserId, userContext.GetUsername(),
+            "Repository", repo.Id,
+            new { name = repo.Name, slug = repo.Slug }, ct);
+
         return Results.Ok(MapToResponse(repo));
     }
 
     private static async Task<IResult> DeleteRepository(
         string slug,
         IRepositoryStore store,
+        UserContext userContext,
+        AuditService audit,
         CancellationToken ct)
     {
         var repo = await store.GetBySlugAsync(slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
 
+        var deleteUserId = await userContext.GetCurrentUserIdAsync(ct);
+
         await store.DeleteAsync(repo.Id, ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.RepositoryDeleted, deleteUserId, userContext.GetUsername(),
+            "Repository", repo.Id,
+            new { name = repo.Name, slug = repo.Slug }, ct);
 
         return Results.NoContent();
     }
