@@ -14,6 +14,11 @@ data/
 *.db-shm
 *.db-wal
 
+# Frontend
+node_modules/
+src/Scribegate.Web/Client/dist/
+wwwroot/
+
 # OS
 Thumbs.db
 .DS_Store

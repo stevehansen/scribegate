@@ -132,4 +132,8 @@ app.MapRepositoryEndpoints();
 app.MapDocumentEndpoints();
 app.MapRevisionRoutes();
 
+// Static files and SPA fallback
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
+
 app.Run();

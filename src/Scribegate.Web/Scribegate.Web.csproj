@@ -23,4 +23,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Frontend build: only runs on Release or Publish -->
+  <Target Name="BuildClient" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release' And Exists('Client/package.json')">
+    <Exec Command="npm ci --ignore-scripts" WorkingDirectory="Client/" />
+    <Exec Command="npm run build" WorkingDirectory="Client/" />
+  </Target>
+
+  <Target Name="PublishClient" BeforeTargets="Publish" Condition="Exists('Client/package.json')">
+    <Exec Command="npm ci --ignore-scripts" WorkingDirectory="Client/" />
+    <Exec Command="npm run build" WorkingDirectory="Client/" />
+    <ItemGroup>
+      <DistFiles Include="Client/dist/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DistFiles)" DestinationFolder="$(PublishDir)wwwroot/%(RecursiveDir)" />
+  </Target>
+
 </Project>
