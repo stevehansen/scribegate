@@ -99,7 +99,9 @@ docs/
 - [x] Health check endpoint (`/healthz`)
 - [x] Documentation (README, CONTRIBUTING, SECURITY, architecture, self-hosting, design decisions)
 - [x] API endpoints for repositories, documents, and revisions (with Swagger at /swagger)
-- [ ] Authentication (extensible: local accounts + SSO/OIDC for all tiers)
+- [x] Authentication (JWT + API tokens, BCrypt passwords, dual-scheme auth pipeline)
+- [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
+- [ ] Audit/tracing system (event log with signatures, EC crypto preferred)
 - [ ] Frontmatter parsing and storage
 - [ ] CLI tool (`sg`) — dotnet global tool
 - [ ] Client libraries (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
@@ -125,14 +127,22 @@ GET    /api/v1/repositories/{slug}/documents/{path}          # Get document with
 PUT    /api/v1/repositories/{slug}/documents/{path}          # Update document (creates new revision)
 DELETE /api/v1/repositories/{slug}/documents/{path}          # Delete document
 
+POST   /api/v1/auth/register                                 # Register (returns JWT)
+POST   /api/v1/auth/login                                    # Login (returns JWT)
+GET    /api/v1/auth/me                                       # Current user info [auth]
+POST   /api/v1/auth/tokens                                   # Create API token [auth]
+GET    /api/v1/auth/tokens                                   # List API tokens [auth]
+DELETE /api/v1/auth/tokens/{id}                              # Revoke API token [auth]
+
 GET    /api/v1/repositories/{slug}/revisions/{path}          # List revision history
 GET    /api/v1/repositories/{slug}/revisions/{docId}/{revId} # Get specific revision
 ```
 
 ## Design Principles
 
-- **Auth:** Simple, extensible. Local accounts + SSO/OIDC available to ALL tiers (no enterprise paywall). Easy to add new auth providers.
+- **Auth:** Dual-scheme (JWT + API tokens). BCrypt passwords, 10-128 chars, no complexity rules. API tokens use `sg_` prefix, SHA-256 hashed, with optional expiry and last-used tracking. SSO/OIDC coming for ALL tiers (no enterprise paywall).
 - **API-first:** REST API is the source of truth. CLI, web UI, and client libraries all consume it.
 - **Client libraries:** Auto-generated from OpenAPI spec. TypeScript/JS, C#, Python. Publish to npm, NuGet, PyPI.
 - **CI/CD:** GitHub Actions with trusted publishing (OIDC, no stored keys). See P:\eidet for reference configs.
 - **Errors:** Structured, actionable. Every error has a code, message, details with fix suggestion, and field reference.
+- **Audit/Tracing:** Every mutation is traceable (who, what, when). Revisions are immutable and append-only. Future: cryptographic signatures on revisions (EC preferred, similar to signed git commits), event audit log for admin actions, token usage tracking.
