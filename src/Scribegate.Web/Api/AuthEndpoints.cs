@@ -14,8 +14,8 @@ public static class AuthEndpoints
         var group = routes.MapGroup("/api/v1/auth")
             .WithTags("Authentication");
 
-        group.MapPost("/register", Register).AllowAnonymous();
-        group.MapPost("/login", Login).AllowAnonymous();
+        group.MapPost("/register", Register).AllowAnonymous().RequireRateLimiting("auth");
+        group.MapPost("/login", Login).AllowAnonymous().RequireRateLimiting("auth");
         group.MapGet("/me", GetMe).RequireAuthorization();
         group.MapPut("/preferences", UpdatePreferences).RequireAuthorization();
         group.MapPost("/tokens", CreateApiToken).RequireAuthorization();
@@ -112,6 +112,17 @@ public static class AuthEndpoints
                 Message = "Password must be 128 characters or less.",
             });
 
+        // ToS acceptance check
+        var requireTos = await settings.GetAsync(SystemSettingKeys.RequireTos, ct);
+        if (requireTos != "false" && !request.AcceptTos)
+            errors.Add(new ApiFieldError
+            {
+                Field = "acceptTos",
+                Code = ApiErrorCodes.Required,
+                Message = "You must accept the Terms of Service to register.",
+                Details = "Set acceptTos to true to indicate you have read and accept the Terms of Service.",
+            });
+
         if (errors.Count > 0)
             return ApiResults.ValidationError(errors);
 
@@ -135,6 +146,10 @@ public static class AuthEndpoints
         // First user becomes admin
         var isFirstUser = !await db.Users.AnyAsync(ct);
 
+        // Email verification: auto-verify first user (admin), others start unverified
+        var emailValidation = await settings.GetAsync(SystemSettingKeys.EmailValidationRequired, ct);
+        var autoVerify = isFirstUser || emailValidation != "true";
+
         var user = new User
         {
             Id = Guid.CreateVersion7(),
@@ -142,7 +157,8 @@ public static class AuthEndpoints
             Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsAdmin = isFirstUser,
-            EmailVerified = true, // No email validation yet; auto-verified
+            EmailVerified = autoVerify,
+            TosAcceptedAt = request.AcceptTos ? DateTime.UtcNow : null,
         };
 
         db.Users.Add(user);

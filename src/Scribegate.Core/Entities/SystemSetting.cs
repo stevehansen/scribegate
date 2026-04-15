@@ -12,4 +12,6 @@ public static class SystemSettingKeys
     public const string RegistrationEnabled = "registration.enabled";
     public const string EmailValidationRequired = "registration.email_validation";
     public const string InstanceName = "instance.name";
+    public const string RequireTos = "registration.require_tos";
+    public const string AccountAgeGateHours = "account.age_gate_hours";
 }

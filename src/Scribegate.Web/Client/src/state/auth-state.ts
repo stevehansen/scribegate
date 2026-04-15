@@ -37,8 +37,8 @@ class AuthState {
     return response;
   }
 
-  async register(username: string, email: string, password: string) {
-    const response = await authApi.register(username, email, password);
+  async register(username: string, email: string, password: string, acceptTos: boolean) {
+    const response = await authApi.register(username, email, password, acceptTos);
     localStorage.setItem('sg_token', response.token);
     this._user = response.user;
     this.notify();

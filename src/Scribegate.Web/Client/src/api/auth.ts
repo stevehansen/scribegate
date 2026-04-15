@@ -1,10 +1,10 @@
 import { apiFetch } from './client.js';
 import type { AuthResponse, UserInfo, ApiTokenResponse, ApiTokenCreatedResponse } from './types.js';
 
-export function register(username: string, email: string, password: string) {
+export function register(username: string, email: string, password: string, acceptTos: boolean) {
   return apiFetch<AuthResponse>('/api/v1/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, acceptTos }),
   });
 }
 

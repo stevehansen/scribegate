@@ -15,7 +15,7 @@ public static class RepositoryEndpoints
 
         group.MapGet("/", ListRepositories).AllowAnonymous();
         group.MapGet("/{slug}", GetRepository).AllowAnonymous();
-        group.MapPost("/", CreateRepository).RequireAuthorization();
+        group.MapPost("/", CreateRepository).RequireAuthorization().RequireRateLimiting("content-create");
         group.MapPut("/{slug}", UpdateRepository).RequireAuthorization();
         group.MapDelete("/{slug}", DeleteRepository).RequireAuthorization();
 
@@ -56,6 +56,8 @@ public static class RepositoryEndpoints
         IRepositoryStore store,
         IMembershipStore membershipStore,
         UserContext userContext,
+        ScribegateDbContext db,
+        ISystemSettingStore settings,
         AuditService audit,
         CancellationToken ct)
     {
@@ -88,6 +90,37 @@ public static class RepositoryEndpoints
                 $"Invalid visibility value '{request.Visibility}'.",
                 "Allowed values: Public, Private.");
 
+        var userId = await userContext.GetCurrentUserIdAsync(ct);
+
+        // Account age gate: new accounts cannot create public repositories
+        if (visibility == Visibility.Public)
+        {
+            var user = await db.Users.FindAsync([userId], ct);
+            if (user is not null && !user.IsAdmin)
+            {
+                var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
+                var ageGateHours = int.TryParse(ageGateSetting, out var h) ? h : 24;
+                if (ageGateHours > 0)
+                {
+                    var accountAge = DateTime.UtcNow - user.CreatedAt;
+                    if (accountAge.TotalHours < ageGateHours)
+                    {
+                        var remaining = TimeSpan.FromHours(ageGateHours) - accountAge;
+                        return Results.Json(new
+                        {
+                            error = new ApiError
+                            {
+                                Code = "ACCOUNT_TOO_NEW",
+                                Message = "Your account is too new to create public repositories.",
+                                Details = $"New accounts must wait {ageGateHours} hours before creating public repositories. You can create it as private now, or try again in {remaining.Hours}h {remaining.Minutes}m.",
+                                Field = "visibility",
+                            }
+                        }, statusCode: 403);
+                    }
+                }
+            }
+        }
+
         var repo = new Repository
         {
             Id = Guid.CreateVersion7(),
@@ -100,7 +133,6 @@ public static class RepositoryEndpoints
         await store.CreateAsync(repo, ct);
 
         // Auto-add creator as admin of the repository
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
         var membership = new RepositoryMembership
         {
             UserId = userId,
@@ -122,6 +154,8 @@ public static class RepositoryEndpoints
         UpdateRepositoryRequest request,
         IRepositoryStore store,
         UserContext userContext,
+        ScribegateDbContext db,
+        ISystemSettingStore settings,
         AuditService audit,
         CancellationToken ct)
     {
@@ -156,7 +190,38 @@ public static class RepositoryEndpoints
             if (!TryParseVisibility(request.Visibility, out var visibility))
                 errors.Add(new ApiFieldError { Field = "visibility", Code = ApiErrorCodes.InvalidFormat, Message = $"Invalid visibility value '{request.Visibility}'.", Details = "Allowed values: Public, Private." });
             else
+            {
+                // Account age gate when switching to Public
+                if (visibility == Visibility.Public && repo.Visibility != Visibility.Public)
+                {
+                    var gateUserId = await userContext.GetCurrentUserIdAsync(ct);
+                    var gateUser = await db.Users.FindAsync([gateUserId], ct);
+                    if (gateUser is not null && !gateUser.IsAdmin)
+                    {
+                        var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
+                        var ageGateHours = int.TryParse(ageGateSetting, out var h) ? h : 24;
+                        if (ageGateHours > 0)
+                        {
+                            var accountAge = DateTime.UtcNow - gateUser.CreatedAt;
+                            if (accountAge.TotalHours < ageGateHours)
+                            {
+                                var remaining = TimeSpan.FromHours(ageGateHours) - accountAge;
+                                return Results.Json(new
+                                {
+                                    error = new ApiError
+                                    {
+                                        Code = "ACCOUNT_TOO_NEW",
+                                        Message = "Your account is too new to make repositories public.",
+                                        Details = $"New accounts must wait {ageGateHours} hours before creating public repositories. Try again in {remaining.Hours}h {remaining.Minutes}m.",
+                                        Field = "visibility",
+                                    }
+                                }, statusCode: 403);
+                            }
+                        }
+                    }
+                }
                 repo.Visibility = visibility;
+            }
         }
 
         if (errors.Count > 0)

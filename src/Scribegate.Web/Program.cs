@@ -1,5 +1,7 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scribegate.Core.Entities;
@@ -104,6 +106,59 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 });
 
+// Rate limiting
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = 429;
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            error = new
+            {
+                code = "RATE_LIMITED",
+                message = "Too many requests. Please try again later.",
+                details = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+                    ? $"Retry after {retryAfter.TotalSeconds:F0} seconds."
+                    : "Slow down and try again in a moment.",
+            }
+        }, ct);
+    };
+
+    // Strict limit for auth endpoints (registration, login)
+    options.AddFixedWindowLimiter("auth", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(15);
+        limiter.QueueLimit = 0;
+    });
+
+    // Moderate limit for content creation (repos, docs, proposals)
+    options.AddFixedWindowLimiter("content-create", limiter =>
+    {
+        limiter.PermitLimit = 30;
+        limiter.Window = TimeSpan.FromMinutes(15);
+        limiter.QueueLimit = 0;
+    });
+
+    // Generous limit for reads
+    options.AddFixedWindowLimiter("read", limiter =>
+    {
+        limiter.PermitLimit = 200;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueLimit = 0;
+    });
+
+    // Limit for report submission (prevent report spam)
+    options.AddFixedWindowLimiter("report", limiter =>
+    {
+        limiter.PermitLimit = 5;
+        limiter.Window = TimeSpan.FromHours(1);
+        limiter.QueueLimit = 0;
+    });
+});
+
 var app = builder.Build();
 
 // Auto-migrate on startup
@@ -120,6 +175,10 @@ using (var scope = app.Services.CreateScope())
         await settings.SetAsync(SystemSettingKeys.EmailValidationRequired, "false");
     if (await settings.GetAsync(SystemSettingKeys.InstanceName) is null)
         await settings.SetAsync(SystemSettingKeys.InstanceName, "Scribegate");
+    if (await settings.GetAsync(SystemSettingKeys.RequireTos) is null)
+        await settings.SetAsync(SystemSettingKeys.RequireTos, "true");
+    if (await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours) is null)
+        await settings.SetAsync(SystemSettingKeys.AccountAgeGateHours, "24");
 }
 
 // Security headers
@@ -204,6 +263,7 @@ app.UseStaticFiles();
 // Auth middleware
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 // Health check
 app.MapHealthChecks("/healthz");
@@ -219,5 +279,6 @@ app.MapProposalEndpoints();
 app.MapReviewEndpoints();
 app.MapCommentEndpoints();
 app.MapMembershipEndpoints();
+app.MapReportEndpoints();
 
 app.Run();

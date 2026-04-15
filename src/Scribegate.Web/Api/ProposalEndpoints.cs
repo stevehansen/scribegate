@@ -14,7 +14,7 @@ public static class ProposalEndpoints
             .WithTags("Proposals");
 
         group.MapGet("/", ListProposals).AllowAnonymous();
-        group.MapPost("/", CreateProposal).RequireAuthorization();
+        group.MapPost("/", CreateProposal).RequireAuthorization().RequireRateLimiting("content-create");
         group.MapGet("/{id:guid}", GetProposal).AllowAnonymous();
         group.MapPut("/{id:guid}", UpdateProposal).RequireAuthorization();
         group.MapPost("/{id:guid}/submit", SubmitProposal).RequireAuthorization();

@@ -8,6 +8,7 @@ public class User
     public string? PasswordHash { get; set; }
     public bool IsAdmin { get; set; }
     public bool EmailVerified { get; set; }
+    public DateTime? TosAcceptedAt { get; set; }
     public string? ExternalProvider { get; set; }
     public string? ExternalId { get; set; }
     public string ThemePreference { get; set; } = "system"; // "light", "dark", or "system"

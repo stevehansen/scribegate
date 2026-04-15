@@ -14,7 +14,7 @@ public static class DocumentEndpoints
 
         group.MapGet("/", ListDocuments).AllowAnonymous();
         group.MapGet("/{*path}", GetDocument).AllowAnonymous();
-        group.MapPost("/", CreateDocument).RequireAuthorization();
+        group.MapPost("/", CreateDocument).RequireAuthorization().RequireRateLimiting("content-create");
         group.MapPut("/{*path}", UpdateDocument).RequireAuthorization();
         group.MapDelete("/{*path}", DeleteDocument).RequireAuthorization();
 

@@ -52,4 +52,8 @@ public static class AuditEventTypes
     public const string MemberAdded = "member.added";
     public const string MemberUpdated = "member.updated";
     public const string MemberRemoved = "member.removed";
+
+    // Reports
+    public const string ContentReported = "content.reported";
+    public const string ReportReviewed = "report.reviewed";
 }

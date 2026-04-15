@@ -42,6 +42,13 @@ export class SgRegisterPage extends LitElement {
       border-radius: var(--sg-radius);
       font-size: var(--sg-font-size-sm);
     }
+    .tos-label {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 400;
+    }
+    .tos-label input[type="checkbox"] { width: auto; margin: 0; }
     .link { text-align: center; font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); }
     .link a { color: var(--sg-primary); text-decoration: none; }
     .link a:hover { text-decoration: underline; }
@@ -63,6 +70,7 @@ export class SgRegisterPage extends LitElement {
         data.get('username') as string,
         data.get('email') as string,
         data.get('password') as string,
+        !!data.get('acceptTos'),
       );
       window.location.href = '/';
     } catch (err) {
@@ -90,6 +98,10 @@ export class SgRegisterPage extends LitElement {
           Password
           <input type="password" name="password" required minlength="10" autocomplete="new-password" />
           <span class="hint">At least 10 characters. No complexity rules.</span>
+        </label>
+        <label class="tos-label">
+          <input type="checkbox" name="acceptTos" value="true" required />
+          I accept the Terms of Service
         </label>
         <button type="submit" ?disabled=${this._loading}>
           ${this._loading ? 'Creating account...' : 'Create account'}

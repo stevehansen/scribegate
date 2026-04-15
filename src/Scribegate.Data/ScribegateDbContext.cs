@@ -17,6 +17,7 @@ public class ScribegateDbContext(DbContextOptions<ScribegateDbContext> options) 
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<ContentReport> ContentReports => Set<ContentReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -110,6 +110,7 @@ docs/
 - [x] Admin panel (settings management, audit log viewer)
 - [x] CLI tool (`sg`) — dotnet global tool with auth, repo, doc, proposal, review commands
 - [x] Client library scaffolding (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
+- [x] Abuse prevention (ToS acceptance, account age gate, rate limiting, content reporting)
 - [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
 - [x] GitHub Actions CI/CD (ci.yml for build/test, release.yml with Docker + GHCR)
 - [x] Frontend SPA (TypeScript + Lit + Vite + SASS, @vaadin/router, marked)
@@ -170,6 +171,11 @@ GET    /api/v1/repositories/{slug}/members                   # List members
 POST   /api/v1/repositories/{slug}/members                   # Add member [admin]
 PUT    /api/v1/repositories/{slug}/members/{userId}          # Update role [admin]
 DELETE /api/v1/repositories/{slug}/members/{userId}          # Remove member [admin]
+
+POST   /api/v1/reports                                       # Report content [auth, rate-limited]
+GET    /api/v1/reports                                       # List reports [admin]
+GET    /api/v1/reports/{id}                                  # Get report [admin]
+PUT    /api/v1/reports/{id}                                  # Resolve report [admin]
 ```
 
 ## Design Principles
