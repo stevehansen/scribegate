@@ -5,8 +5,16 @@ const MINUTE = 60;
 const HOUR = 3600;
 const DAY = 86400;
 
+function parseUtc(dateStr: string): Date {
+  // Backend returns UTC timestamps without 'Z' suffix — ensure correct parsing
+  if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+    return new Date(dateStr + 'Z');
+  }
+  return new Date(dateStr);
+}
+
 function timeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = parseUtc(dateStr);
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -35,7 +43,7 @@ export class SgTimeAgo extends LitElement {
 
   render() {
     if (!this.datetime) return html``;
-    const full = new Date(this.datetime).toLocaleString();
+    const full = parseUtc(this.datetime).toLocaleString();
     return html`<time datetime=${this.datetime} title=${full}>${timeAgo(this.datetime)}</time>`;
   }
 }
