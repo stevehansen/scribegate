@@ -17,7 +17,7 @@ COPY src/Scribegate.Cli/*.csproj src/Scribegate.Cli/
 RUN dotnet restore
 COPY src/ src/
 COPY --from=frontend /app/client/dist/ src/Scribegate.Web/wwwroot/
-RUN dotnet publish src/Scribegate.Web -c Release -o /publish --no-restore
+RUN dotnet publish src/Scribegate.Web -c Release -o /publish --no-restore -p:SkipClientBuild=true
 
 # Stage 3: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

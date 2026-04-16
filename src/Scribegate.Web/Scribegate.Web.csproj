@@ -26,13 +26,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-  <!-- Frontend build: only runs on Release or Publish -->
-  <Target Name="BuildClient" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release' And Exists('Client/package.json')">
+  <!-- Frontend build: only runs on Release or Publish. Set SkipClientBuild=true to bypass (e.g. when the Docker build stage already produced Client/dist). -->
+  <Target Name="BuildClient" BeforeTargets="Build" Condition="'$(Configuration)' == 'Release' And Exists('Client/package.json') And '$(SkipClientBuild)' != 'true'">
     <Exec Command="npm ci --ignore-scripts" WorkingDirectory="Client/" />
     <Exec Command="npm run build" WorkingDirectory="Client/" />
   </Target>
 
-  <Target Name="PublishClient" BeforeTargets="Publish" Condition="Exists('Client/package.json')">
+  <Target Name="PublishClient" BeforeTargets="Publish" Condition="Exists('Client/package.json') And '$(SkipClientBuild)' != 'true'">
     <Exec Command="npm ci --ignore-scripts" WorkingDirectory="Client/" />
     <Exec Command="npm run build" WorkingDirectory="Client/" />
     <ItemGroup>
