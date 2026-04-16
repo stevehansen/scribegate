@@ -48,6 +48,10 @@ sg doc view company-handbook hr/vacation.md
 sg doc create company-handbook hr/vacation.md --file ./vacation.md --message "Initial policy"
 sg doc edit company-handbook hr/vacation.md --content "..." --message "Bump to 25 days"
 sg doc history company-handbook hr/vacation.md
+sg doc share company-handbook hr/vacation.md --expires 7 --description "Q2 review copy"
+sg doc shares company-handbook                        # list links for the whole repo
+sg doc shares company-handbook --path hr/vacation.md  # list links for one document
+sg doc unshare company-handbook <link-id>             # revoke a share link
 
 sg proposal list company-handbook --status open
 sg proposal create company-handbook \

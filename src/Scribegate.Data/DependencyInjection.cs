@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<ICommentStore, SqliteCommentStore>();
         services.AddScoped<IMembershipStore, SqliteMembershipStore>();
         services.AddScoped<IContentReportStore, SqliteContentReportStore>();
+        services.AddScoped<IShareLinkStore, SqliteShareLinkStore>();
 
         return services;
     }

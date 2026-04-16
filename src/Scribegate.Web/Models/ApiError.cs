@@ -35,4 +35,6 @@ public static class ApiErrorCodes
     public const string Forbidden = "FORBIDDEN";
     public const string RegistrationDisabled = "REGISTRATION_DISABLED";
     public const string QuotaExceeded = "QUOTA_EXCEEDED";
+    public const string Expired = "EXPIRED";
+    public const string Revoked = "REVOKED";
 }

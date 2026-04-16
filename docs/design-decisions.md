@@ -169,16 +169,41 @@ Public repositories do **not** allow unauthenticated:
 For sharing specific documents from private repositories:
 
 ```
-scribegate.dev/s/abc123def456     # Share link (short, opaque token)
+scribegate.dev/s/sl_abc123def456...     # Share link (short URL, opaque token with sl_ prefix)
 ```
 
 Share links are:
 - **Created by** users with Contributor role or above
-- **Scoped to** a single document at a specific revision (or latest)
-- **Time-limited** with configurable expiry (default: 7 days, max: 90 days, or permanent)
-- **Revocable** by the creator or any Admin
-- **Read-only** (no editing, no authentication, no account required)
-- **Audited** (who created, when, how many views)
+- **Scoped to** a single document — at a specific revision (pinned) or always the latest (live)
+- **Time-limited** with configurable expiry (default: 7 days, max: 365 days, or permanent)
+- **Revocable** by the creator or any repository Admin
+- **Read-only** (no editing, no authentication, no account required to view)
+- **Audited** (create/revoke/access events logged with IP)
+
+### Implementation
+
+**Token format.** Tokens use the `sl_` prefix followed by 32 random bytes encoded as URL-safe Base64 with padding stripped. Mirrors the `sg_` API token scheme.
+
+**Token storage.** Tokens are SHA-256 hashed before storage; the raw token is shown once at creation time and never again. A display-only `TokenPrefix` (first 8 chars) is stored for UI listings — enough to distinguish links in a list, not enough to reconstruct the secret.
+
+**Validation flow.** The public resolver endpoint hashes the incoming token and looks up by hash. Because lookup is on a unique indexed hash column, comparison is timing-safe by construction. Revoked and expired links return `410 Gone` with `REVOKED` or `EXPIRED` error codes.
+
+**Rate limiting.** The anonymous resolver endpoint (`GET /api/v1/shares/{token}`) has a dedicated rate-limit bucket (100 requests/minute per IP) to frustrate token enumeration without impacting legitimate repeat views.
+
+**Endpoints.**
+
+```
+POST   /api/v1/repositories/{slug}/shares          # Create link [auth, contributor+]
+GET    /api/v1/repositories/{slug}/shares          # List links (repo-wide or ?path=)
+DELETE /api/v1/repositories/{slug}/shares/{id}     # Revoke (creator or repo admin)
+GET    /api/v1/shares/{token}                      # Public resolver [anonymous, rate-limited]
+```
+
+The SPA serves `/s/:token` as a read-only document view that consumes the public resolver and renders the markdown with a banner showing the source repository and expiry.
+
+**Access counting.** Each successful resolve updates `LastAccessedAt` and increments `AccessCount` as a best-effort side-effect; failures to write don't break the read. An audit event (`share_link.accessed`) is always logged with the viewer's IP.
+
+**Revisions.** If `RevisionId` is null the link resolves to the document's current revision, so the link stays "live" as the document evolves. Setting `RevisionId` pins the link to a specific historic version — useful for sharing a "as of review" snapshot.
 
 ### Authenticated Document Fetching
 

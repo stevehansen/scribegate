@@ -140,6 +140,7 @@ export class SgHeader extends LitElement {
           ${this._isAuth
             ? html`
                 ${this._isAdmin ? html`<a href="/admin">Admin</a>` : ''}
+                <a href="/settings">Settings</a>
                 <span class="user-info">${this._username}</span>
                 <button @click=${() => authState.logout()}>Sign out</button>
               `

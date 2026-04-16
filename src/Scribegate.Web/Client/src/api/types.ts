@@ -228,3 +228,45 @@ export interface SignatureResponse {
   verified: boolean;
   createdAt: string;
 }
+
+// Share links
+
+export interface ShareLinkResponse {
+  id: string;
+  tokenPrefix: string;
+  description?: string;
+  documentPath: string;
+  revisionId?: string;
+  createdBy: string;
+  createdAt: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  lastAccessedAt?: string;
+  accessCount: number;
+  isActive: boolean;
+}
+
+export interface ShareLinkCreatedResponse {
+  id: string;
+  token: string;
+  url: string;
+  description?: string;
+  createdAt: string;
+  expiresAt?: string;
+}
+
+export interface ShareLinkListResponse {
+  items: ShareLinkResponse[];
+  total: number;
+}
+
+export interface PublicShareLinkResponse {
+  repositorySlug: string;
+  repositoryName: string;
+  documentPath: string;
+  content: string;
+  revisionId: string;
+  revisionMessage: string;
+  revisionCreatedAt: string;
+  expiresAt?: string;
+}

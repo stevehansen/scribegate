@@ -321,6 +321,42 @@ Self-hosted instances use implicit single-owner mode: `docs.example.com/handbook
 - **Share links** let you share individual documents from private repositories via time-limited, revocable URLs
 - **API tokens** enable programmatic access for CI/CD pipelines and AI agents
 
+### Share Links
+
+Share a single document from a private repository without granting access to the whole repo. Links are:
+
+- **Created by** Contributors, Reviewers, or Admins on the repository
+- **Read-only** — no editing, no account required to view
+- **Time-limited** (default 7 days, max 365 days) or permanent
+- **Revocable** by the creator or any repo admin
+- **Audited** — every creation, revocation, and access is logged
+- **Pinned or live** — lock the link to a specific revision, or always show the latest
+
+```bash
+# Web UI: open a document → click "Share" → copy the link
+
+# API
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/shares \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path": "hr/vacation.md", "expiresInDays": 7, "description": "Q2 review copy"}'
+
+# Response — the raw token is only returned here, once
+{
+  "id": "...",
+  "token": "sl_abc123...",
+  "url": "/s/sl_abc123...",
+  "expiresAt": "2026-04-23T10:00:00Z"
+}
+
+# CLI
+sg doc share company-handbook hr/vacation.md --expires 7
+sg doc shares company-handbook                  # list all share links
+sg doc unshare company-handbook <link-id>       # revoke
+```
+
+Recipients open the URL and see the rendered document with a banner indicating the source repository and expiry. Revoked or expired links return a clear message, not the document.
+
 ## API
 
 All interactions go through a versioned REST API at `/api/v1/`. Every endpoint is:
@@ -344,6 +380,7 @@ All interactions go through a versioned REST API at `/api/v1/`. Every endpoint i
 | **Members** | CRUD `/repositories/{slug}/members` | Admin |
 | **Media** | `POST/GET /repositories/{slug}/media`, `GET/DELETE .../{id}`, `GET .../{id}/download` | Yes |
 | **Search** | `GET /search?q=...&repo=...` | No |
+| **Share Links** | `POST/GET /repositories/{slug}/shares`, `DELETE .../{id}`, `GET /shares/{token}` | Yes (resolve is anonymous) |
 | **Notifications** | `GET /notifications`, `POST .../{id}/read`, `POST .../read-all`, `GET/PUT .../preferences` | Yes |
 | **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit`, `PUT /admin/users/{id}/tier` | Admin |
 | **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |
@@ -401,16 +438,53 @@ When multiple fields fail validation, all errors are returned at once:
 
 ## CLI (`sg`)
 
-A command-line tool for power users and AI agents. Mirrors the full API with human-friendly and JSON output:
+A command-line tool for power users and AI agents. Mirrors the full API with human-friendly and JSON output.
+
+### Install
+
+The CLI is published as a [.NET global tool](https://learn.microsoft.com/en-us/dotnet/core/tools/global-tools). Install once with:
 
 ```bash
-sg auth login                                          # Authenticate (browser-based or token)
-sg repo list                                           # List your repositories
-sg doc view company-handbook hr/vacation.md             # View a document
-sg doc edit company-handbook hr/vacation.md             # Edit (opens $EDITOR)
-sg proposal create company-handbook hr/vacation.md \
-  --title "Update vacation days"                       # Create a proposal
-sg review approve company-handbook 42                  # Approve a proposal
+dotnet tool install -g Scribegate.Cli
+```
+
+This puts `sg` on your `PATH`. Update later with:
+
+```bash
+dotnet tool update -g Scribegate.Cli
+```
+
+**Prerequisite:** .NET 10 SDK or newer ([download](https://dotnet.microsoft.com/download)).
+
+> Don't have .NET? You can also build and run from source: `dotnet run --project src/Scribegate.Cli -- <args>`.
+
+### Authenticate
+
+```bash
+# Point the CLI at your instance and log in with email + password
+sg auth login me@example.com my-password --host https://scribegate.example.com
+
+# Or configure it with an existing API token (sg_... prefix) — ideal for CI and agents
+sg auth token sg_abc123...
+
+# Verify
+sg auth status
+```
+
+The host and credentials are saved to your OS user profile. `SCRIBEGATE_HOST` and `SCRIBEGATE_TOKEN` environment variables take precedence when set.
+
+### Everyday use
+
+```bash
+sg repo list                                              # List your repositories
+sg doc view company-handbook hr/vacation.md               # View a document
+sg doc edit company-handbook hr/vacation.md --file new.md # Update a document
+sg doc share company-handbook hr/vacation.md --expires 7  # Create a share link
+sg proposal create company-handbook \
+  --title "Update vacation days" \
+  --document hr/vacation.md \
+  --file ./vacation-updated.md                            # Create a proposal
+sg review approve company-handbook <proposal-id>          # Approve a proposal
 ```
 
 Every command supports `--json` for machine-readable output. See [docs/design-decisions.md](docs/design-decisions.md) for the full command reference.

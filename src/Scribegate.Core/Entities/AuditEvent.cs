@@ -61,4 +61,9 @@ public static class AuditEventTypes
     // Reports
     public const string ContentReported = "content.reported";
     public const string ReportReviewed = "report.reviewed";
+
+    // Share links
+    public const string ShareLinkCreated = "share_link.created";
+    public const string ShareLinkRevoked = "share_link.revoked";
+    public const string ShareLinkAccessed = "share_link.accessed";
 }

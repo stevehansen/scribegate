@@ -8,6 +8,7 @@ import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
+import '../shared/sg-share-dialog.js';
 
 @customElement('sg-document-page')
 export class SgDocumentPage extends LitElement {
@@ -33,6 +34,7 @@ export class SgDocumentPage extends LitElement {
   @state() private _doc: DocumentResponse | null = null;
   @state() private _loading = true;
   @state() private _error = '';
+  @state() private _shareOpen = false;
 
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
@@ -82,11 +84,21 @@ export class SgDocumentPage extends LitElement {
           : ''}
         <a href="/${this._slug}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
         <a href="/${this._slug}/proposals">Proposals</a>
+        ${authState.isAuthenticated
+          ? html`<a href="#" @click=${(e: Event) => { e.preventDefault(); this._shareOpen = true; }}>Share</a>`
+          : ''}
       </div>
 
       <div class="content">
         <sg-markdown-view content=${this._doc.content ?? ''}></sg-markdown-view>
       </div>
+
+      <sg-share-dialog
+        ?open=${this._shareOpen}
+        repoSlug=${this._repo.slug}
+        docPath=${this._doc.path}
+        @close=${() => { this._shareOpen = false; }}
+      ></sg-share-dialog>
     `;
   }
 }

@@ -21,6 +21,7 @@ public class ScribegateDbContext(DbContextOptions<ScribegateDbContext> options) 
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -386,7 +386,7 @@ The differentiating feature: editorial workflow.
 - [x] Notification system with user preferences
 - [x] Expanded slug denylist (~100+ reserved words for future-proofing)
 
-### Milestone 4 — "Ecosystem" (Future)
+### Milestone 4 — "Ecosystem" (In Progress)
 
 - [ ] Webhooks (on proposal created, approved, etc.)
 - [ ] API for external integrations
@@ -394,7 +394,7 @@ The differentiating feature: editorial workflow.
 - [ ] Static site generation from repository content
 - [ ] Markdown templates per repository
 - [ ] Export repository as a zip of markdown files (deferred from M3)
-- [ ] Share links for individual documents (time-limited, revocable, read-only URLs)
+- [x] Share links for individual documents (time-limited, revocable, read-only URLs)
 
 ---
 

@@ -169,6 +169,19 @@ builder.Services.AddRateLimiter(options =>
         limiter.Window = TimeSpan.FromHours(1);
         limiter.QueueLimit = 0;
     });
+
+    // Limit for anonymous share-link resolution (per-IP, prevents single-IP abuse
+    // without letting one attacker starve the bucket for everyone else)
+    options.AddPolicy("share-resolve", context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 100,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
 });
 
 var app = builder.Build();
@@ -312,5 +325,6 @@ app.MapOidcEndpoints();
 app.MapSearchEndpoints();
 app.MapMediaEndpoints();
 app.MapNotificationEndpoints();
+app.MapShareLinkEndpoints();
 
 app.Run();

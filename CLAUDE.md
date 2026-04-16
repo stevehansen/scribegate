@@ -48,9 +48,17 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 4 — "Ecosystem" (Next)**
+**Milestone 4 — "Ecosystem" (In Progress)**
 
 Milestones 1 (Read & Write), 2 (Propose & Review), and 3 (Polish & Integrate) are complete.
+
+M4 progress:
+- [x] Share links for individual documents (time-limited, revocable, read-only `/s/{token}` URLs)
+- [ ] Webhooks (on proposal created, approved, etc.)
+- [ ] Git-compatible read-only access (clone the repo)
+- [ ] Static site generation from repository content
+- [ ] Markdown templates per repository
+- [ ] Export repository as a zip of markdown files (deferred from M3)
 
 Milestone 3 delivered:
 - [x] SSO/OIDC integration (configurable via admin settings, available to all tiers)
@@ -206,6 +214,11 @@ GET    /api/v1/repositories/{slug}/media                     # List media assets
 GET    /api/v1/repositories/{slug}/media/{id}                # Get media asset info
 GET    /api/v1/repositories/{slug}/media/{id}/download       # Download media file
 DELETE /api/v1/repositories/{slug}/media/{id}                # Delete media [owner/admin]
+
+POST   /api/v1/repositories/{slug}/shares                    # Create share link [auth, contributor+]
+GET    /api/v1/repositories/{slug}/shares                    # List share links (?path= for one doc) [auth]
+DELETE /api/v1/repositories/{slug}/shares/{id}               # Revoke share link [creator/admin]
+GET    /api/v1/shares/{token}                                # Resolve public share link (anonymous, rate-limited)
 
 GET    /api/v1/notifications                                 # List notifications [auth]
 POST   /api/v1/notifications/{id}/read                       # Mark notification as read [auth]

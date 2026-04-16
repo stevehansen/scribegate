@@ -13,6 +13,8 @@ import './components/pages/sg-proposal-page.js';
 import './components/pages/sg-proposal-create.js';
 import './components/pages/sg-members-page.js';
 import './components/pages/sg-admin-page.js';
+import './components/pages/sg-share-page.js';
+import './components/pages/sg-settings-page.js';
 
 export function initRouter(outlet: HTMLElement) {
   const router = new Router(outlet);
@@ -21,6 +23,8 @@ export function initRouter(outlet: HTMLElement) {
     { path: '/login', component: 'sg-login-page' },
     { path: '/register', component: 'sg-register-page' },
     { path: '/admin', component: 'sg-admin-page' },
+    { path: '/settings', component: 'sg-settings-page' },
+    { path: '/s/:token', component: 'sg-share-page' },
     { path: '/', component: 'sg-repository-list' },
     { path: '/:slug', component: 'sg-repository-page' },
     { path: '/:slug/edit/new', component: 'sg-editor-page' },
