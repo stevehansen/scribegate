@@ -270,3 +270,52 @@ export interface PublicShareLinkResponse {
   revisionCreatedAt: string;
   expiresAt?: string;
 }
+
+// Webhooks
+
+export interface WebhookResponse {
+  id: string;
+  url: string;
+  description?: string;
+  events: string[];
+  enabled: boolean;
+  consecutiveFailures: number;
+  lastDeliveryAt?: string;
+  lastDeliveryStatus?: number;
+  disabledAt?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WebhookCreatedResponse {
+  id: string;
+  url: string;
+  description?: string;
+  events: string[];
+  enabled: boolean;
+  secret: string;
+  createdAt: string;
+}
+
+export interface WebhookListResponse {
+  items: WebhookResponse[];
+  total: number;
+}
+
+export interface WebhookDeliveryResponse {
+  id: string;
+  eventType: string;
+  attemptCount: number;
+  statusCode?: number;
+  error?: string;
+  succeeded: boolean;
+  durationMs: number;
+  createdAt: string;
+  deliveredAt?: string;
+}
+
+export interface WebhookDeliveryListResponse {
+  items: WebhookDeliveryResponse[];
+  total: number;
+}

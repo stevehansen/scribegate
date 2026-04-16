@@ -28,6 +28,59 @@ builder.Services.AddScoped<TierService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<NotificationService>();
 
+// Webhook dispatch: singleton queue + hosted worker; HttpClient factory for deliveries
+builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();
+builder.Services.AddSingleton<Scribegate.Web.Services.IWebhookDispatcher>(sp => sp.GetRequiredService<Scribegate.Web.Services.WebhookDispatcher>());
+builder.Services.AddHostedService<Scribegate.Web.Services.WebhookDeliveryWorker>();
+
+var webhookConfig = builder.Configuration;
+builder.Services.AddHttpClient("webhooks", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.Accept.Clear();
+})
+.ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler
+{
+    // Defence-in-depth against SSRF — validate every resolved IP per connect,
+    // closing the DNS-rebinding window that the create-time check cannot cover.
+    AllowAutoRedirect = false,
+    ConnectCallback = async (ctx, ct) =>
+    {
+        var host = ctx.DnsEndPoint.Host;
+        var port = ctx.DnsEndPoint.Port;
+        var addresses = System.Net.IPAddress.TryParse(host, out var literal)
+            ? [literal]
+            : await System.Net.Dns.GetHostAddressesAsync(host, ct);
+
+        // Re-read per connect so operators can flip the setting without restart,
+        // and so the validate-time and connect-time checks can't disagree.
+        var allowPrivate = webhookConfig.GetValue("Scribegate:Webhooks:AllowPrivateAddresses", false);
+        if (!allowPrivate)
+        {
+            foreach (var a in addresses)
+                if (Scribegate.Web.Services.WebhookUrlValidator.IsPrivateOrLocal(a))
+                    // Deliberately generic: the resolved IP never reaches callers
+                    // (who could be low-trust repo admins on a multi-tenant host).
+                    throw new InvalidOperationException("Connection refused by webhook policy.");
+        }
+
+        var socket = new System.Net.Sockets.Socket(System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp)
+        {
+            NoDelay = true,
+        };
+        try
+        {
+            await socket.ConnectAsync(addresses, port, ct);
+            return new System.Net.Sockets.NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    },
+});
+
 // Authentication: JWT + API token (dual scheme)
 var jwtService = new JwtService(builder.Configuration);
 
@@ -326,5 +379,7 @@ app.MapSearchEndpoints();
 app.MapMediaEndpoints();
 app.MapNotificationEndpoints();
 app.MapShareLinkEndpoints();
+app.MapWebhookEndpoints();
+app.MapExportEndpoints();
 
 app.Run();

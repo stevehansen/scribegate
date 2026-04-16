@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { RepositoryResponse, DocumentSummary } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
+import * as exportsApi from '../../api/exports.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
 import { boxReset } from '../../styles/shared.js';
@@ -76,6 +77,7 @@ export class SgRepositoryPage extends LitElement {
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _dialogError = '';
+  @state() private _exporting = false;
 
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
@@ -98,6 +100,18 @@ export class SgRepositoryPage extends LitElement {
       this._error = 'Repository not found.';
     } finally {
       this._loading = false;
+    }
+  }
+
+  private async _onExport() {
+    if (this._exporting) return;
+    this._exporting = true;
+    try {
+      await exportsApi.downloadRepoZip(this._slug);
+    } catch (err) {
+      this._error = err instanceof ApiException ? err.error.message : 'Export failed.';
+    } finally {
+      this._exporting = false;
     }
   }
 
@@ -156,6 +170,10 @@ export class SgRepositoryPage extends LitElement {
         <div class="actions">
           <a class="btn btn-secondary" href="/${this._slug}/proposals">Proposals</a>
           <a class="btn btn-secondary" href="/${this._slug}/members">Members</a>
+          <a class="btn btn-secondary" href="/${this._slug}/webhooks">Webhooks</a>
+          <button class="btn btn-secondary" @click=${this._onExport} ?disabled=${this._exporting}>
+            ${this._exporting ? 'Exporting…' : 'Export'}
+          </button>
           ${authState.isAuthenticated
             ? html`
                 <button class="btn btn-secondary" @click=${this._openSettings}>Settings</button>

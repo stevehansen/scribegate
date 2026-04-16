@@ -66,4 +66,14 @@ public static class AuditEventTypes
     public const string ShareLinkCreated = "share_link.created";
     public const string ShareLinkRevoked = "share_link.revoked";
     public const string ShareLinkAccessed = "share_link.accessed";
+
+    // Webhooks
+    public const string WebhookCreated = "webhook.created";
+    public const string WebhookUpdated = "webhook.updated";
+    public const string WebhookDeleted = "webhook.deleted";
+    public const string WebhookDisabled = "webhook.disabled";
+    public const string WebhookTested = "webhook.tested";
+
+    // Export
+    public const string RepositoryExported = "repository.exported";
 }

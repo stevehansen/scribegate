@@ -54,11 +54,11 @@ Milestones 1 (Read & Write), 2 (Propose & Review), and 3 (Polish & Integrate) ar
 
 M4 progress:
 - [x] Share links for individual documents (time-limited, revocable, read-only `/s/{token}` URLs)
-- [ ] Webhooks (on proposal created, approved, etc.)
+- [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures)
+- [x] Export repository as a zip of markdown files (streaming; public repos + members)
 - [ ] Git-compatible read-only access (clone the repo)
 - [ ] Static site generation from repository content
 - [ ] Markdown templates per repository
-- [ ] Export repository as a zip of markdown files (deferred from M3)
 
 Milestone 3 delivered:
 - [x] SSO/OIDC integration (configurable via admin settings, available to all tiers)
@@ -219,6 +219,16 @@ POST   /api/v1/repositories/{slug}/shares                    # Create share link
 GET    /api/v1/repositories/{slug}/shares                    # List share links (?path= for one doc) [auth]
 DELETE /api/v1/repositories/{slug}/shares/{id}               # Revoke share link [creator/admin]
 GET    /api/v1/shares/{token}                                # Resolve public share link (anonymous, rate-limited)
+
+POST   /api/v1/repositories/{slug}/webhooks                  # Create webhook [repo admin]
+GET    /api/v1/repositories/{slug}/webhooks                  # List webhooks [repo admin]
+GET    /api/v1/repositories/{slug}/webhooks/{id}             # Get webhook [repo admin]
+PUT    /api/v1/repositories/{slug}/webhooks/{id}             # Update webhook (optionally ?resetSecret) [repo admin]
+DELETE /api/v1/repositories/{slug}/webhooks/{id}             # Delete webhook [repo admin]
+GET    /api/v1/repositories/{slug}/webhooks/{id}/deliveries  # Recent delivery attempts [repo admin]
+POST   /api/v1/repositories/{slug}/webhooks/{id}/test        # Send ping event (direct) [repo admin, rate-limited]
+
+GET    /api/v1/repositories/{slug}/export                    # Download repo as zip (streaming) [auth, member or public]
 
 GET    /api/v1/notifications                                 # List notifications [auth]
 POST   /api/v1/notifications/{id}/read                       # Mark notification as read [auth]

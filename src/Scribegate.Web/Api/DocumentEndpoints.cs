@@ -2,6 +2,7 @@ using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
+using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -93,6 +94,7 @@ public static class DocumentEndpoints
         SignatureService signatureService,
         ScribegateDbContext db,
         TierService tierService,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -189,6 +191,14 @@ public static class DocumentEndpoints
             "Document", doc.Id,
             new { path = doc.Path, repositorySlug = repoSlug }, ct);
 
+        webhooks.Dispatch(WebhookEventTypes.DocumentCreated, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            document = new { id = doc.Id, path = doc.Path, revisionId = doc.CurrentRevisionId },
+            actor = new { id = userId, username },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Created($"/api/v1/repositories/{repoSlug}/documents/{normalizedPath}", new DocumentResponse
         {
             Id = doc.Id,
@@ -212,6 +222,7 @@ public static class DocumentEndpoints
         AuditService audit,
         SignatureService signatureService,
         ScribegateDbContext db,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -284,6 +295,15 @@ public static class DocumentEndpoints
             "Document", doc.Id,
             new { path = doc.Path, revisionId = revision.Id, message = revision.Message }, ct);
 
+        webhooks.Dispatch(WebhookEventTypes.DocumentUpdated, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            document = new { id = doc.Id, path = doc.Path, revisionId = revision.Id },
+            revision = new { id = revision.Id, message = revision.Message },
+            actor = new { id = userId, username },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Ok(new DocumentResponse
         {
             Id = doc.Id,
@@ -303,6 +323,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuditService audit,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -323,6 +344,14 @@ public static class DocumentEndpoints
             AuditEventTypes.DocumentDeleted, userId, userContext.GetUsername(),
             "Document", doc.Id,
             new { path = normalizedPath, repositorySlug = repoSlug }, ct);
+
+        webhooks.Dispatch(WebhookEventTypes.DocumentDeleted, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            document = new { id = doc.Id, path = normalizedPath },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
 
         return Results.NoContent();
     }
@@ -351,6 +380,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuditService audit,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -392,6 +422,14 @@ public static class DocumentEndpoints
             AuditEventTypes.DocumentMoved, userId, userContext.GetUsername(),
             "Document", doc.Id,
             new { oldPath, newPath = newNormalized, repositorySlug = repoSlug }, ct);
+
+        webhooks.Dispatch(WebhookEventTypes.DocumentMoved, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            document = new { id = doc.Id, path = newNormalized, oldPath },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
 
         return Results.Ok(new DocumentResponse
         {

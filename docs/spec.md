@@ -388,13 +388,13 @@ The differentiating feature: editorial workflow.
 
 ### Milestone 4 — "Ecosystem" (In Progress)
 
-- [ ] Webhooks (on proposal created, approved, etc.)
+- [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures, on proposal/document/review/comment events)
+- [x] Export repository as a zip of markdown files (streaming, 1 GiB cap, manifest with skipped list)
+- [x] Share links for individual documents (time-limited, revocable, read-only URLs)
 - [ ] API for external integrations
 - [ ] Git-compatible read-only access (clone the repo)
 - [ ] Static site generation from repository content
 - [ ] Markdown templates per repository
-- [ ] Export repository as a zip of markdown files (deferred from M3)
-- [x] Share links for individual documents (time-limited, revocable, read-only URLs)
 
 ---
 

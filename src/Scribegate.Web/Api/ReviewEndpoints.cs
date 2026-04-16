@@ -2,6 +2,7 @@ using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
+using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -56,6 +57,7 @@ public static class ReviewEndpoints
         IReviewStore reviewStore,
         UserContext userContext,
         AuditService audit,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -89,6 +91,15 @@ public static class ReviewEndpoints
         await audit.LogAsync(AuditEventTypes.ReviewSubmitted, userId, userContext.GetUsername(),
             "Review", review.Id,
             new { proposalId, verdict = verdict.ToString() }, ct);
+
+        webhooks.Dispatch(WebhookEventTypes.ReviewSubmitted, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title },
+            review = new { id = review.Id, verdict = verdict.ToString() },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
 
         return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposalId}/reviews", new Models.ReviewResponse
         {

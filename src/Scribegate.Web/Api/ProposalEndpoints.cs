@@ -3,6 +3,7 @@ using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
+using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -125,6 +126,7 @@ public static class ProposalEndpoints
         UserContext userContext,
         AuditService audit,
         NotificationService notifications,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -192,6 +194,14 @@ public static class ProposalEndpoints
             $"{userContext.GetUsername()} created a new proposal in {repo.Name}.",
             $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
 
+        webhooks.Dispatch(WebhookEventTypes.ProposalCreated, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString(), documentPath = proposal.ProposedPath },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", new ProposalSummary
         {
             Id = proposal.Id,
@@ -249,6 +259,7 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         UserContext userContext,
         AuditService audit,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -268,6 +279,14 @@ public static class ProposalEndpoints
         await audit.LogAsync(AuditEventTypes.ProposalSubmitted, userId, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
 
+        webhooks.Dispatch(WebhookEventTypes.ProposalSubmitted, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Ok(new { status = "Open" });
     }
 
@@ -277,6 +296,7 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         UserContext userContext,
         AuditService audit,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -301,6 +321,14 @@ public static class ProposalEndpoints
         await audit.LogAsync(AuditEventTypes.ProposalWithdrawn, userId, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
 
+        webhooks.Dispatch(WebhookEventTypes.ProposalWithdrawn, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Ok(new { status = "Withdrawn" });
     }
 
@@ -317,6 +345,7 @@ public static class ProposalEndpoints
         AuditService audit,
         SignatureService signatureService,
         NotificationService notifications,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -437,6 +466,16 @@ public static class ProposalEndpoints
             $"Your proposal has been approved and merged by {userContext.GetUsername()}.",
             $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
 
+        webhooks.Dispatch(WebhookEventTypes.ProposalApproved, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
+            document = new { id = doc.Id, path = doc.Path },
+            revision = new { id = revision.Id, message = revision.Message },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
+
         return Results.Ok(new { status = "Approved", revisionId = revision.Id, approvals = approvalCount, requiredApprovals });
     }
 
@@ -449,6 +488,7 @@ public static class ProposalEndpoints
         UserContext userContext,
         AuditService audit,
         NotificationService notifications,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -481,6 +521,14 @@ public static class ProposalEndpoints
             $"Proposal rejected: {proposal.Title}",
             $"Your proposal was rejected by {userContext.GetUsername()}.",
             $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
+
+        webhooks.Dispatch(WebhookEventTypes.ProposalRejected, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
 
         return Results.Ok(new { status = "Rejected" });
     }

@@ -357,6 +357,60 @@ sg doc unshare company-handbook <link-id>       # revoke
 
 Recipients open the URL and see the rendered document with a banner indicating the source repository and expiry. Revoked or expired links return a clear message, not the document.
 
+## Webhooks
+
+Trigger your systems when things happen in a repository — CI pipelines, chat notifications, search-index rebuilds, whatever you need. Webhooks:
+
+- **Scoped to a repository** and managed by that repo's admins
+- **HMAC-SHA256 signed** — every request carries `X-Scribegate-Signature-256: sha256=<hex>` (HMAC over the raw body using the shared secret)
+- **Retried** with exponential backoff (2s, 10s, 60s). 4xx responses stop retrying; 5xx/408/429 retry
+- **Auto-disabled** after 10 consecutive failures so a broken endpoint stops spamming the queue
+- **SSRF-guarded** — URLs pointing at loopback, link-local, private, or cloud-metadata addresses are rejected at create time and blocked at connect time (set `Scribegate:Webhooks:AllowPrivateAddresses=true` for local development)
+- **Audited** — every creation, update, delete, test, and auto-disable is logged
+
+Events you can subscribe to: `proposal.created`, `proposal.submitted`, `proposal.approved`, `proposal.rejected`, `proposal.withdrawn`, `document.created`, `document.updated`, `document.deleted`, `document.moved`, `review.submitted`, `comment.created`.
+
+```bash
+# Create
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/webhooks \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://ci.example.com/hook", "events": ["proposal.approved", "document.updated"]}'
+
+# Response — the secret is only returned here, once
+{
+  "id": "01860...",
+  "url": "https://ci.example.com/hook",
+  "events": ["proposal.approved", "document.updated"],
+  "enabled": true,
+  "secret": "whsec_a9f3..."
+}
+
+# Verify in your endpoint (Node.js)
+const h = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+const signature = `sha256=${h}`;
+if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(req.header('X-Scribegate-Signature-256')))) {
+  return res.status(401).end();
+}
+```
+
+Manage from the web UI: open a repository → **Webhooks** → create, disable, rotate secret, view recent deliveries, or send a `ping` test to one specific hook.
+
+## Export
+
+Download the entire content of a repository as a zip of markdown files, with a `scribegate-export.json` manifest describing what was exported:
+
+```bash
+# Web UI: open a repository → click "Export"
+
+# API
+curl -o export.zip \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/repositories/company-handbook/export
+```
+
+Members of a repo (any role) can export; public repos are also exportable by any authenticated user. The response streams directly — no server-side buffering — with a 1 GiB hard cap.
+
 ## API
 
 All interactions go through a versioned REST API at `/api/v1/`. Every endpoint is:
@@ -381,6 +435,8 @@ All interactions go through a versioned REST API at `/api/v1/`. Every endpoint i
 | **Media** | `POST/GET /repositories/{slug}/media`, `GET/DELETE .../{id}`, `GET .../{id}/download` | Yes |
 | **Search** | `GET /search?q=...&repo=...` | No |
 | **Share Links** | `POST/GET /repositories/{slug}/shares`, `DELETE .../{id}`, `GET /shares/{token}` | Yes (resolve is anonymous) |
+| **Webhooks** | CRUD `/repositories/{slug}/webhooks`, `POST .../{id}/test`, `GET .../{id}/deliveries` | Repo admin |
+| **Export** | `GET /repositories/{slug}/export` | Yes (member or public) |
 | **Notifications** | `GET /notifications`, `POST .../{id}/read`, `POST .../read-all`, `GET/PUT .../preferences` | Yes |
 | **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit`, `PUT /admin/users/{id}/tier` | Admin |
 | **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |

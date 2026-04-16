@@ -2,6 +2,7 @@ using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
+using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -60,6 +61,7 @@ public static class CommentEndpoints
         ICommentStore commentStore,
         UserContext userContext,
         NotificationService notifications,
+        IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -98,6 +100,15 @@ public static class CommentEndpoints
                 $"{userContext.GetUsername()} commented on your proposal.",
                 $"/api/v1/repositories/{repoSlug}/proposals/{proposalId}", ct);
         }
+
+        webhooks.Dispatch(WebhookEventTypes.CommentCreated, repo.Id, new
+        {
+            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
+            proposal = new { id = proposal.Id, title = proposal.Title },
+            comment = new { id = comment.Id, lineReference = comment.LineReference, parentCommentId = comment.ParentCommentId },
+            actor = new { id = userId, username = userContext.GetUsername() },
+            timestamp = DateTime.UtcNow,
+        });
 
         return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposalId}/comments", new CommentResponse
         {

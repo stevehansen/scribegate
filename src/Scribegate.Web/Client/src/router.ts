@@ -15,6 +15,7 @@ import './components/pages/sg-members-page.js';
 import './components/pages/sg-admin-page.js';
 import './components/pages/sg-share-page.js';
 import './components/pages/sg-settings-page.js';
+import './components/pages/sg-webhooks-page.js';
 
 export function initRouter(outlet: HTMLElement) {
   const router = new Router(outlet);
@@ -34,6 +35,7 @@ export function initRouter(outlet: HTMLElement) {
     { path: '/:slug/proposals/new', component: 'sg-proposal-create' },
     { path: '/:slug/proposals/:id', component: 'sg-proposal-page' },
     { path: '/:slug/members', component: 'sg-members-page' },
+    { path: '/:slug/webhooks', component: 'sg-webhooks-page' },
     { path: '/:slug/(.*)', component: 'sg-document-page' },
   ]);
 
