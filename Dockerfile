@@ -13,6 +13,7 @@ COPY *.slnx ./
 COPY src/Scribegate.Core/*.csproj src/Scribegate.Core/
 COPY src/Scribegate.Data/*.csproj src/Scribegate.Data/
 COPY src/Scribegate.Web/*.csproj src/Scribegate.Web/
+COPY src/Scribegate.Cli/*.csproj src/Scribegate.Cli/
 RUN dotnet restore
 COPY src/ src/
 COPY --from=frontend /app/client/dist/ src/Scribegate.Web/wwwroot/
