@@ -44,19 +44,17 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 1 — "Read & Write" (MVP)**
+**Milestone 3 — "Polish & Integrate"**
 
-Focus on the core reading and editing loop WITHOUT the review workflow yet:
+Milestones 1 (Read & Write) and 2 (Propose & Review) are complete. Current focus:
 
-1. Repository CRUD (name, slug, description, visibility)
-2. Document CRUD (create, edit, view rendered markdown, file tree by path)
-3. Revision history (automatic on every save, immutable snapshots)
-4. File tree navigation
-5. Markdown editor with live preview
-6. Basic authentication (ASP.NET Core Identity, local accounts)
-7. Single-container Docker deployment
-
-Do NOT build the proposal/review workflow yet — that's Milestone 2.
+- [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
+- [ ] Line-level comments on diffs
+- [ ] Email notifications
+- [ ] Full-text search across documents
+- [ ] Configurable approval rules (e.g., require 2 approvals)
+- [ ] Document rename/move with history preservation
+- [ ] Media/image uploads
 
 ## Project Structure
 
@@ -85,7 +83,7 @@ docs/
 
 ## Conventions
 
-- **Conventional commits:** `type(scope): description` (types: feat, fix, docs, refactor, chore, test, perf; scopes: core, data, web, api, auth, cli, docs)
+- **Conventional commits:** `type(scope): description` (types: feat, fix, docs, refactor, chore, test, perf; scopes: core, data, web, api, auth, cli, ui, docs)
 - **Layer rule:** Core has zero dependencies. Data depends on Core. Web depends on both. Never reference Data from Core.
 - **Error handling:** Fail fast at the API boundary with structured errors (code, message, details, field). No stack traces in production.
 - **Migrations:** Auto-applied on startup. Generate with `dotnet ef migrations add Name --project src/Scribegate.Data --startup-project src/Scribegate.Web`

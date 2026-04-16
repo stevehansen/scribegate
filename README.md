@@ -10,20 +10,15 @@ Scribegate is what you get when a wiki and a Git forge have a baby: contributors
 |---|---|---|
 | Approval workflows for docs | Wikis let anyone edit live | Propose, review, approve cycle |
 | Non-technical authors | Git forges expose branches, CI, CLI | A clean web UI, zero Git knowledge needed |
-| Version history | Real-time editors overwrite in place | Immutable revision snapshots |
+| Version history | Real-time editors overwrite in place | Immutable, cryptographically signed revision snapshots |
 | Self-hosted simplicity | Most tools need databases, caches, queues | One container, one SQLite file, done |
+| Programmatic access | Many tools lack APIs or lock them behind enterprise tiers | REST API + CLI + API tokens from day one |
 
 ## Quick Start
 
 ### Option A: Use the Hosted Version
 
-Visit [scribegate.dev](https://scribegate.dev) and create an account. The free tier includes:
-
-- 1 repository, 25 documents, 5 collaborators
-- Unlimited proposals and reviews
-- 30-revision history per document
-
-No setup, no infrastructure, no maintenance.
+Visit [scribegate.dev](https://scribegate.dev) and create an account. No setup, no infrastructure, no maintenance.
 
 ### Option B: Self-Host with Docker
 
@@ -46,23 +41,123 @@ dotnet run --project src/Scribegate.Web
 
 The app creates a `data/` directory with the SQLite database on first run. No external dependencies.
 
-## Core Concepts
+## How It Works
 
-Scribegate has a small, focused domain model. Understanding these five concepts is all you need:
+Scribegate has a small, focused domain model. Here's the complete workflow from setup to published document:
+
+### Step 1: Create an Account
+
+The first user to register automatically becomes the instance admin. Registration is open by default (configurable in admin settings).
+
+```bash
+# Register
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "jane", "email": "jane@example.com", "password": "a-secure-password"}'
+
+# Response — a JWT token for subsequent requests
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "d4f5a6b7-...",
+    "username": "jane",
+    "email": "jane@example.com",
+    "isAdmin": true
+  }
+}
+```
+
+### Step 2: Create a Repository
+
+A repository is the top-level container for a collection of documents — think of it as a project, a handbook, or a knowledge base.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Company Handbook",
+    "description": "Internal policies and procedures",
+    "visibility": "Private"
+  }'
+
+# Response — slug is auto-generated from the name
+{
+  "id": "a1b2c3d4-...",
+  "name": "Company Handbook",
+  "slug": "company-handbook",
+  "description": "Internal policies and procedures",
+  "visibility": "Private"
+}
+```
+
+### Step 3: Create a Document
+
+Documents are markdown files organized in a folder structure. Each document automatically gets its first revision.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/documents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "hr/vacation-policy.md",
+    "content": "---\ntitle: Vacation Policy\ntags: [hr, policy]\naudit:\n  review-interval: 90d\n---\n\n# Vacation Policy\n\nAll employees receive 20 vacation days per year...",
+    "message": "Initial vacation policy"
+  }'
+```
+
+### Step 4: Propose a Change
+
+Instead of editing the live document directly, contributors create proposals — like a pull request, but for a single document. This is the core of Scribegate's editorial workflow.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "documentPath": "hr/vacation-policy.md",
+    "title": "Increase vacation days to 25",
+    "description": "Per HR directive 2026-04, all employees now receive 25 days",
+    "proposedContent": "# Vacation Policy\n\nAll employees receive 25 vacation days per year..."
+  }'
+```
+
+### Step 5: Review and Approve
+
+Reviewers see the diff between the current document and the proposed changes. They can approve, request changes, or leave comments.
+
+```bash
+# A reviewer approves the proposal
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals/{id}/approve \
+  -H "Authorization: Bearer $REVIEWER_TOKEN"
+
+# This:
+# 1. Creates a new immutable Revision with the proposed content
+# 2. Signs the revision with ECDSA P-256
+# 3. Updates the document to point to the new revision
+# 4. Closes the proposal as "Approved"
+# 5. Logs an audit event
+```
+
+That's the complete cycle: **write → propose → review → publish**.
+
+## Core Concepts
 
 ### Repository
 
 The top-level container for a collection of documents. Think of it as a project or a handbook.
 
-- Has a unique slug for URL-friendly access (`/my-team-handbook`)
+- Has a unique slug for URL-friendly access (`/company-handbook`)
 - Can be **Public** (anyone can read) or **Private** (authenticated users only)
 - Contains documents organized in a folder structure
+- Has its own set of members with assigned roles
 
 ### Document
 
 A markdown file within a repository. Documents have paths like `onboarding/first-week.md` and form a navigable file tree.
 
 - Always points to its **current revision** (the published truth)
+- Supports optional YAML frontmatter for metadata (tags, audit schedules, custom fields)
 - Created by a user, tracked with timestamps
 - Unique within a repository by path
 
@@ -73,27 +168,108 @@ An immutable snapshot of a document's content at a point in time. Every approved
 - Stores the **full markdown content** (not a diff) so any revision renders independently
 - Has a human-readable message describing what changed
 - Links to its parent revision, forming a history chain
+- **Cryptographically signed** with ECDSA P-256 — every revision is tamper-evident
 
-### Proposal (Milestone 2)
+### Proposal
 
-The editorial workflow entity, analogous to a pull request but scoped to a single document. A contributor edits markdown and submits it for review. Proposals move through states: Draft, Open, Approved, Rejected, or Withdrawn.
+The editorial workflow entity, analogous to a pull request but scoped to a single document. A contributor edits markdown and submits it for review.
 
-### Review (Milestone 2)
+**State machine:**
 
-A reviewer's verdict on a proposal: Approve, Request Changes, or Comment. One approval merges the proposal into a new revision.
+```
+  Draft ──→ Open ──→ Approved ──→ (creates new Revision)
+              │
+              ├──→ Rejected
+              │
+              └──→ Withdrawn (by author)
+```
+
+- **Draft** — work in progress, only visible to the author
+- **Open** — submitted for review, visible to all members
+- **Approved** — accepted by a reviewer, content becomes a new revision
+- **Rejected** — declined by a reviewer, with comments explaining why
+- **Withdrawn** — retracted by the author
+
+### Review
+
+A reviewer's verdict on a proposal: **Approve**, **Request Changes**, or **Comment**. One approval merges the proposal into a new revision.
+
+### Comment
+
+Threaded discussion on a proposal. Comments can be general or anchored to a specific line in the proposed content. Supports markdown formatting.
 
 ## User Roles
+
+Roles are assigned per repository. A user can be an Admin in one repository and a Reader in another.
 
 | Action | Reader | Contributor | Reviewer | Admin |
 |---|---|---|---|---|
 | View published documents | Yes | Yes | Yes | Yes |
+| View revision history | Yes | Yes | Yes | Yes |
 | Create proposals | | Yes | Yes | Yes |
 | Review & approve proposals | | | Yes | Yes |
 | Manage repository settings | | | | Yes |
 | Manage members | | | | Yes |
 | Direct publish (skip proposal) | | | | Yes |
+| Delete repository | | | | Yes |
 
-Adding users is straightforward: invite by email, they set a password, and they're in. Admins assign roles per repository. The complexity of permissions is handled internally; users just see what they're allowed to do.
+**Adding members:**
+
+```bash
+# Add a contributor to the repository
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/members \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"userId": "user-guid-here", "role": "Contributor"}'
+```
+
+## Authentication
+
+Scribegate uses dual-scheme authentication — pick whichever fits your use case:
+
+### JWT Tokens (for users)
+
+Login or register to receive a JWT token. Include it in the `Authorization` header for all subsequent requests.
+
+```bash
+# Login
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "jane@example.com", "password": "a-secure-password"}'
+
+# Response
+{"token": "eyJhbGciOiJIUzI1NiIs...", "user": {"id": "...", "username": "jane"}}
+
+# Use the token
+curl http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### API Tokens (for services and AI agents)
+
+Long-lived, scoped credentials for programmatic access. Created from the API (or the web UI's settings page). API tokens use the `sg_` prefix.
+
+```bash
+# Create an API token
+curl -X POST http://localhost:8080/api/v1/auth/tokens \
+  -H "Authorization: Bearer $JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "CI Pipeline", "expiresAt": "2027-01-01T00:00:00Z"}'
+
+# Response
+{
+  "id": "...",
+  "name": "CI Pipeline",
+  "token": "sg_abc123...",
+  "expiresAt": "2027-01-01T00:00:00Z"
+}
+
+# Use the API token — same Authorization header, the server detects the sg_ prefix
+curl http://localhost:8080/api/v1/repositories \
+  -H "Authorization: Bearer sg_abc123..."
+```
+
+API tokens are SHA-256 hashed in the database (the raw token is only shown once, at creation time), support optional expiry, and track last-used timestamps.
 
 ## Document Frontmatter
 
@@ -112,12 +288,21 @@ audit:
 ...
 ```
 
-Frontmatter enables:
-- **Search and filtering** by tags, status, and dates
-- **Audit trails** with review cadences and accountability
-- **Custom fields** for team-specific workflows (unknown keys are preserved)
+**What frontmatter gives you:**
 
-Some fields are auto-managed by the system (`created`, `updated`, `audit.next-review`). See [docs/design-decisions.md](docs/design-decisions.md) for the full schema.
+- **Search and filtering** — find documents by tags, status, or dates
+- **Audit trails** — set review cadences (`audit.review-interval: 90d`) and track when documents were last reviewed
+- **Custom fields** — add any key you want; unknown fields are preserved as-is
+
+**Auto-managed fields** (set by the system, not the user):
+
+| Field | Description |
+|---|---|
+| `created` | When the document was first created |
+| `updated` | When the last revision was approved |
+| `audit.next-review` | Computed from `audit.last-reviewed` + `audit.review-interval` |
+
+See [docs/design-decisions.md](docs/design-decisions.md) for the full frontmatter schema.
 
 ## URL Structure
 
@@ -136,30 +321,35 @@ Self-hosted instances use implicit single-owner mode: `docs.example.com/handbook
 - **Share links** let you share individual documents from private repositories via time-limited, revocable URLs
 - **API tokens** enable programmatic access for CI/CD pipelines and AI agents
 
-## CLI (`sg`)
-
-A command-line tool for power users and AI agents. Mirrors the full API with human-friendly and JSON output:
-
-```bash
-sg doc view acme-corp/handbook hr/vacation.md    # View a document
-sg proposal create acme-corp/handbook hr/vacation.md \
-  --title "Update vacation days"                  # Create a proposal
-sg review approve acme-corp/handbook 42           # Approve a proposal
-```
-
-AI agents use the same CLI to propose edits and participate in reviews, keeping humans in the approval loop. See [docs/design-decisions.md](docs/design-decisions.md) for the full command reference.
-
 ## API
 
-All interactions go through a REST API. Every endpoint is:
+All interactions go through a versioned REST API at `/api/v1/`. Every endpoint is:
 
-- **Authenticated** (except public document reads on public repositories)
+- **Authenticated** by default (except public document reads)
 - **Validated** with clear error messages that explain what went wrong and how to fix it
 - **Consistent** in response format and error structure
 
+### Endpoint Overview
+
+| Group | Endpoints | Auth Required |
+|---|---|---|
+| **Auth** | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PUT /auth/preferences`, CRUD `/auth/tokens` | Varies |
+| **Repositories** | `GET/POST /repositories`, `GET/PUT/DELETE /repositories/{slug}` | Yes (except public reads) |
+| **Documents** | `GET/POST /repositories/{slug}/documents`, `GET/PUT/DELETE /repositories/{slug}/documents/{path}` | Yes (except public reads) |
+| **Revisions** | `GET /repositories/{slug}/revisions/{path}`, `GET /repositories/{slug}/revisions/{docId}/{revId}` | Yes |
+| **Proposals** | CRUD `/repositories/{slug}/proposals`, plus `/submit`, `/approve`, `/reject`, `/withdraw` actions | Yes |
+| **Reviews** | `GET/POST /repositories/{slug}/proposals/{id}/reviews` | Yes |
+| **Comments** | CRUD `/repositories/{slug}/proposals/{id}/comments` | Yes |
+| **Members** | CRUD `/repositories/{slug}/members` | Admin |
+| **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit` | Admin |
+| **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |
+| **Health** | `GET /healthz` | No |
+
+All endpoints are prefixed with `/api/v1/`. Interactive API docs are available at `/swagger`.
+
 ### Error Responses
 
-Scribegate returns detailed, actionable errors. Instead of a generic 400, you'll get:
+Scribegate returns detailed, actionable errors. Instead of a generic 400, you get:
 
 ```json
 {
@@ -178,13 +368,114 @@ Every error includes:
 - A `details` field with context and suggested fixes
 - A `field` reference when the error relates to a specific input
 
-### Health Check
+### Validation Errors
 
-```
-GET /healthz
+When multiple fields fail validation, all errors are returned at once:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Request validation failed.",
+    "errors": [
+      {
+        "field": "slug",
+        "code": "INVALID_FORMAT",
+        "message": "Slug must contain only lowercase letters, numbers, and hyphens.",
+        "details": "The value 'My Handbook!' contains uppercase letters and special characters. Try 'my-handbook' instead."
+      },
+      {
+        "field": "name",
+        "code": "REQUIRED",
+        "message": "Name is required.",
+        "details": "Provide a display name for the repository (1-200 characters)."
+      }
+    ]
+  }
+}
 ```
 
-Returns `200 Healthy` when the database is connected and migrations are applied. Use this for Docker health checks, load balancer probes, and monitoring.
+## CLI (`sg`)
+
+A command-line tool for power users and AI agents. Mirrors the full API with human-friendly and JSON output:
+
+```bash
+sg auth login                                          # Authenticate (browser-based or token)
+sg repo list                                           # List your repositories
+sg doc view company-handbook hr/vacation.md             # View a document
+sg doc edit company-handbook hr/vacation.md             # Edit (opens $EDITOR)
+sg proposal create company-handbook hr/vacation.md \
+  --title "Update vacation days"                       # Create a proposal
+sg review approve company-handbook 42                  # Approve a proposal
+```
+
+Every command supports `--json` for machine-readable output. See [docs/design-decisions.md](docs/design-decisions.md) for the full command reference.
+
+### AI Agent Example
+
+AI agents use the same CLI (or REST API) to propose edits and participate in reviews:
+
+```bash
+# Agent fetches the current document
+CONTENT=$(sg doc raw company-handbook hr/vacation.md)
+
+# Agent modifies the content
+UPDATED=$(echo "$CONTENT" | ai-edit --instruction "Update vacation days from 20 to 25")
+
+# Agent creates a proposal — a human must still approve it
+echo "$UPDATED" | sg proposal create company-handbook hr/vacation.md \
+  --title "Update vacation days to 25" \
+  --description "Per HR directive 2026-04" \
+  --json
+```
+
+Humans stay in the approval loop. AI agents can propose and comment, but approval requires a human reviewer.
+
+## Admin Panel
+
+Instance admins can manage settings and review audit logs from the web UI or the API:
+
+| Setting | Default | Description |
+|---|---|---|
+| `RegistrationEnabled` | `true` | Whether new users can register |
+| `EmailValidationRequired` | `false` | Require email verification before access |
+| `InstanceName` | `Scribegate` | Display name for the instance |
+| `RequireTos` | `true` | Require Terms of Service acceptance on registration |
+| `AccountAgeGateHours` | `24` | Hours a new account must wait before creating content |
+
+```bash
+# View all settings (admin only)
+curl http://localhost:8080/api/v1/admin/settings \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Update a setting
+curl -X PUT http://localhost:8080/api/v1/admin/settings/RegistrationEnabled \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"value": "false"}'
+
+# View audit log
+curl "http://localhost:8080/api/v1/admin/audit?limit=20" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+## Content Reporting
+
+Authenticated users can report content for abuse. Reports are reviewed by admins.
+
+```bash
+# Report abusive content
+curl -X POST http://localhost:8080/api/v1/reports \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "targetType": "Document",
+    "targetId": "document-guid",
+    "reason": "Contains misinformation about the vacation policy"
+  }'
+```
+
+Reports move through statuses: **Pending** → **Reviewed** / **Dismissed** / **ActionTaken**.
 
 ## Configuration
 
@@ -194,7 +485,20 @@ Configuration is via environment variables or `appsettings.json`:
 |---|---|---|
 | `Scribegate__DataPath` | `data` | Directory for the SQLite database file |
 | `Scribegate__BaseUrl` | `http://localhost:8080` | Public URL (for links in notifications) |
+| `Scribegate__Jwt__ExpirationHours` | `24` | JWT token lifetime |
 | `ASPNETCORE_URLS` | `http://+:8080` | Listen address |
+| `ASPNETCORE_ENVIRONMENT` | `Production` | Set to `Development` for detailed error pages |
+
+### Rate Limiting
+
+Rate limits protect against abuse without interfering with normal use:
+
+| Scope | Limit | Applies to |
+|---|---|---|
+| Authentication | 10 requests / 15 min per IP | `/api/v1/auth/*` |
+| Content creation | 30 requests / 15 min per user | Creating proposals, comments, documents |
+| Reads | 200 requests / 1 min per IP | All GET endpoints |
+| Reports | 5 reports / 1 hour per user | Content reporting |
 
 ## Deployment Options
 
@@ -213,41 +517,56 @@ See [docs/self-hosting.md](docs/self-hosting.md) for step-by-step deployment gui
 ```
 scribegate/
   src/
-    Scribegate.Core/       # Domain entities, enums, storage interfaces
+    Scribegate.Core/       # Domain entities, enums, storage interfaces (zero dependencies)
     Scribegate.Data/       # EF Core + SQLite implementation
-    Scribegate.Web/        # ASP.NET Core host, API endpoints
+    Scribegate.Web/        # ASP.NET Core host, API endpoints, auth, middleware
+      Client/              # Frontend SPA (TypeScript + Lit + Vite + SASS)
   docs/
     spec.md                # Full product requirements
     architecture.md        # Technical architecture deep-dive
+    design-decisions.md    # Frontmatter, URL structure, sharing, CLI design
     self-hosting.md        # Deployment guide
 ```
 
-**Scribegate.Core** has zero dependencies. It defines what the system *is*.
+**Scribegate.Core** has zero dependencies. It defines what the system *is* — entities, enums, and storage interfaces.
 **Scribegate.Data** implements storage with EF Core + SQLite. Swappable for RavenDB later.
-**Scribegate.Web** is the host that wires everything together and exposes the API.
+**Scribegate.Web** is the host that wires everything together: API endpoints, auth middleware, static file serving for the SPA.
+**Client** is a single-page app built with Lit web components, Vaadin Router, and marked.js for markdown rendering.
+
+## Security
+
+Security is a core design principle, not an afterthought. See [SECURITY.md](SECURITY.md) for the full model.
+
+Key principles:
+- All API endpoints are authenticated by default; public access is explicitly opted into
+- Dual-scheme auth: JWT for users, `sg_` API tokens for services — both use the same `Authorization: Bearer` header
+- BCrypt password hashing, 10-128 character passwords, no artificial complexity rules
+- Every revision is cryptographically signed (ECDSA P-256) for tamper evidence
+- Every mutation is logged to an audit trail (who, what, when, from which IP)
+- Security headers: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, HSTS
+- Rate limiting only where it protects against real abuse, never where it degrades normal UX
+- Structured error responses that help without leaking internals
+
+## Health Check
+
+```
+GET /healthz → 200 Healthy
+```
+
+Returns `200 Healthy` when the database is connected and migrations are applied. Use this for Docker health checks, load balancer probes, and monitoring.
 
 ## For AI Agents
 
 Scribegate is designed to be agent-friendly:
 
 - **Structured errors** with machine-readable codes, not just status codes
-- **Consistent API patterns** (CRUD follows the same shape for every resource)
+- **Consistent API patterns** — every resource follows the same CRUD shape
+- **JSON everywhere** — `--json` flag on the CLI, JSON request/response bodies on the API
+- **API tokens** — create a dedicated `sg_` token for your agent, no browser auth needed
 - **Health endpoint** for automated monitoring
-- **Conventional commits** in the git history for automated changelog generation
-- **Clear project structure** with separation of concerns (domain/data/web layers)
-- **Storage interfaces** in `Scribegate.Core/Stores/` define the contract; implementations live in `Scribegate.Data/Stores/`
+- **Audit trail** — every action your agent takes is logged and attributable
 
 To work on this codebase: read `CLAUDE.md` for project-specific context, `CONTRIBUTING.md` for development workflow, and `docs/architecture.md` for technical decisions.
-
-## Security
-
-Security is a core design principle, not an afterthought. See [SECURITY.md](SECURITY.md) for the full security model.
-
-Key principles:
-- All API endpoints are authenticated by default; public access is explicitly opted into
-- Input validation on every request with detailed error feedback
-- No security through obscurity; the model is transparent and auditable
-- Rate limiting only where it protects against real abuse, never where it degrades normal UX
 
 ## License
 
@@ -255,9 +574,9 @@ MIT
 
 ## Links
 
-- [Product Spec](docs/spec.md)
-- [Design Decisions](docs/design-decisions.md) — frontmatter, URL structure, sharing, CLI
-- [Architecture](docs/architecture.md)
-- [Self-Hosting Guide](docs/self-hosting.md)
-- [Security](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
+- [Product Spec](docs/spec.md) — full PRD with domain model and milestones
+- [Architecture](docs/architecture.md) — layered design, entity model, auth pipeline, data flow
+- [Design Decisions](docs/design-decisions.md) — frontmatter, URL structure, sharing, CLI, auth
+- [Self-Hosting Guide](docs/self-hosting.md) — Docker, Azure, fly.io, bare metal
+- [Security](SECURITY.md) — auth, validation, rate limiting, content security
+- [Contributing](CONTRIBUTING.md) — dev setup, conventions, how to add features

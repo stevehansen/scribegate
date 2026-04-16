@@ -333,15 +333,108 @@ The CLI is a separate project (`src/Scribegate.Cli`) using `System.CommandLine`:
 
 ---
 
-## 5. Design Principles Summary
+## 5. Authentication Design
+
+### Decision
+
+Scribegate uses dual-scheme authentication: JWT tokens for interactive users and `sg_`-prefixed API tokens for programmatic access. Both schemes produce the same identity, so all authorization checks work identically regardless of how the user authenticated.
+
+### Why Dual-Scheme?
+
+| Use case | Mechanism | Why |
+|---|---|---|
+| Browser/SPA user | JWT | Short-lived (24h default), standard, no server-side session storage |
+| CI/CD pipeline | API token (`sg_`) | Long-lived, scoped, revocable without affecting the user's other sessions |
+| AI agent | API token (`sg_`) | Same as CI/CD — create a dedicated token per agent |
+| CLI tool (`sg`) | Either | `sg auth login` gets a JWT via browser, `sg auth token` stores an API token |
+
+### JWT Implementation
+
+```
+Login flow:
+  1. POST /api/v1/auth/login  { email, password }
+  2. Server verifies password with BCrypt
+  3. Server issues JWT (HS256) with claims: sub, email, username, jti, is_admin
+  4. Client stores token in localStorage, sends as Authorization: Bearer <jwt>
+  5. Token expires after Scribegate:Jwt:ExpirationHours (default: 24)
+```
+
+The signing key is auto-generated on first run and stored in `.jwt-key` in the data directory. For multi-instance deployments (load balancer with multiple app instances), configure the same key on all instances.
+
+### API Token Implementation
+
+```
+Creation flow:
+  1. POST /api/v1/auth/tokens  { name, expiresAt? }  (requires JWT auth)
+  2. Server generates 32 random bytes, base64-encodes with "sg_" prefix
+  3. Server stores SHA-256(token) in database — raw token is NEVER stored
+  4. Server returns the raw token ONCE in the response
+  5. Client stores token securely, sends as Authorization: Bearer sg_<token>
+
+Authentication flow:
+  1. Request arrives with Authorization: Bearer sg_abc123...
+  2. Middleware detects "sg_" prefix → routes to ApiTokenAuthHandler
+  3. Handler SHA-256 hashes the token
+  4. Looks up hash in ApiTokens table
+  5. Checks expiration, updates LastUsedAt
+  6. Builds ClaimsPrincipal from the token owner's User record
+```
+
+### Design Rules
+
+1. **No session state.** JWTs are stateless, API tokens are looked up per-request. No server-side session store needed.
+2. **API tokens are hashed, not encrypted.** If the database leaks, attackers can't reverse the hashes to get usable tokens.
+3. **First user is admin.** The first account registered on a new instance automatically gets `IsAdmin = true`. This bootstraps the admin role without a seed password.
+4. **Registration is controllable.** Admins can disable registration, require email verification, require Terms of Service acceptance, and set an account age gate (new accounts must wait N hours before creating content).
+
+### Token Management
+
+Users can manage their API tokens via the API or the web UI:
+
+```bash
+# List tokens (shows name, prefix, created, last used — never the full token)
+GET /api/v1/auth/tokens
+
+# Create a token
+POST /api/v1/auth/tokens  { "name": "My CI", "expiresAt": "2027-01-01T00:00:00Z" }
+
+# Revoke a token
+DELETE /api/v1/auth/tokens/{id}
+```
+
+---
+
+## 6. Cryptographic Signatures
+
+### Decision
+
+Every revision is signed with ECDSA P-256 at creation time. The signature covers the revision content, message, author, and timestamp.
+
+### Why?
+
+- **Tamper evidence.** If someone modifies a revision directly in the database, the signature won't verify. This is important for compliance-sensitive environments (HR policies, regulatory documents).
+- **Auditability.** Combined with the append-only audit log, signatures provide a complete chain of evidence for who changed what and when.
+- **Not access control.** Signatures don't prevent modification — they detect it after the fact.
+
+### Implementation
+
+- The signing key is generated per instance (ECDSA P-256 key pair, stored in the data directory)
+- On revision creation: `sign(content + message + createdBy + createdAt)` → stored as `RevisionSignature`
+- Verification is available via the API for compliance checks
+- If you restore a database backup to a different instance (different signing key), existing signatures won't verify — this is expected and the audit trail remains intact
+
+---
+
+## 7. Design Principles Summary
 
 These decisions reinforce the core product principles:
 
 | Principle | How these decisions support it |
 |---|---|
 | **Non-technical authors first** | Guided naming, frontmatter is optional, share links are one click |
-| **The repository is the truth** | Frontmatter audit trails, immutable revisions, computed review dates |
-| **Minimal surface area** | CLI mirrors the API exactly, frontmatter fields are few but powerful |
-| **Self-hosted by default** | Single-owner mode simplifies URLs, all features work without managed hosting |
-| **Security first, then usability** | Share links are audited and revocable, API tokens are scoped, public access is explicit |
-| **Agent-friendly** | CLI with `--json`, structured errors, PAT auth, stdin/stdout piping |
+| **The repository is the truth** | Frontmatter audit trails, immutable revisions, cryptographic signatures, computed review dates |
+| **Minimal surface area** | CLI mirrors the API exactly, frontmatter fields are few but powerful, auth is just two schemes |
+| **Self-hosted by default** | Single-owner mode simplifies URLs, auto-generated signing keys, all features work without managed hosting |
+| **Security first, then usability** | Share links are audited and revocable, API tokens are hashed not encrypted, BCrypt passwords, ECDSA-signed revisions |
+| **Agent-friendly** | CLI with `--json`, structured errors, dedicated API tokens, stdin/stdout piping |
+| **Compliance-ready** | Append-only audit log, tamper-evident revision signatures, per-IP tracking, configurable registration controls |

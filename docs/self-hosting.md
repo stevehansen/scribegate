@@ -9,6 +9,7 @@ Scribegate is designed to be trivially easy to self-host. It's a single binary w
 - **RAM:** 64 MB minimum, 256 MB recommended
 - **Disk:** 100 MB for the app + your document data
 - **Network:** One HTTP port (default 8080)
+- **External dependencies:** None. SQLite is embedded, the frontend is bundled, no message queues or caches needed.
 
 ## Option 1: Docker (Recommended)
 
@@ -62,6 +63,30 @@ docker compose up -d
 ```
 
 Migrations run automatically on startup. Your data is preserved in the volume.
+
+## First Run
+
+When Scribegate starts for the first time on a fresh database:
+
+1. **Database created** — SQLite file is created at the configured data path
+2. **Migrations applied** — all tables, indexes, and constraints are set up automatically
+3. **Default settings seeded** — registration enabled, Terms of Service required, 24h account age gate
+4. **JWT signing key generated** — stored as `.jwt-key` in the data directory
+5. **ECDSA signing key generated** — used for revision signatures, stored in the data directory
+
+**The first user to register becomes the instance admin.** After that, registration can be toggled on or off from the admin panel.
+
+```bash
+# Register the admin account
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "email": "admin@example.com", "password": "your-secure-password"}'
+
+# Verify you're admin
+curl http://localhost:8080/api/v1/auth/me \
+  -H "Authorization: Bearer <token-from-register-response>"
+# Response includes "isAdmin": true
+```
 
 ## Option 2: dotnet publish
 

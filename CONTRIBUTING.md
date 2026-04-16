@@ -8,6 +8,8 @@
 
 ## Getting Started
 
+### Backend
+
 ```bash
 git clone https://github.com/stevehansen/scribegate.git
 cd scribegate
@@ -15,17 +17,48 @@ dotnet build
 dotnet run --project src/Scribegate.Web
 ```
 
-The app starts on `http://localhost:5000` (or whichever port is configured in `launchSettings.json`). A `data/` directory is created automatically with the SQLite database. The database is migrated on startup — no manual migration steps needed.
+The app starts on `http://localhost:5000` (or whichever port is configured in `Properties/launchSettings.json`). A `data/` directory is created automatically with the SQLite database. The database is migrated on startup — no manual migration steps needed.
+
+### Frontend
+
+The frontend is a separate build step. For development with hot reload:
+
+```bash
+cd src/Scribegate.Web/Client
+npm install
+npm run dev
+```
+
+This starts the Vite dev server (typically on port 5173) with hot module replacement. The dev server proxies API requests to the backend at `http://localhost:5000`.
+
+To build the frontend for production:
+
+```bash
+cd src/Scribegate.Web/Client
+npm run build
+```
+
+The output goes to `dist/` and is served by the .NET app as static files.
 
 ### Verifying Your Setup
 
 ```bash
+# Check the backend is running
 curl http://localhost:5000/healthz
 # Should return: Healthy
+
+# Check the API is responding
+curl http://localhost:5000/swagger
+# Should return the Swagger UI HTML
+
+# Register a test user (first user becomes admin)
+curl -X POST http://localhost:5000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "dev", "email": "dev@localhost", "password": "dev-password-123"}'
 ```
 
-If it doesn't, check:
-1. Is port 5000 already in use? Change it in `Properties/launchSettings.json`
+If the health check fails:
+1. Is the port already in use? Change it in `Properties/launchSettings.json`
 2. Is the `data/` directory writable? The app needs to create the SQLite file there
 3. Run `dotnet build` — are there compilation errors?
 
@@ -34,19 +67,27 @@ If it doesn't, check:
 ```
 src/
   Scribegate.Core/         # Domain layer (zero dependencies)
-    Entities/              # Repository, Document, Revision, User, RepositoryMembership
-    Enums/                 # Visibility, RepositoryRole
-    Stores/                # Storage interfaces (IRepositoryStore, IDocumentStore, IRevisionStore)
+    Entities/              # All domain entities (Repository, Document, Revision, Proposal, etc.)
+    Enums/                 # Visibility, RepositoryRole, ProposalStatus, ReviewVerdict, ReportStatus
+    Stores/                # Storage interfaces (IRepositoryStore, IDocumentStore, etc.)
 
   Scribegate.Data/         # Infrastructure layer (depends on Core)
-    Configurations/        # EF Core fluent API entity configurations
-    Migrations/            # EF Core migrations (auto-generated)
-    Stores/                # SQLite store implementations
+    Configurations/        # EF Core fluent API entity configurations (one per entity)
+    Migrations/            # EF Core migrations (auto-generated, never hand-edit)
+    Stores/                # SQLite store implementations (one per interface)
     ScribegateDbContext.cs  # The EF Core DbContext
     DependencyInjection.cs # AddScribegateData() service registration
 
   Scribegate.Web/          # Application layer (depends on Core + Data)
+    Api/                   # API endpoint files (one per entity group) + auth handlers
     Program.cs             # App startup, DI wiring, middleware pipeline
+    Client/                # Frontend SPA
+      src/
+        api/               # TypeScript API client modules
+        components/pages/  # Lit web components (one per page)
+        styles/            # SASS stylesheets
+      package.json         # Node dependencies
+      vite.config.ts       # Vite build configuration
 ```
 
 ### Layer Rules
@@ -100,15 +141,32 @@ We use [Conventional Commits](https://www.conventionalcommits.org/) for clear, a
 | `test` | Adding or fixing tests |
 | `perf` | Performance improvement |
 
-**Scopes:** `core`, `data`, `web`, `api`, `auth`, `docs`
+**Scopes:**
+
+| Scope | When to use |
+|---|---|
+| `core` | Domain entities, enums, store interfaces in `Scribegate.Core` |
+| `data` | EF Core context, configurations, migrations, store implementations in `Scribegate.Data` |
+| `web` | API endpoints, middleware, startup in `Scribegate.Web` |
+| `api` | API contract changes (new endpoints, request/response shapes) |
+| `auth` | Authentication, authorization, JWT, API tokens |
+| `cli` | CLI tool (`sg`) |
+| `ui` | Frontend SPA (Lit components, styles, routing) |
+| `docs` | Documentation changes |
 
 **Examples:**
 ```
-feat(core): add Document entity with path-based organization
+feat(core): add Proposal entity with state machine
+feat(api): add proposal approval endpoint with revision creation
+feat(ui): add proposal diff view with side-by-side comparison
+feat(auth): add API token creation and authentication
 fix(data): handle concurrent revision creation with optimistic locking
+fix(ui): fix markdown preview not updating on paste
 docs: add self-hosting guide for Docker deployment
 refactor(web): extract health check configuration to extension method
 chore: update EF Core to 10.0.6
+test(api): add integration tests for document CRUD endpoints
+perf(data): add composite index on Proposal(RepositoryId, Status)
 ```
 
 ### 5. Open a Pull Request
@@ -171,6 +229,37 @@ Scribegate errors should be **helpful, not hostile**:
 4. Add authentication/authorization as appropriate
 5. Test the endpoint manually with curl or a REST client
 
+## Adding a Frontend Page
+
+1. Create a new Lit component in `src/Scribegate.Web/Client/src/components/pages/`
+2. Follow the naming pattern: `sg-<name>-page.ts` → `class SgNamePage extends LitElement`
+3. If the page needs API data, create or extend an API module in `src/api/`
+4. Register the route in `sg-app.ts` with Vaadin Router
+5. Use the shared `apiFetch` wrapper from `src/api/client.ts` for all API calls (it handles auth headers automatically)
+
+**Example: a minimal page component:**
+
+```typescript
+import { LitElement, html, css } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
+import { apiFetch } from '../api/client';
+
+@customElement('sg-example-page')
+export class SgExamplePage extends LitElement {
+    @state() private data: string[] = [];
+
+    async connectedCallback() {
+        super.connectedCallback();
+        const res = await apiFetch('/api/v1/repositories');
+        if (res.ok) this.data = await res.json();
+    }
+
+    render() {
+        return html`<ul>${this.data.map(d => html`<li>${d.name}</li>`)}</ul>`;
+    }
+}
+```
+
 ## For AI Agents
 
 If you're an AI agent working on this codebase:
@@ -188,7 +277,10 @@ If you're an AI agent working on this codebase:
 
 | Task | Files to touch |
 |---|---|
-| Add a new entity | `Core/Entities/`, `Core/Stores/`, `Data/Configurations/`, `Data/Stores/`, `Data/DependencyInjection.cs`, `Data/ScribegateDbContext.cs` |
-| Add an API endpoint | `Web/` (endpoint definition), `Core/Stores/` (if new data access needed) |
-| Change entity properties | Entity class, configuration, new migration |
-| Fix a bug | Locate via store interface → implementation → configuration chain |
+| Add a new entity | `Core/Entities/`, `Core/Stores/`, `Data/Configurations/`, `Data/Stores/`, `Data/DependencyInjection.cs`, `Data/ScribegateDbContext.cs`, then generate a migration |
+| Add an API endpoint | `Web/Api/` (endpoint file), `Web/Program.cs` (register with `Map*Endpoints()`), `Core/Stores/` (if new data access needed) |
+| Add a frontend page | `Web/Client/src/components/pages/` (component), `Web/Client/src/api/` (API module if needed), `sg-app.ts` (route registration) |
+| Change entity properties | Entity class in `Core/Entities/`, configuration in `Data/Configurations/`, then generate a migration |
+| Add auth to an endpoint | Use `.RequireAuthorization()` in the endpoint definition; check role via `IMembershipStore` in the handler |
+| Fix a bug | Locate via store interface → implementation → configuration chain; check the endpoint handler for business logic |
+| Add an admin setting | `ISystemSettingStore` (get/set), seed default in `Program.cs`, expose via `AdminEndpoints.cs` |

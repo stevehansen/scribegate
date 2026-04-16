@@ -259,7 +259,7 @@ This is deliberately simple. No automatic merging, no conflict resolution algori
 |---|---|---|
 | Backend framework | ASP.NET Core (via Vidyano) | Existing expertise; robust, performant, self-hostable |
 | Database (primary) | SQLite via EF Core | Zero-config, file-based, free everywhere, trivial to host and backup |
-| Database (optional) | RavenDB (sync `IDocumentSession`) | For teams already running RavenDB; offered as a storage adapter |
+| Database (future) | RavenDB adapter | For teams already running RavenDB; same storage interfaces, different implementation |
 | Frontend | TypeScript + Lit components + SASS | Existing expertise; lightweight, no heavy framework overhead |
 | Markdown rendering | Server-side via Markdig (.NET) | Fast, extensible, CommonMark-compliant |
 | Diff engine | DiffPlex (.NET) | Mature .NET diff library, supports side-by-side and inline diffs |
@@ -286,9 +286,9 @@ RepositoryMemberships → UserId, RepositoryId, Role
 
 Full-text search via SQLite FTS5 on Document content and Proposal content.
 
-**Optional: RavenDB adapter**
+**Future: RavenDB adapter**
 
-For self-hosted users who prefer RavenDB, a storage adapter using `IDocumentSession` maps the same entities to RavenDB collections. This leverages RavenDB's built-in full-text search and document model.
+A RavenDB storage adapter is planned for self-hosted users who prefer it. It would implement the same store interfaces (`IRepositoryStore`, etc.) using `IDocumentSession`, leveraging RavenDB's built-in full-text search and document model. No changes to the Core or Web layers would be needed.
 
 **Content storage consideration:** Revision content and Proposal content are stored as full markdown strings (not diffs). This trades some storage space for radical simplicity — any revision can be rendered independently without replaying a chain. For typical documentation (tens of KB per document, hundreds of revisions), this is negligible.
 
@@ -305,14 +305,14 @@ docker run -d \
 
 The container bundles:
 - The ASP.NET Core application
-- An embedded RavenDB instance (or connects to an external one via config)
-- Static frontend assets
+- The frontend SPA (TypeScript + Lit, built with Vite)
+- A SQLite database file in `/data`
 
 Configuration via environment variables or `appsettings.json`:
-- `SCRIBEGATE_BASE_URL` — public URL for links in notifications
-- `SCRIBEGATE_DATA_PATH` — where RavenDB stores data (default: `/data`)
-- `SCRIBEGATE_SMTP_*` — optional, for email notifications
-- `SCRIBEGATE_AUTH_OIDC_*` — optional, for external auth providers
+- `Scribegate__BaseUrl` — public URL for links in notifications
+- `Scribegate__DataPath` — where SQLite stores data (default: `/data`)
+- `Scribegate__Jwt__ExpirationHours` — JWT token lifetime (default: 24)
+- `ASPNETCORE_URLS` — listen address (default: `http://+:8080`)
 
 ---
 
@@ -322,7 +322,7 @@ Scribegate supports both self-hosted and managed (scribegate.dev) deployment fro
 
 ### 6.1 Database: SQLite-First
 
-SQLite via EF Core is the primary storage engine — zero-config, file-based, runs anywhere .NET runs. A RavenDB storage adapter is planned for teams that already run RavenDB.
+SQLite via EF Core is the primary storage engine — zero-config, file-based, runs anywhere .NET runs. The storage layer is abstracted behind interfaces (`IRepositoryStore`, `IDocumentStore`, etc.) so a RavenDB adapter can be added later without changing any other code.
 
 ### 6.2 Self-Hosting Options
 
@@ -411,7 +411,7 @@ Clarity on boundaries prevents scope creep:
 
 2. **Approval threshold default.** One approval to merge, or configurable from the start? (Recommendation: one approval in v1, configurable in Milestone 3.)
 
-3. **Embedded RavenDB vs. external.** Shipping an embedded RavenDB makes single-container deployment trivial, but limits scaling. (Recommendation: embedded by default with an option to point to external. Sufficient for the target audience of small-to-medium teams.)
+3. **RavenDB adapter scope.** When should the RavenDB adapter be built? (Recommendation: after the SQLite-based product is stable and there's user demand. The storage interface abstraction is already in place, so adding it is straightforward.)
 
 4. **Markdown extensions.** Which extensions beyond CommonMark? (Recommendation: GFM tables, task lists, syntax highlighting, and Mermaid diagrams. Align with what Markdig supports out of the box.)
 
