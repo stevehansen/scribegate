@@ -396,6 +396,31 @@ if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(req.header('X-Sc
 
 Manage from the web UI: open a repository → **Webhooks** → create, disable, rotate secret, view recent deliveries, or send a `ping` test to one specific hook.
 
+## Templates
+
+Per-repository markdown templates give authors a starting point for common document shapes — runbooks, meeting notes, release announcements, post-mortems, whatever your team writes a lot of. Templates are:
+
+- **Scoped to a repository** and managed by that repo's admins
+- **Optional** — documents can still be created from a blank editor
+- **Just markdown** — the content (including frontmatter) is copied into the new-document editor as the starting point, then the author can edit freely
+
+```bash
+# Web UI: open a repository → Templates → New template
+# (admin-only page at /{slug}/templates)
+
+# API — create a template
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/templates \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Meeting notes",
+    "description": "Standard meeting-notes layout",
+    "content": "---\ntags: [meeting]\n---\n\n# Meeting notes\n\n## Attendees\n\n## Agenda\n\n## Actions\n"
+  }'
+```
+
+When creating a new document from the web UI, the editor shows a template picker populated from the repository's templates. Pick one and the editor is prefilled; pick none and you get a blank document.
+
 ## Export
 
 Download the entire content of a repository as a zip of markdown files, with a `scribegate-export.json` manifest describing what was exported:
@@ -410,6 +435,60 @@ curl -o export.zip \
 ```
 
 Members of a repo (any role) can export; public repos are also exportable by any authenticated user. The response streams directly — no server-side buffering — with a 1 GiB hard cap.
+
+## Static site generation
+
+Turn a repository into a self-contained static site — a zip containing rendered HTML, basic CSS, and a manifest — ready to drop on any static host.
+
+```bash
+# Web UI: open a repository → click "Generate site"
+
+# API
+curl -o site.zip \
+  -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/repositories/company-handbook/site
+```
+
+The zip contains:
+
+- `index.html` — repository landing page with a tree of links to every document
+- One HTML file per document (mirroring the original folder structure)
+- `assets/style.css` — minimal, dark-mode friendly styles
+- `manifest.json` — generation timestamp, document count, and a `sizeCapReached` flag if the 1 GiB cap was hit before completion
+
+Unzip it and upload the folder anywhere that serves static files — GitHub Pages, Netlify, nginx, S3, a USB stick. No server-side runtime needed.
+
+Markdown is rendered server-side through a hardened Markdig pipeline. Raw HTML is disabled (`DisableHtml()`), generic attribute syntax is **not** enabled, and link URLs are scrubbed — any `javascript:`, `vbscript:`, or `data:` URL is rewritten to `#`. Same 1 GiB streaming cap and `sizeCapReached` manifest flag as repository export.
+
+Members of a repo (any role) can generate; public repos are also generatable by any authenticated user.
+
+## Git clone (read-only)
+
+Scribegate exposes every repository over the Git dumb-HTTP protocol as a **read-only snapshot**. You can `git clone` it with any standard Git client — no extensions, no forge integration required.
+
+```bash
+# Public repository — no auth
+git clone https://your-scribegate.example/myrepo.git
+```
+
+For private repositories, authenticate with an `sg_` API token as the HTTP Basic password (the username is ignored — use anything):
+
+```bash
+git clone https://your-scribegate.example/myrepo.git
+# When prompted:
+#   Username: x
+#   Password: sg_yourapitoken
+```
+
+Or embed the credential in the URL (useful for CI and credential managers):
+
+```bash
+git clone https://x:sg_yourapitoken@your-scribegate.example/myrepo.git
+```
+
+**What you get:** a single synthetic commit containing the current state of every document. Re-clones show a fresh snapshot — Scribegate is not tracking your `git fetch` history, so subsequent fetches will see a forced update. This is expected. Scribegate is a markdown collaboration platform, not a git server; clone is a convenience for mirroring, archiving, and integrating with static-site generators or AI tooling that speaks git.
+
+Rate limits per IP: **60 requests/minute** on `info/refs` and **2000 requests/minute** on object fetches. A `repository.cloned` audit event is logged on the first `info/refs` per (repository, user-agent) within a 60-second window, so a clone shows up once in the audit log instead of once per HTTP request.
 
 ## API
 
@@ -437,6 +516,8 @@ All interactions go through a versioned REST API at `/api/v1/`. Every endpoint i
 | **Share Links** | `POST/GET /repositories/{slug}/shares`, `DELETE .../{id}`, `GET /shares/{token}` | Yes (resolve is anonymous) |
 | **Webhooks** | CRUD `/repositories/{slug}/webhooks`, `POST .../{id}/test`, `GET .../{id}/deliveries` | Repo admin |
 | **Export** | `GET /repositories/{slug}/export` | Yes (member or public) |
+| **Static site** | `GET /repositories/{slug}/site` | Yes (member or public) |
+| **Templates** | `GET/POST /repositories/{slug}/templates`, `GET/PUT/DELETE .../{id}` | Yes (mutations: repo admin) |
 | **Notifications** | `GET /notifications`, `POST .../{id}/read`, `POST .../read-all`, `GET/PUT .../preferences` | Yes |
 | **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit`, `PUT /admin/users/{id}/tier` | Admin |
 | **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |

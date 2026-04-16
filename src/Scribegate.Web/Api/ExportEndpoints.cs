@@ -58,9 +58,6 @@ public static class ExportEndpoints
 
         var fileName = $"{SanitizeFilename(repo.Slug)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
 
-        await audit.LogAsync(AuditEventTypes.RepositoryExported, userId, userContext.GetUsername(),
-            "Repository", repo.Id, new { docs.Count }, ct);
-
         return Results.Stream(async stream =>
         {
             using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -123,23 +120,26 @@ public static class ExportEndpoints
                     PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
                 }, ct);
             }
+
+            // Audit after the zip has been fully composed so totals reflect what
+            // the caller actually received — mirrors SiteEndpoints.GenerateSite.
+            await audit.LogAsync(
+                AuditEventTypes.RepositoryExported, userId, userContext.GetUsername(),
+                "Repository", repo.Id,
+                new
+                {
+                    documentCount = exportedCount,
+                    sizeBytes = totalBytes,
+                    sizeCapReached = overflow,
+                }, ct);
         }, "application/zip", fileName);
     }
 
-    // Returns a ZIP-safe relative entry path or null if the source path cannot
-    // be trusted (ZipSlip defence in depth: even though PathHelper.IsValidPath
-    // normalises inputs at create/move time, we don't trust the DB blindly).
+    // Wraps ZipPathSafety with the markdown-specific extension guarantee.
     private static string? SafeZipEntryPath(string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-
-        var normalized = path.Replace('\\', '/').TrimStart('/');
-
-        foreach (var segment in normalized.Split('/'))
-        {
-            if (segment is "." or "..") return null;
-            if (segment.Length == 0) return null;
-        }
+        var normalized = ZipPathSafety.Sanitize(path);
+        if (normalized is null) return null;
 
         if (!normalized.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             normalized += ".md";

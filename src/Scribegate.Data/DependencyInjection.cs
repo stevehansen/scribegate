@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<IContentReportStore, SqliteContentReportStore>();
         services.AddScoped<IShareLinkStore, SqliteShareLinkStore>();
         services.AddScoped<IWebhookStore, SqliteWebhookStore>();
+        services.AddScoped<IDocumentTemplateStore, SqliteDocumentTemplateStore>();
 
         return services;
     }

@@ -69,6 +69,39 @@ export class SgRepositoryPage extends LitElement {
       background: var(--sg-danger-light); border: 1px solid var(--sg-danger-border);
       color: var(--sg-danger); padding: 0.75rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
     }
+
+    .clone-box {
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--sg-border);
+      border-radius: var(--sg-radius-lg);
+      background: var(--sg-bg-elevated);
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .clone-box label {
+      font-size: var(--sg-font-size-sm);
+      font-weight: 500;
+      color: var(--sg-text-secondary);
+    }
+    .clone-box code {
+      flex: 1;
+      min-width: 12rem;
+      padding: 0.35rem 0.6rem;
+      background: var(--sg-bg-tertiary);
+      border-radius: var(--sg-radius);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: var(--sg-font-size-sm);
+      color: var(--sg-text);
+      overflow: auto;
+      white-space: nowrap;
+    }
+    .clone-copied {
+      color: var(--sg-text-secondary);
+      font-size: var(--sg-font-size-xs);
+    }
   `];
 
   @property() location: any;
@@ -78,6 +111,8 @@ export class SgRepositoryPage extends LitElement {
   @state() private _error = '';
   @state() private _dialogError = '';
   @state() private _exporting = false;
+  @state() private _generatingSite = false;
+  @state() private _cloneCopied = false;
 
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
@@ -112,6 +147,35 @@ export class SgRepositoryPage extends LitElement {
       this._error = err instanceof ApiException ? err.error.message : 'Export failed.';
     } finally {
       this._exporting = false;
+    }
+  }
+
+  private async _onGenerateSite() {
+    if (this._generatingSite) return;
+    this._generatingSite = true;
+    try {
+      await exportsApi.buildSite(this._slug);
+    } catch (err) {
+      this._error = err instanceof ApiException ? err.error.message : 'Site generation failed.';
+    } finally {
+      this._generatingSite = false;
+    }
+  }
+
+  private get _cloneUrl(): string {
+    // Build from the current window origin so self-hosted deployments behind
+    // custom domains get the right URL without any server round-trip.
+    return `${window.location.origin}/${this._slug}.git`;
+  }
+
+  private async _onCopyCloneUrl() {
+    try {
+      await navigator.clipboard.writeText(this._cloneUrl);
+      this._cloneCopied = true;
+      setTimeout(() => (this._cloneCopied = false), 2000);
+    } catch {
+      // Clipboard permission denied or unavailable — ignore, the URL is still
+      // selectable in the <code> block.
     }
   }
 
@@ -171,8 +235,12 @@ export class SgRepositoryPage extends LitElement {
           <a class="btn btn-secondary" href="/${this._slug}/proposals">Proposals</a>
           <a class="btn btn-secondary" href="/${this._slug}/members">Members</a>
           <a class="btn btn-secondary" href="/${this._slug}/webhooks">Webhooks</a>
+          <a class="btn btn-secondary" href="/${this._slug}/templates">Templates</a>
           <button class="btn btn-secondary" @click=${this._onExport} ?disabled=${this._exporting}>
             ${this._exporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button class="btn btn-secondary" @click=${this._onGenerateSite} ?disabled=${this._generatingSite}>
+            ${this._generatingSite ? 'Generating…' : 'Generate site'}
           </button>
           ${authState.isAuthenticated
             ? html`
@@ -181,6 +249,20 @@ export class SgRepositoryPage extends LitElement {
             : ''}
         </div>
       </div>
+
+      ${this._repo.visibility === 'Public' || authState.isAuthenticated
+        ? html`
+            <div class="clone-box">
+              <label>Git clone</label>
+              <code>git clone ${this._cloneUrl}</code>
+              <button class="btn btn-secondary" @click=${this._onCopyCloneUrl}>
+                ${this._cloneCopied ? 'Copied' : 'Copy'}
+              </button>
+              ${this._repo.visibility === 'Private'
+                ? html`<span class="clone-copied">Private repo — use an API token as the password.</span>`
+                : html`<span class="clone-copied">Public repo — no credentials required.</span>`}
+            </div>`
+        : ''}
 
       <section>
         <h2>Documents</h2>

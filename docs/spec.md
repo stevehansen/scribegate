@@ -392,9 +392,9 @@ The differentiating feature: editorial workflow.
 - [x] Export repository as a zip of markdown files (streaming, 1 GiB cap, manifest with skipped list)
 - [x] Share links for individual documents (time-limited, revocable, read-only URLs)
 - [ ] API for external integrations
-- [ ] Git-compatible read-only access (clone the repo)
-- [ ] Static site generation from repository content
-- [ ] Markdown templates per repository
+- [x] Git-compatible read-only access (clone the repo)
+- [x] Static site generation from repository content
+- [x] Markdown templates per repository
 
 ---
 
@@ -403,7 +403,7 @@ The differentiating feature: editorial workflow.
 Clarity on boundaries prevents scope creep:
 
 - **Not a real-time collaborative editor.** One author per proposal. No simultaneous cursors.
-- **Not a Git server.** No branches, no CLI push/pull, no merge strategies. (Read-only Git access is a future possibility, not a core feature.)
+- **Not a Git server.** No branches, no CLI push/pull, no merge strategies. Read-only snapshot clones are exposed at `/{slug}.git` for convenience; they produce a single synthetic commit per snapshot and are not a substitute for version control.
 - **Not a CMS.** No themes, no page layouts, no publishing pipeline. It stores and serves markdown.
 - **Not an issue tracker.** Proposals have discussion threads, but there's no separate "issues" concept.
 - **Not a wiki in the "anyone can edit live" sense.** All changes go through proposals (except Admin direct publish).

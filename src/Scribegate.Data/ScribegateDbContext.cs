@@ -24,6 +24,7 @@ public class ScribegateDbContext(DbContextOptions<ScribegateDbContext> options) 
     public DbSet<ShareLink> ShareLinks => Set<ShareLink>();
     public DbSet<Webhook> Webhooks => Set<Webhook>();
     public DbSet<WebhookDelivery> WebhookDeliveries => Set<WebhookDelivery>();
+    public DbSet<DocumentTemplate> DocumentTemplates => Set<DocumentTemplate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

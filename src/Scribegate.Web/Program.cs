@@ -33,6 +33,13 @@ builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();
 builder.Services.AddSingleton<Scribegate.Web.Services.IWebhookDispatcher>(sp => sp.GetRequiredService<Scribegate.Web.Services.WebhookDispatcher>());
 builder.Services.AddHostedService<Scribegate.Web.Services.WebhookDeliveryWorker>();
 
+// Git mirror cache for read-only clone — owns the per-repo semaphores, so
+// it must be singleton. Scope-sensitive collaborators are resolved through
+// IServiceScopeFactory inside the service.
+builder.Services.AddSingleton<Scribegate.Web.Services.GitMirrorService>();
+builder.Services.AddHostedService<Scribegate.Web.Services.GitMirrorPruneService>();
+builder.Services.AddMemoryCache();
+
 var webhookConfig = builder.Configuration;
 builder.Services.AddHttpClient("webhooks", client =>
 {
@@ -235,6 +242,36 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0,
         });
     });
+
+    // Git dumb-HTTP refs/HEAD/pack-index advertisement — hit once per clone, so
+    // a tight per-IP limit protects against scrape storms without affecting
+    // legitimate users. Each allowed request typically anchors a clone session
+    // that then proceeds to many object fetches under the looser git-objects
+    // policy below.
+    options.AddPolicy("git-refs", context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+
+    // Git object fetches — a single clone of a medium repo issues hundreds of
+    // these, so the ceiling is deliberately high. Still bounded per IP so one
+    // abusive client cannot exhaust disk I/O for everyone else.
+    options.AddPolicy("git-objects", context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 2000,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
 });
 
 var app = builder.Build();
@@ -322,7 +359,11 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// SPA fallback: intercept 404s for non-API paths and serve index.html
+// SPA fallback: intercept 404s for non-API paths and serve index.html.
+// Dumb-HTTP git endpoints (the literal `.git` path segment) must NOT be
+// rewritten to the SPA — returning index.html on a missing git object
+// would break `git clone` with a cryptic parse error instead of a clean
+// 404 that git surfaces to the user.
 app.Use(async (context, next) =>
 {
     await next();
@@ -331,7 +372,8 @@ app.Use(async (context, next) =>
         && !context.Response.HasStarted
         && !context.Request.Path.StartsWithSegments("/api")
         && !context.Request.Path.StartsWithSegments("/healthz")
-        && !context.Request.Path.StartsWithSegments("/swagger"))
+        && !context.Request.Path.StartsWithSegments("/swagger")
+        && !IsGitPath(context.Request.Path))
     {
         context.Response.StatusCode = 200;
         context.Response.ContentType = "text/html";
@@ -340,6 +382,18 @@ app.Use(async (context, next) =>
         {
             await context.Response.SendFileAsync(indexPath);
         }
+    }
+
+    static bool IsGitPath(PathString path)
+    {
+        if (!path.HasValue) return false;
+        var value = path.Value!;
+        // Matches `/{slug}.git` and `/{slug}.git/...`. Cheap string check —
+        // avoids a regex allocation on every non-API 404.
+        var dotGit = value.IndexOf(".git", StringComparison.OrdinalIgnoreCase);
+        if (dotGit < 0) return false;
+        var after = dotGit + ".git".Length;
+        return after == value.Length || value[after] == '/';
     }
 });
 
@@ -381,5 +435,13 @@ app.MapNotificationEndpoints();
 app.MapShareLinkEndpoints();
 app.MapWebhookEndpoints();
 app.MapExportEndpoints();
+app.MapSiteEndpoints();
+app.MapTemplateEndpoints();
+
+// Dumb-HTTP git clone endpoints. Must be registered so they're considered
+// before the SPA fallback middleware treats `.git` paths as client routes —
+// the fallback explicitly skips `.git` (see IsGitPath above), but registering
+// here also lets the ASP.NET routing layer dispatch them cleanly.
+app.MapGitEndpoints();
 
 app.Run();

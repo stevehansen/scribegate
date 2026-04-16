@@ -56,9 +56,9 @@ M4 progress:
 - [x] Share links for individual documents (time-limited, revocable, read-only `/s/{token}` URLs)
 - [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures)
 - [x] Export repository as a zip of markdown files (streaming; public repos + members)
-- [ ] Git-compatible read-only access (clone the repo)
-- [ ] Static site generation from repository content
-- [ ] Markdown templates per repository
+- [x] Markdown templates per repository (DocumentTemplate entity + CRUD endpoints, template picker on new-document editor)
+- [x] Static site generation from repository content (streaming zip of HTML + CSS + manifest, 1 GiB cap, hardened Markdig pipeline)
+- [x] Git-compatible read-only access (dumb-HTTP clone via LibGit2Sharp, per-repo on-disk mirror, public anonymous / private API-token auth)
 
 Milestone 3 delivered:
 - [x] SSO/OIDC integration (configurable via admin settings, available to all tiers)
@@ -229,6 +229,13 @@ GET    /api/v1/repositories/{slug}/webhooks/{id}/deliveries  # Recent delivery a
 POST   /api/v1/repositories/{slug}/webhooks/{id}/test        # Send ping event (direct) [repo admin, rate-limited]
 
 GET    /api/v1/repositories/{slug}/export                    # Download repo as zip (streaming) [auth, member or public]
+GET    /api/v1/repositories/{slug}/site                      # Generate static HTML site as zip (streaming) [auth, member or public]
+
+GET    /api/v1/repositories/{slug}/templates                 # List markdown templates
+POST   /api/v1/repositories/{slug}/templates                 # Create template [repo admin]
+GET    /api/v1/repositories/{slug}/templates/{id}            # Get template
+PUT    /api/v1/repositories/{slug}/templates/{id}            # Update template [repo admin]
+DELETE /api/v1/repositories/{slug}/templates/{id}            # Delete template [repo admin]
 
 GET    /api/v1/notifications                                 # List notifications [auth]
 POST   /api/v1/notifications/{id}/read                       # Mark notification as read [auth]
@@ -236,6 +243,8 @@ POST   /api/v1/notifications/read-all                        # Mark all as read 
 GET    /api/v1/notifications/preferences                     # Get notification preferences [auth]
 PUT    /api/v1/notifications/preferences                     # Update notification preferences [auth]
 ```
+
+Git-compatible read-only clone is served outside `/api/v1/` as a dumb-HTTP transport at `/{slug}.git/info/refs`, `/{slug}.git/HEAD`, and `/{slug}.git/objects/...`. Public repos are anonymous; private repos require HTTP Basic with an `sg_` API token as the password (username is ignored). Per-repo on-disk mirror with SHA-256 content-hash staleness. Rate limits: 60 req/min/IP on refs, 2000 req/min/IP on objects. A `repository.cloned` audit event is logged on the first `info/refs` per (repo, user-agent) in a 60s window.
 
 ## Design Principles
 

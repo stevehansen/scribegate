@@ -319,3 +319,31 @@ export interface WebhookDeliveryListResponse {
   items: WebhookDeliveryResponse[];
   total: number;
 }
+
+// Templates
+
+export interface TemplateSummaryResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface TemplateResponse extends TemplateSummaryResponse {
+  content: string;
+}
+
+export interface TemplateListResponse {
+  items: TemplateSummaryResponse[];
+  total: number;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  description?: string | null;
+  content: string;
+}
+
+export type UpdateTemplateRequest = CreateTemplateRequest;

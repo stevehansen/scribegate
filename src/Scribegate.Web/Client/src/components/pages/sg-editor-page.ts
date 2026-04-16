@@ -1,8 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse } from '../../api/types.js';
+import type { RepositoryResponse, TemplateSummaryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
+import * as templateApi from '../../api/templates.js';
 import { ApiException } from '../../api/client.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
@@ -34,11 +35,11 @@ export class SgEditorPage extends LitElement {
     .preview { padding: 1rem; overflow-y: auto; max-height: 32rem; }
     .fields { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
     label { font-size: var(--sg-font-size-sm); font-weight: 500; display: flex; flex-direction: column; gap: 0.25rem; color: var(--sg-text); }
-    input {
+    input, select {
       padding: 0.5rem 0.75rem; border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
       font-size: var(--sg-font-size-sm); background: var(--sg-bg-elevated); color: var(--sg-text);
     }
-    input:focus, textarea:focus { outline: 2px solid var(--sg-primary); outline-offset: -1px; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--sg-primary); outline-offset: -1px; }
     .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
     .btn {
       padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
@@ -70,6 +71,8 @@ export class SgEditorPage extends LitElement {
   @state() private _saving = false;
   @state() private _error = '';
   @state() private _isNew = false;
+  @state() private _templates: TemplateSummaryResponse[] = [];
+  @state() private _selectedTemplateId = '';
 
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
@@ -92,10 +95,44 @@ export class SgEditorPage extends LitElement {
         this._content = doc.content ?? '';
         this._path = doc.path;
       }
+
+      if (this._isNew) {
+        // Best-effort: templates listing is optional. If a user can't see them
+        // (private repo, non-member) we silently hide the selector rather than
+        // blocking the whole editor.
+        try {
+          const res = await templateApi.list(this._slug);
+          this._templates = res.items;
+        } catch {
+          this._templates = [];
+        }
+      }
     } catch {
       this._error = 'Failed to load.';
     } finally {
       this._loading = false;
+    }
+  }
+
+  private async _onTemplateChange(e: Event) {
+    const id = (e.target as HTMLSelectElement).value;
+    this._selectedTemplateId = id;
+    if (!id) return;
+
+    if (this._content.trim().length > 0) {
+      const ok = confirm('Replace current editor content with the selected template?');
+      if (!ok) {
+        this._selectedTemplateId = '';
+        return;
+      }
+    }
+
+    try {
+      const tpl = await templateApi.get(this._slug, id);
+      this._content = tpl.content;
+    } catch (err) {
+      this._error = err instanceof ApiException ? err.error.message : 'Failed to load template.';
+      this._selectedTemplateId = '';
     }
   }
 
@@ -149,6 +186,16 @@ export class SgEditorPage extends LitElement {
       <div class="fields">
         ${this._isNew ? html`
           <label>Path <input type="text" .value=${this._path} @input=${(e: Event) => this._path = (e.target as HTMLInputElement).value} placeholder="folder/document-name" /></label>
+          ${this._templates.length > 0 ? html`
+            <label>Start from template
+              <select .value=${this._selectedTemplateId} @change=${this._onTemplateChange}>
+                <option value="">— Blank —</option>
+                ${this._templates.map((t) => html`
+                  <option value=${t.id}>${t.name}${t.description ? ` — ${t.description}` : ''}</option>
+                `)}
+              </select>
+            </label>
+          ` : ''}
         ` : ''}
         <label>Commit message <input type="text" .value=${this._message} @input=${(e: Event) => this._message = (e.target as HTMLInputElement).value} placeholder="${this._isNew ? 'Initial content' : 'Describe your changes'}" /></label>
       </div>

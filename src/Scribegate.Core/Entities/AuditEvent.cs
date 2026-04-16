@@ -76,4 +76,15 @@ public static class AuditEventTypes
 
     // Export
     public const string RepositoryExported = "repository.exported";
+
+    // Git clone (read-only dumb HTTP)
+    public const string RepositoryCloned = "repository.cloned";
+
+    // Static site generation
+    public const string SiteGenerated = "repository.site_generated";
+
+    // Document templates
+    public const string DocumentTemplateCreated = "document_template.created";
+    public const string DocumentTemplateUpdated = "document_template.updated";
+    public const string DocumentTemplateDeleted = "document_template.deleted";
 }

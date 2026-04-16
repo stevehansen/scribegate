@@ -1,13 +1,13 @@
 import { ApiException } from './client.js';
 import type { ApiError } from './types.js';
 
-export async function downloadRepoZip(repoSlug: string): Promise<void> {
+async function downloadZip(repoSlug: string, endpoint: string, defaultFileName: string): Promise<void> {
   const token = localStorage.getItem('sg_token');
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const response = await fetch(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/export`,
+    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/${endpoint}`,
     { headers },
   );
 
@@ -25,7 +25,7 @@ export async function downloadRepoZip(repoSlug: string): Promise<void> {
   const blob = await response.blob();
   const disposition = response.headers.get('Content-Disposition') ?? '';
   const match = /filename="?([^"]+)"?/i.exec(disposition);
-  const fileName = match?.[1] ?? `${repoSlug}.zip`;
+  const fileName = match?.[1] ?? defaultFileName;
 
   const url = URL.createObjectURL(blob);
   try {
@@ -38,4 +38,12 @@ export async function downloadRepoZip(repoSlug: string): Promise<void> {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+export async function downloadRepoZip(repoSlug: string): Promise<void> {
+  return downloadZip(repoSlug, 'export', `${repoSlug}.zip`);
+}
+
+export async function buildSite(repoSlug: string): Promise<void> {
+  return downloadZip(repoSlug, 'site', `${repoSlug}-site.zip`);
 }
