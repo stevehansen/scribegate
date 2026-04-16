@@ -12,6 +12,11 @@ public sealed class UpdateSettingRequest
     public string? Value { get; init; }
 }
 
+public sealed class SetUserTierRequest
+{
+    public string? Tier { get; init; }
+}
+
 public sealed class AuditEventResponse
 {
     public required Guid Id { get; init; }

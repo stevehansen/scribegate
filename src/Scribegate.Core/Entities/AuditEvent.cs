@@ -24,6 +24,7 @@ public static class AuditEventTypes
     public const string DocumentCreated = "document.created";
     public const string DocumentUpdated = "document.updated";
     public const string DocumentDeleted = "document.deleted";
+    public const string DocumentMoved = "document.moved";
 
     // Revision
     public const string RevisionCreated = "revision.created";
@@ -52,6 +53,10 @@ public static class AuditEventTypes
     public const string MemberAdded = "member.added";
     public const string MemberUpdated = "member.updated";
     public const string MemberRemoved = "member.removed";
+
+    // Media
+    public const string MediaUploaded = "media.uploaded";
+    public const string MediaDeleted = "media.deleted";
 
     // Reports
     public const string ContentReported = "content.reported";

@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Scribegate.Web.Api;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +24,9 @@ builder.Services.AddSingleton<JwtService>();
 builder.Services.AddSingleton<SignatureService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<AuthorizationHelper>();
+builder.Services.AddScoped<TierService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<NotificationService>();
 
 // Authentication: JWT + API token (dual scheme)
 var jwtService = new JwtService(builder.Configuration);
@@ -66,10 +70,15 @@ builder.Services.AddAuthentication(options =>
     };
 })
 .AddScheme<AuthenticationSchemeOptions, ApiTokenAuthHandler>(ApiTokenDefaults.AuthenticationScheme, null)
+.AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, _ => { })
 .AddPolicyScheme("MultiScheme", "JWT or API Token", options =>
 {
     options.ForwardDefaultSelector = context =>
     {
+        // OIDC callback path — let OIDC handle it
+        if (context.Request.Path.StartsWithSegments("/api/v1/auth/oidc"))
+            return OpenIdConnectDefaults.AuthenticationScheme;
+
         var authHeader = context.Request.Headers.Authorization.ToString();
         if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
@@ -80,6 +89,9 @@ builder.Services.AddAuthentication(options =>
         return JwtBearerDefaults.AuthenticationScheme;
     };
 });
+
+// OIDC dynamic configuration from database settings
+builder.Services.ConfigureOptions<OidcConfigureOptions>();
 
 builder.Services.AddAuthorization();
 
@@ -179,6 +191,22 @@ using (var scope = app.Services.CreateScope())
         await settings.SetAsync(SystemSettingKeys.RequireTos, "true");
     if (await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours) is null)
         await settings.SetAsync(SystemSettingKeys.AccountAgeGateHours, "24");
+
+    // Tier settings: default to "none" (self-hosted = no limits)
+    if (await settings.GetAsync(SystemSettingKeys.TierMode) is null)
+        await settings.SetAsync(SystemSettingKeys.TierMode, "none");
+    if (await settings.GetAsync(SystemSettingKeys.DefaultTier) is null)
+        await settings.SetAsync(SystemSettingKeys.DefaultTier, "free");
+
+    // SMTP settings: disabled by default
+    if (await settings.GetAsync(SystemSettingKeys.SmtpEnabled) is null)
+        await settings.SetAsync(SystemSettingKeys.SmtpEnabled, "false");
+
+    // OIDC settings: disabled by default
+    if (await settings.GetAsync(SystemSettingKeys.OidcEnabled) is null)
+        await settings.SetAsync(SystemSettingKeys.OidcEnabled, "false");
+    if (await settings.GetAsync(SystemSettingKeys.OidcAutoProvision) is null)
+        await settings.SetAsync(SystemSettingKeys.OidcAutoProvision, "true");
 }
 
 // Security headers
@@ -280,5 +308,9 @@ app.MapReviewEndpoints();
 app.MapCommentEndpoints();
 app.MapMembershipEndpoints();
 app.MapReportEndpoints();
+app.MapOidcEndpoints();
+app.MapSearchEndpoints();
+app.MapMediaEndpoints();
+app.MapNotificationEndpoints();
 
 app.Run();

@@ -374,13 +374,16 @@ The differentiating feature: editorial workflow.
 
 ### Milestone 3 — "Polish & Integrate"
 
-- [ ] Line-level comments on diffs
-- [ ] Email notifications (new proposal, review submitted, proposal approved)
-- [ ] Full-text search across documents
-- [ ] OIDC / LDAP authentication
-- [ ] Configurable approval rules (e.g., require 2 approvals)
-- [ ] Document rename/move with history preservation
-- [ ] Media/image uploads (stored alongside documents)
+- [x] Line-level comments on diffs
+- [x] Email notifications (new proposal, review submitted, proposal approved)
+- [x] Full-text search across documents (SQLite FTS5)
+- [x] SSO/OIDC authentication (configurable via admin settings, available to all tiers)
+- [x] Configurable approval rules (per-repository, 1-10 required approvals)
+- [x] Document rename/move with history preservation
+- [x] Media/image uploads (local disk storage, MIME validation, storage quotas)
+- [x] Configurable tier/quota system (free/paid tiers, enforced or unlimited)
+- [x] Notification system with user preferences
+- [x] Expanded slug denylist (~100+ reserved words for future-proofing)
 - [ ] Export repository as a zip of markdown files
 
 ### Milestone 4 — "Ecosystem" (Future)
@@ -409,7 +412,7 @@ Clarity on boundaries prevents scope creep:
 
 1. **Multi-document proposals.** Should a single proposal be able to change multiple documents atomically? (Git PRs can, but it adds complexity. Recommendation: not in v1, revisit based on user feedback.)
 
-2. **Approval threshold default.** One approval to merge, or configurable from the start? (Recommendation: one approval in v1, configurable in Milestone 3.)
+2. ~~**Approval threshold default.**~~ Resolved: `RequiredApprovals` is configurable per repository (1-10). Defaults to 1. Distinct approvals are counted per reviewer.
 
 3. **RavenDB adapter scope.** When should the RavenDB adapter be built? (Recommendation: after the SQLite-based product is stable and there's user demand. The storage interface abstraction is already in place, so adding it is straightforward.)
 

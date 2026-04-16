@@ -18,7 +18,8 @@ Scribegate uses a layered architecture with three projects, each with a clear re
 ```
 
 **Scribegate.Core** has zero external dependencies. It defines:
-- Domain entities (`Repository`, `Document`, `Revision`, `Proposal`, `Review`, `Comment`, `User`, `RepositoryMembership`, `ApiToken`, `AuditEvent`, `ContentReport`, `RevisionSignature`, `SystemSetting`)
+- Domain entities (`Repository`, `Document`, `Revision`, `Proposal`, `Review`, `Comment`, `User`, `RepositoryMembership`, `ApiToken`, `AuditEvent`, `ContentReport`, `RevisionSignature`, `SystemSetting`, `MediaAsset`, `Notification`, `NotificationPreference`)
+- Value objects (`TierLimits`)
 - Enums (`Visibility`, `RepositoryRole`, `ProposalStatus`, `ReviewVerdict`, `ReportStatus`)
 - Storage interfaces (one per entity group)
 
@@ -69,6 +70,9 @@ Repository ─┬─ (*) Document ─┬─ (*) Revision ── RevisionSignatur
 
 SystemSetting (standalone, instance-level config)
 ContentReport (references any target by type + ID)
+MediaAsset ──→ Repository, User (uploaded files with MIME validation)
+Notification ──→ User (in-app + email notifications)
+NotificationPreference ──→ User (per-user email preferences)
 ```
 
 ### Entity Details
@@ -85,6 +89,7 @@ public class Repository
     public required string Slug { get; set; }        // "company-handbook" (unique, URL-safe)
     public string? Description { get; set; }
     public Visibility Visibility { get; set; }       // Public or Private
+    public int RequiredApprovals { get; set; } = 1;  // Configurable 1-10
     public DateTime CreatedAt { get; set; }
 }
 ```
@@ -227,11 +232,14 @@ public class User
     public Guid Id { get; set; }
     public required string Username { get; set; }
     public required string Email { get; set; }
-    public required string PasswordHash { get; set; } // BCrypt hashed
+    public string? PasswordHash { get; set; }         // BCrypt hashed (nullable for OIDC-only users)
     public bool IsAdmin { get; set; }                 // Instance-level admin
     public bool EmailVerified { get; set; }
-    public bool TosAccepted { get; set; }
-    public string? ThemePreference { get; set; }
+    public DateTime? TosAcceptedAt { get; set; }
+    public string? ExternalProvider { get; set; }     // "oidc" for SSO users
+    public string? ExternalId { get; set; }           // External provider's subject ID
+    public string Tier { get; set; } = "free";        // "free" or "paid"
+    public string ThemePreference { get; set; } = "system";
     public DateTime CreatedAt { get; set; }
 }
 ```
@@ -826,4 +834,4 @@ The current design supports multi-tenancy by:
 
 ### SSO/OIDC Integration
 
-Planned for all tiers (not an enterprise paywall). Will add a third authentication scheme alongside JWT and API tokens. The multi-scheme selector in `Program.cs` already supports this pattern.
+Implemented for all tiers (not an enterprise paywall). Uses OpenID Connect middleware with database-stored provider configuration. The multi-scheme selector in `Program.cs` routes OIDC requests to the OpenIdConnect handler while API and JWT requests continue using their respective handlers. OIDC settings (authority, client ID/secret, display name) are stored in SystemSettings and configurable via admin API. Auto-provisioning creates user accounts on first OIDC login, with email-based linking to existing accounts.

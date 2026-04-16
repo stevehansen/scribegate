@@ -59,6 +59,7 @@ public static class CommentEndpoints
         IProposalStore proposalStore,
         ICommentStore commentStore,
         UserContext userContext,
+        NotificationService notifications,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -87,6 +88,16 @@ public static class CommentEndpoints
         };
 
         await commentStore.CreateAsync(comment, ct);
+
+        // Notify proposal author about the comment
+        if (proposal.CreatedById != userId)
+        {
+            await notifications.NotifyAsync(
+                proposal.CreatedById, NotificationTypes.CommentAdded,
+                $"New comment on: {proposal.Title}",
+                $"{userContext.GetUsername()} commented on your proposal.",
+                $"/api/v1/repositories/{repoSlug}/proposals/{proposalId}", ct);
+        }
 
         return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposalId}/comments", new CommentResponse
         {

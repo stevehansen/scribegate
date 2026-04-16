@@ -15,6 +15,7 @@ public sealed class UpdateRepositoryRequest
     public string? Name { get; init; }
     public string? Description { get; init; }
     public string? Visibility { get; init; }
+    public int? RequiredApprovals { get; init; }
 }
 
 public sealed record RepositoryResponse
@@ -24,6 +25,7 @@ public sealed record RepositoryResponse
     public required string Slug { get; init; }
     public string? Description { get; init; }
     public required string Visibility { get; init; }
+    public int RequiredApprovals { get; init; } = 1;
     public required DateTime CreatedAt { get; init; }
     public int DocumentCount { get; init; }
 }

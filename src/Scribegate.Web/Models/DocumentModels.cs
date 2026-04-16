@@ -13,6 +13,11 @@ public sealed class UpdateDocumentRequest
     public string? Message { get; init; }
 }
 
+public sealed class MoveDocumentRequest
+{
+    public string? NewPath { get; init; }
+}
+
 public sealed class DocumentResponse
 {
     public required Guid Id { get; init; }

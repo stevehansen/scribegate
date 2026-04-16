@@ -34,4 +34,5 @@ public static class ApiErrorCodes
     public const string HasDependents = "HAS_DEPENDENTS";
     public const string Forbidden = "FORBIDDEN";
     public const string RegistrationDisabled = "REGISTRATION_DISABLED";
+    public const string QuotaExceeded = "QUOTA_EXCEEDED";
 }

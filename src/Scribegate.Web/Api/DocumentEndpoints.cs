@@ -17,6 +17,8 @@ public static class DocumentEndpoints
         group.MapPost("/", CreateDocument).RequireAuthorization().RequireRateLimiting("content-create");
         group.MapPut("/{*path}", UpdateDocument).RequireAuthorization();
         group.MapDelete("/{*path}", DeleteDocument).RequireAuthorization();
+        // Move endpoint uses action query parameter since catch-all must be last segment
+        group.MapPost("/move/{*path}", MoveDocument).RequireAuthorization();
 
         return group;
     }
@@ -90,6 +92,7 @@ public static class DocumentEndpoints
         AuditService audit,
         SignatureService signatureService,
         ScribegateDbContext db,
+        TierService tierService,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -117,6 +120,27 @@ public static class DocumentEndpoints
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
         var username = userContext.GetUsername();
+
+        // Quota check: max documents per repo
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is not null)
+        {
+            var limits = await tierService.GetLimitsForUserAsync(user, ct);
+            if (!limits.IsUnlimited(limits.MaxDocumentsPerRepo))
+            {
+                var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+                if (docs.Count >= limits.MaxDocumentsPerRepo)
+                    return Results.Json(new
+                    {
+                        error = new ApiError
+                        {
+                            Code = ApiErrorCodes.QuotaExceeded,
+                            Message = $"This repository has reached the maximum of {limits.MaxDocumentsPerRepo} documents for your plan.",
+                            Details = $"Your {user.Tier} plan allows up to {limits.MaxDocumentsPerRepo} documents per repository. Upgrade your plan or delete existing documents.",
+                        }
+                    }, statusCode: 403);
+            }
+        }
 
         // Parse frontmatter
         var frontmatterJson = request.Content is not null ? FrontmatterService.ToJson(request.Content) : null;
@@ -317,6 +341,68 @@ public static class DocumentEndpoints
             });
 
         return errors;
+    }
+
+    private static async Task<IResult> MoveDocument(
+        string repoSlug,
+        string path,
+        MoveDocumentRequest request,
+        IRepositoryStore repoStore,
+        IDocumentStore documentStore,
+        UserContext userContext,
+        AuditService audit,
+        CancellationToken ct)
+    {
+        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        var normalizedPath = PathHelper.NormalizePath(path);
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        if (doc is null)
+            return ApiResults.NotFound("Document", normalizedPath);
+
+        if (string.IsNullOrWhiteSpace(request.NewPath))
+            return ApiResults.ValidationError("newPath", ApiErrorCodes.Required, "New path is required.");
+
+        var newNormalized = PathHelper.NormalizePath(request.NewPath);
+
+        if (!PathHelper.IsValidPath(newNormalized))
+            return ApiResults.ValidationError("newPath", ApiErrorCodes.InvalidFormat,
+                $"The path '{newNormalized}' is not valid.",
+                "Paths must use forward slashes, contain only letters, numbers, dots, hyphens, and underscores, and end with .md.");
+
+        if (newNormalized == normalizedPath)
+            return ApiResults.ValidationError("newPath", ApiErrorCodes.InvalidFormat,
+                "New path must be different from the current path.");
+
+        var existing = await documentStore.GetByPathAsync(repo.Id, newNormalized, ct);
+        if (existing is not null)
+            return ApiResults.Conflict(
+                ApiErrorCodes.PathAlreadyExists,
+                $"A document at path '{newNormalized}' already exists.",
+                "Choose a different path.", "newPath");
+
+        var oldPath = doc.Path;
+        doc.Path = newNormalized;
+        await documentStore.UpdateAsync(doc, ct);
+
+        var userId = await userContext.GetCurrentUserIdAsync(ct);
+        await audit.LogAsync(
+            AuditEventTypes.DocumentMoved, userId, userContext.GetUsername(),
+            "Document", doc.Id,
+            new { oldPath, newPath = newNormalized, repositorySlug = repoSlug }, ct);
+
+        return Results.Ok(new DocumentResponse
+        {
+            Id = doc.Id,
+            Path = doc.Path,
+            Content = null,
+            CurrentRevisionId = doc.CurrentRevisionId,
+            CreatedAt = doc.CreatedAt,
+            CreatedBy = doc.CreatedBy?.Username ?? doc.CreatedById.ToString(),
+            UpdatedAt = null,
+        });
     }
 
     private static DocumentSummary MapToSummary(Document doc) => new()

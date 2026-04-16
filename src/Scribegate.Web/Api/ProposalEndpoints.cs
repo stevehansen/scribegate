@@ -124,6 +124,7 @@ public static class ProposalEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuditService audit,
+        NotificationService notifications,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -183,6 +184,13 @@ public static class ProposalEndpoints
             AuditEventTypes.ProposalCreated, userId, userContext.GetUsername(),
             "Proposal", proposal.Id,
             new { proposal.Title, proposal.Status }, ct);
+
+        // Notify repository reviewers
+        await notifications.NotifyRepositoryReviewersAsync(
+            repo.Id, userId, NotificationTypes.ProposalCreated,
+            $"New proposal: {proposal.Title}",
+            $"{userContext.GetUsername()} created a new proposal in {repo.Name}.",
+            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
 
         return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", new ProposalSummary
         {
@@ -302,11 +310,13 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        IReviewStore reviewStore,
         IMembershipStore membershipStore,
         ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
         SignatureService signatureService,
+        NotificationService notifications,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -331,7 +341,43 @@ public static class ProposalEndpoints
         if (proposal.CreatedById == userId)
             return Error("SELF_REVIEW_NOT_ALLOWED", "You cannot approve your own proposal.", 422);
 
-        // Create revision from proposed content
+        // Record the approval review
+        var review = new Review
+        {
+            Id = Guid.CreateVersion7(),
+            ProposalId = id,
+            Verdict = ReviewVerdict.Approved,
+            Body = null,
+            CreatedById = userId,
+        };
+        await reviewStore.CreateAsync(review, ct);
+
+        await audit.LogAsync(AuditEventTypes.ReviewSubmitted, userId, userContext.GetUsername(),
+            "Review", review.Id,
+            new { proposalId = id, verdict = "Approved" }, ct);
+
+        // Count distinct approvals (one per reviewer)
+        var allReviews = await reviewStore.ListByProposalAsync(id, ct);
+        var approvalCount = allReviews
+            .Where(r => r.Verdict == ReviewVerdict.Approved)
+            .Select(r => r.CreatedById)
+            .Distinct()
+            .Count();
+
+        var requiredApprovals = Math.Max(1, repo.RequiredApprovals);
+
+        if (approvalCount < requiredApprovals)
+        {
+            return Results.Ok(new
+            {
+                status = "Open",
+                approvals = approvalCount,
+                requiredApprovals,
+                message = $"Approved ({approvalCount}/{requiredApprovals}). Waiting for more approvals.",
+            });
+        }
+
+        // Threshold met — merge the proposal
         Document? doc;
         if (proposal.DocumentId.HasValue)
         {
@@ -340,7 +386,6 @@ public static class ProposalEndpoints
         }
         else if (proposal.ProposedPath is not null)
         {
-            // Create new document
             doc = new Document
             {
                 Id = Guid.CreateVersion7(),
@@ -368,17 +413,14 @@ public static class ProposalEndpoints
 
         await revisionStore.CreateAsync(revision, ct);
 
-        // Sign the revision
         var signature = signatureService.SignRevision(revision);
         db.RevisionSignatures.Add(signature);
         await db.SaveChangesAsync(ct);
 
-        // Update document's current revision
         doc.CurrentRevisionId = revision.Id;
         doc.FrontmatterJson = FrontmatterService.ToJson(proposal.ProposedContent);
         await documentStore.UpdateAsync(doc, ct);
 
-        // Update proposal status
         proposal.Status = ProposalStatus.Approved;
         proposal.ResolvedAt = DateTime.UtcNow;
         proposal.ResolvedById = userId;
@@ -386,9 +428,16 @@ public static class ProposalEndpoints
 
         await audit.LogAsync(AuditEventTypes.ProposalApproved, userId, userContext.GetUsername(),
             "Proposal", proposal.Id,
-            new { revisionId = revision.Id, documentPath = doc.Path }, ct);
+            new { revisionId = revision.Id, documentPath = doc.Path, approvalCount }, ct);
 
-        return Results.Ok(new { status = "Approved", revisionId = revision.Id });
+        // Notify the proposal author
+        await notifications.NotifyAsync(
+            proposal.CreatedById, NotificationTypes.ProposalApproved,
+            $"Proposal approved: {proposal.Title}",
+            $"Your proposal has been approved and merged by {userContext.GetUsername()}.",
+            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
+
+        return Results.Ok(new { status = "Approved", revisionId = revision.Id, approvals = approvalCount, requiredApprovals });
     }
 
     private static async Task<IResult> RejectProposal(
@@ -399,6 +448,7 @@ public static class ProposalEndpoints
         ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
+        NotificationService notifications,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -425,6 +475,12 @@ public static class ProposalEndpoints
 
         await audit.LogAsync(AuditEventTypes.ProposalRejected, userId, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
+
+        await notifications.NotifyAsync(
+            proposal.CreatedById, NotificationTypes.ProposalRejected,
+            $"Proposal rejected: {proposal.Title}",
+            $"Your proposal was rejected by {userContext.GetUsername()}.",
+            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
 
         return Results.Ok(new { status = "Rejected" });
     }

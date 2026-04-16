@@ -37,6 +37,9 @@ A simplified, self-hosted markdown collaboration platform with editorial review 
 Repository → Document → Revision (immutable, append-only)
                      → Proposal → Review
                                → Comment
+                     → MediaAsset (uploaded files)
+User → Notification → NotificationPreference
+     → Tier ("free" or "paid", configurable limits)
 
 Documents have optional YAML frontmatter parsed and stored as JSON for querying.
 
@@ -44,17 +47,21 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 3 — "Polish & Integrate"**
+**Milestone 4 — "Ecosystem" (Next)**
 
-Milestones 1 (Read & Write) and 2 (Propose & Review) are complete. Current focus:
+Milestones 1 (Read & Write), 2 (Propose & Review), and 3 (Polish & Integrate) are complete.
 
-- [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
-- [ ] Line-level comments on diffs
-- [ ] Email notifications
-- [ ] Full-text search across documents
-- [ ] Configurable approval rules (e.g., require 2 approvals)
-- [ ] Document rename/move with history preservation
-- [ ] Media/image uploads
+Milestone 3 delivered:
+- [x] SSO/OIDC integration (configurable via admin settings, available to all tiers)
+- [x] Line-level comments on diffs (Comment.LineReference)
+- [x] Email notifications (SMTP, notification preferences, triggered on key events)
+- [x] Full-text search across documents (SQLite FTS5 with auto-update triggers)
+- [x] Configurable approval rules (per-repository RequiredApprovals 1-10, threshold-based auto-merge)
+- [x] Document rename/move with audit trail
+- [x] Media/image uploads (local disk, MIME validation, storage quotas)
+- [x] Configurable tier/quota system (free/paid, self-hosted=unlimited by default)
+- [x] Notification system with user preferences
+- [x] Expanded slug denylist (~100+ reserved words for future-proofing)
 
 ## Project Structure
 
@@ -109,7 +116,13 @@ docs/
 - [x] CLI tool (`sg`) — dotnet global tool with auth, repo, doc, proposal, review commands
 - [x] Client library scaffolding (TypeScript/JS, C#, Python) — auto-generated from OpenAPI spec
 - [x] Abuse prevention (ToS acceptance, account age gate, rate limiting, content reporting)
-- [ ] SSO/OIDC integration (available to all tiers, no enterprise paywall)
+- [x] SSO/OIDC integration (OpenIdConnect middleware, DB-stored config, auto-provisioning)
+- [x] Configurable tier/quota system (TierService, free/paid tiers, SystemSettings-based)
+- [x] Full-text search (SQLite FTS5 virtual table with triggers)
+- [x] Configurable approval rules (RequiredApprovals per repo, threshold-based merge)
+- [x] Document rename/move with audit trail
+- [x] Media/image uploads (MediaAsset entity, local disk, MIME validation)
+- [x] Email notifications (SMTP service, Notification entity, user preferences)
 - [x] GitHub Actions CI/CD (ci.yml for build/test, release.yml with Docker + GHCR)
 - [x] Frontend SPA (TypeScript + Lit + Vite + SASS, @vaadin/router, marked)
 - [x] Dockerfile (multi-stage: Node + .NET SDK + aspnet runtime, non-root user)
@@ -174,11 +187,35 @@ POST   /api/v1/reports                                       # Report content [a
 GET    /api/v1/reports                                       # List reports [admin]
 GET    /api/v1/reports/{id}                                  # Get report [admin]
 PUT    /api/v1/reports/{id}                                  # Resolve report [admin]
+
+GET    /api/v1/auth/me/quota                                 # Current user quota/limits [auth]
+GET    /api/v1/auth/oidc/config                              # OIDC provider config (anonymous)
+GET    /api/v1/auth/oidc/login                               # Initiate OIDC login
+GET    /api/v1/auth/oidc/callback                            # OIDC callback (issues JWT)
+
+PUT    /api/v1/admin/users/{userId}/tier                     # Set user tier [admin]
+
+GET    /api/v1/search?q={query}&repo={slug}                  # Full-text search across documents
+
+POST   /api/v1/repositories/{slug}/documents/move/{path}     # Rename/move document [auth]
+
+POST   /api/v1/repositories/{slug}/media                     # Upload media file [auth]
+GET    /api/v1/repositories/{slug}/media                     # List media assets
+GET    /api/v1/repositories/{slug}/media/{id}                # Get media asset info
+GET    /api/v1/repositories/{slug}/media/{id}/download       # Download media file
+DELETE /api/v1/repositories/{slug}/media/{id}                # Delete media [owner/admin]
+
+GET    /api/v1/notifications                                 # List notifications [auth]
+POST   /api/v1/notifications/{id}/read                       # Mark notification as read [auth]
+POST   /api/v1/notifications/read-all                        # Mark all as read [auth]
+GET    /api/v1/notifications/preferences                     # Get notification preferences [auth]
+PUT    /api/v1/notifications/preferences                     # Update notification preferences [auth]
 ```
 
 ## Design Principles
 
-- **Auth:** Dual-scheme (JWT + API tokens). BCrypt passwords, 10-128 chars, no complexity rules. API tokens use `sg_` prefix, SHA-256 hashed, with optional expiry and last-used tracking. SSO/OIDC coming for ALL tiers (no enterprise paywall).
+- **Auth:** Triple-scheme (JWT + API tokens + OIDC). BCrypt passwords, 10-128 chars, no complexity rules. API tokens use `sg_` prefix, SHA-256 hashed, with optional expiry and last-used tracking. SSO/OIDC available for ALL tiers (no enterprise paywall), configurable via admin settings.
+- **Tiers:** Configurable via `instance.tier_mode` setting. Self-hosted defaults to unlimited ("none"). Managed hosting uses "enforced" mode with free/paid tiers. Free tier defaults: 3 repos, 20 docs/repo, 50MB storage, 2 API tokens, 3 members/repo. All limits configurable via admin settings.
 - **API-first:** REST API is the source of truth. CLI, web UI, and client libraries all consume it.
 - **Client libraries:** Auto-generated from OpenAPI spec. TypeScript/JS, C#, Python. Publish to npm, NuGet, PyPI.
 - **CI/CD:** GitHub Actions with trusted publishing (OIDC, no stored keys). See P:\eidet for reference configs.

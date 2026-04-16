@@ -15,6 +15,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.PasswordHash);
         builder.Property(u => u.ExternalProvider).HasMaxLength(100);
         builder.Property(u => u.ExternalId).HasMaxLength(200);
+        builder.Property(u => u.Tier).HasMaxLength(20).HasDefaultValue("free");
         builder.Property(u => u.ThemePreference).HasMaxLength(10).HasDefaultValue("system");
 
         builder.HasIndex(u => u.Username).IsUnique();

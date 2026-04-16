@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
 
 namespace Scribegate.Data.Stores;
@@ -52,5 +53,17 @@ public class SqliteMembershipStore(ScribegateDbContext db) : IMembershipStore
             db.RepositoryMemberships.Remove(membership);
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task<int> CountRepositoriesOwnedByUserAsync(Guid userId, CancellationToken ct)
+    {
+        return await db.RepositoryMemberships
+            .CountAsync(m => m.UserId == userId && m.Role == RepositoryRole.Admin, ct);
+    }
+
+    public async Task<int> CountMembersByRepositoryAsync(Guid repositoryId, CancellationToken ct)
+    {
+        return await db.RepositoryMemberships
+            .CountAsync(m => m.RepositoryId == repositoryId, ct);
     }
 }

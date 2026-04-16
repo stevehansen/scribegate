@@ -52,6 +52,7 @@ public static class MembershipEndpoints
         ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
+        TierService tierService,
         CancellationToken ct)
     {
         var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
@@ -81,6 +82,26 @@ public static class MembershipEndpoints
         if (existing is not null)
             return ApiResults.Conflict("ALREADY_MEMBER", $"User '{targetUser.Username}' is already a member of this repository.",
                 "Use PUT to update their role.", "username");
+
+        // Quota check: max members per repo
+        if (currentUser is not null)
+        {
+            var limits = await tierService.GetLimitsForUserAsync(currentUser, ct);
+            if (!limits.IsUnlimited(limits.MaxMembersPerRepo))
+            {
+                var memberCount = await membershipStore.CountMembersByRepositoryAsync(repo.Id, ct);
+                if (memberCount >= limits.MaxMembersPerRepo)
+                    return Results.Json(new
+                    {
+                        error = new ApiError
+                        {
+                            Code = ApiErrorCodes.QuotaExceeded,
+                            Message = $"This repository has reached the maximum of {limits.MaxMembersPerRepo} members for your plan.",
+                            Details = $"Your {currentUser.Tier} plan allows up to {limits.MaxMembersPerRepo} members per repository. Upgrade your plan or remove existing members.",
+                        }
+                    }, statusCode: 403);
+            }
+        }
 
         var membership = new RepositoryMembership
         {

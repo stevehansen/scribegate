@@ -17,6 +17,7 @@ public static class AuthEndpoints
         group.MapPost("/register", Register).AllowAnonymous().RequireRateLimiting("auth");
         group.MapPost("/login", Login).AllowAnonymous().RequireRateLimiting("auth");
         group.MapGet("/me", GetMe).RequireAuthorization();
+        group.MapGet("/me/quota", GetMyQuota).RequireAuthorization();
         group.MapPut("/preferences", UpdatePreferences).RequireAuthorization();
         group.MapPost("/tokens", CreateApiToken).RequireAuthorization();
         group.MapGet("/tokens", ListApiTokens).RequireAuthorization();
@@ -31,6 +32,7 @@ public static class AuthEndpoints
         JwtService jwt,
         ISystemSettingStore settings,
         AuditService audit,
+        TierService tierService,
         CancellationToken ct)
     {
         // Check if registration is enabled
@@ -150,6 +152,8 @@ public static class AuthEndpoints
         var emailValidation = await settings.GetAsync(SystemSettingKeys.EmailValidationRequired, ct);
         var autoVerify = isFirstUser || emailValidation != "true";
 
+        var defaultTier = await tierService.GetDefaultTierAsync(ct);
+
         var user = new User
         {
             Id = Guid.CreateVersion7(),
@@ -157,6 +161,7 @@ public static class AuthEndpoints
             Email = email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsAdmin = isFirstUser,
+            Tier = defaultTier,
             EmailVerified = autoVerify,
             TosAcceptedAt = request.AcceptTos ? DateTime.UtcNow : null,
         };
@@ -248,6 +253,45 @@ public static class AuthEndpoints
         return Results.Ok(MapToUserInfo(user));
     }
 
+    private static async Task<IResult> GetMyQuota(
+        ClaimsPrincipal principal,
+        ScribegateDbContext db,
+        TierService tierService,
+        IMembershipStore membershipStore,
+        CancellationToken ct)
+    {
+        var userId = GetUserId(principal);
+        if (userId is null) return Unauthorized();
+
+        var user = await db.Users.FindAsync([userId.Value], ct);
+        if (user is null) return Unauthorized();
+
+        var enforced = await tierService.IsEnforcedAsync(ct);
+        var limits = await tierService.GetLimitsForUserAsync(user, ct);
+
+        var repoCount = await membershipStore.CountRepositoriesOwnedByUserAsync(userId.Value, ct);
+        var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId.Value, ct);
+
+        return Results.Ok(new
+        {
+            tier = user.Tier,
+            enforced,
+            limits = new
+            {
+                maxRepositories = limits.MaxRepositories,
+                maxDocumentsPerRepo = limits.MaxDocumentsPerRepo,
+                maxStorageMb = limits.MaxStorageMb,
+                maxApiTokens = limits.MaxApiTokens,
+                maxMembersPerRepo = limits.MaxMembersPerRepo,
+            },
+            usage = new
+            {
+                repositories = repoCount,
+                apiTokens = tokenCount,
+            },
+        });
+    }
+
     private static readonly HashSet<string> ValidThemes = ["light", "dark", "system"];
 
     private static async Task<IResult> UpdatePreferences(
@@ -281,6 +325,7 @@ public static class AuthEndpoints
         ClaimsPrincipal principal,
         ScribegateDbContext db,
         AuditService audit,
+        TierService tierService,
         CancellationToken ct)
     {
         var userId = GetUserId(principal);
@@ -295,6 +340,27 @@ public static class AuthEndpoints
         if (request.Name.Trim().Length > 200)
             return ApiResults.ValidationError("name", ApiErrorCodes.TooLong,
                 "Token name must be 200 characters or less.");
+
+        // Quota check: max API tokens
+        var user = await db.Users.FindAsync([userId.Value], ct);
+        if (user is not null)
+        {
+            var limits = await tierService.GetLimitsForUserAsync(user, ct);
+            if (!limits.IsUnlimited(limits.MaxApiTokens))
+            {
+                var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId.Value, ct);
+                if (tokenCount >= limits.MaxApiTokens)
+                    return Results.Json(new
+                    {
+                        error = new ApiError
+                        {
+                            Code = ApiErrorCodes.QuotaExceeded,
+                            Message = $"You have reached the maximum of {limits.MaxApiTokens} API tokens for your plan.",
+                            Details = $"Your {user.Tier} plan allows up to {limits.MaxApiTokens} API tokens. Revoke an existing token or upgrade your plan.",
+                        }
+                    }, statusCode: 403);
+            }
+        }
 
         var rawToken = ApiTokenAuthHandler.GenerateToken();
         var tokenHash = ApiTokenAuthHandler.HashToken(rawToken);
@@ -408,6 +474,7 @@ public static class AuthEndpoints
         Username = user.Username,
         Email = user.Email,
         IsAdmin = user.IsAdmin,
+        Tier = user.Tier,
         ThemePreference = user.ThemePreference,
         CreatedAt = user.CreatedAt,
     };

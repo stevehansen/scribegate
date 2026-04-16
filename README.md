@@ -192,7 +192,7 @@ The editorial workflow entity, analogous to a pull request but scoped to a singl
 
 ### Review
 
-A reviewer's verdict on a proposal: **Approve**, **Request Changes**, or **Comment**. One approval merges the proposal into a new revision.
+A reviewer's verdict on a proposal: **Approve**, **Request Changes**, or **Comment**. Repositories have configurable approval thresholds (default: 1, max: 10). When the required number of distinct approvals is reached, the proposal auto-merges into a new revision.
 
 ### Comment
 
@@ -333,15 +333,19 @@ All interactions go through a versioned REST API at `/api/v1/`. Every endpoint i
 
 | Group | Endpoints | Auth Required |
 |---|---|---|
-| **Auth** | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PUT /auth/preferences`, CRUD `/auth/tokens` | Varies |
+| **Auth** | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `GET /auth/me/quota`, `PUT /auth/preferences`, CRUD `/auth/tokens` | Varies |
+| **SSO/OIDC** | `GET /auth/oidc/config`, `GET /auth/oidc/login`, `GET /auth/oidc/callback` | No |
 | **Repositories** | `GET/POST /repositories`, `GET/PUT/DELETE /repositories/{slug}` | Yes (except public reads) |
-| **Documents** | `GET/POST /repositories/{slug}/documents`, `GET/PUT/DELETE /repositories/{slug}/documents/{path}` | Yes (except public reads) |
-| **Revisions** | `GET /repositories/{slug}/revisions/{path}`, `GET /repositories/{slug}/revisions/{docId}/{revId}` | Yes |
+| **Documents** | `GET/POST /repositories/{slug}/documents`, `GET/PUT/DELETE .../{path}`, `POST .../move/{path}` | Yes (except public reads) |
+| **Revisions** | `GET /repositories/{slug}/revisions/{path}`, `GET .../{docId}/{revId}` | Yes |
 | **Proposals** | CRUD `/repositories/{slug}/proposals`, plus `/submit`, `/approve`, `/reject`, `/withdraw` actions | Yes |
 | **Reviews** | `GET/POST /repositories/{slug}/proposals/{id}/reviews` | Yes |
 | **Comments** | CRUD `/repositories/{slug}/proposals/{id}/comments` | Yes |
 | **Members** | CRUD `/repositories/{slug}/members` | Admin |
-| **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit` | Admin |
+| **Media** | `POST/GET /repositories/{slug}/media`, `GET/DELETE .../{id}`, `GET .../{id}/download` | Yes |
+| **Search** | `GET /search?q=...&repo=...` | No |
+| **Notifications** | `GET /notifications`, `POST .../{id}/read`, `POST .../read-all`, `GET/PUT .../preferences` | Yes |
+| **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit`, `PUT /admin/users/{id}/tier` | Admin |
 | **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |
 | **Health** | `GET /healthz` | No |
 
@@ -458,6 +462,104 @@ curl -X PUT http://localhost:8080/api/v1/admin/settings/RegistrationEnabled \
 curl "http://localhost:8080/api/v1/admin/audit?limit=20" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
+
+## Tiers & Quotas
+
+Scribegate has a configurable tier system that adapts to your deployment:
+
+| Mode | `instance.tier_mode` | Behavior |
+|---|---|---|
+| **Self-hosted** (default) | `none` | All users get unlimited access. No quota enforcement. |
+| **Managed hosting** | `enforced` | Free and paid tiers with configurable limits. |
+| **Demo** | `enforced` + low limits | Strict free-tier-only for evaluation. |
+
+Free tier defaults (when enforced): 3 repositories, 20 documents per repo, 50MB storage, 2 API tokens, 3 members per repo. All limits are configurable via admin settings — you can always increase them later.
+
+Admins always get unlimited access regardless of tier mode.
+
+```bash
+# Check your current quota
+curl http://localhost:8080/api/v1/auth/me/quota \
+  -H "Authorization: Bearer $TOKEN"
+
+# Set a user to paid tier (admin only)
+curl -X PUT http://localhost:8080/api/v1/admin/users/{userId}/tier \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tier": "paid"}'
+```
+
+## SSO/OIDC
+
+SSO is available to **all tiers** — no enterprise paywall. Configure any OpenID Connect provider (Google, Azure AD, Okta, Keycloak, etc.) via admin settings.
+
+```bash
+# Enable OIDC via admin settings
+curl -X PUT http://localhost:8080/api/v1/admin/settings/oidc.enabled \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"value": "true"}'
+
+# Set the OIDC provider
+curl -X PUT http://localhost:8080/api/v1/admin/settings/oidc.authority \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"value": "https://accounts.google.com"}'
+```
+
+When a user logs in via OIDC for the first time, an account is auto-provisioned (configurable). Existing accounts are linked by email.
+
+## Search
+
+Full-text search across all documents, powered by SQLite FTS5:
+
+```bash
+# Search across all repositories
+curl "http://localhost:8080/api/v1/search?q=vacation+policy"
+
+# Search within a specific repository
+curl "http://localhost:8080/api/v1/search?q=vacation&repo=company-handbook"
+```
+
+Results include highlighted snippets showing matching text in context.
+
+## Notifications
+
+In-app notifications with optional email delivery. Users control what they receive:
+
+```bash
+# List unread notifications
+curl "http://localhost:8080/api/v1/notifications?unreadOnly=true" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Update notification preferences
+curl -X PUT http://localhost:8080/api/v1/notifications/preferences \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"emailOnProposalActivity": true, "emailOnReview": true, "emailOnComment": false}'
+```
+
+Email notifications require SMTP configuration (admin settings: `smtp.host`, `smtp.port`, `smtp.username`, etc.).
+
+## Media Uploads
+
+Upload images and files to repositories for use in markdown documents:
+
+```bash
+# Upload an image
+curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/media \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@diagram.png"
+
+# Response includes the download URL
+{
+  "id": "...",
+  "fileName": "diagram.png",
+  "url": "/api/v1/repositories/company-handbook/media/{id}/download"
+}
+```
+
+Reference uploaded media in your markdown: `![Diagram](/api/v1/repositories/company-handbook/media/{id}/download)`
+
+Supported types: JPEG, PNG, GIF, WebP, SVG, PDF. Max file size: 10MB. Storage quota enforced per user tier.
 
 ## Content Reporting
 

@@ -11,6 +11,7 @@ public class User
     public DateTime? TosAcceptedAt { get; set; }
     public string? ExternalProvider { get; set; }
     public string? ExternalId { get; set; }
+    public string Tier { get; set; } = "free"; // "free" or "paid"
     public string ThemePreference { get; set; } = "system"; // "light", "dark", or "system"
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

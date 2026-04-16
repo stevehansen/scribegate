@@ -18,6 +18,7 @@ public static class AdminEndpoints
         group.MapGet("/settings", ListSettings);
         group.MapPut("/settings/{key}", UpdateSetting);
         group.MapGet("/settings/registration", GetRegistrationStatus).AllowAnonymous();
+        group.MapPut("/users/{userId:guid}/tier", SetUserTier);
 
         return group;
     }
@@ -79,6 +80,41 @@ public static class AdminEndpoints
             Value = request.Value.Trim(),
             UpdatedAt = DateTime.UtcNow,
         });
+    }
+
+    private static readonly HashSet<string> ValidTiers = ["free", "paid"];
+
+    private static async Task<IResult> SetUserTier(
+        Guid userId,
+        SetUserTierRequest request,
+        ClaimsPrincipal principal,
+        ScribegateDbContext db,
+        AuditService audit,
+        CancellationToken ct)
+    {
+        if (!await IsAdmin(principal, db, ct))
+            return Forbidden();
+
+        if (string.IsNullOrWhiteSpace(request.Tier) || !ValidTiers.Contains(request.Tier))
+            return ApiResults.ValidationError("tier", ApiErrorCodes.InvalidFormat,
+                $"Invalid tier '{request.Tier}'.",
+                "Allowed values: free, paid.");
+
+        var user = await db.Users.FindAsync([userId], ct);
+        if (user is null)
+            return ApiResults.NotFound("User", userId.ToString());
+
+        var oldTier = user.Tier;
+        user.Tier = request.Tier;
+        await db.SaveChangesAsync(ct);
+
+        var adminId = GetUserId(principal);
+        await audit.LogAsync(
+            AuditEventTypes.SettingChanged, adminId, principal.FindFirstValue("username"),
+            "User", userId,
+            new { field = "tier", oldValue = oldTier, newValue = request.Tier }, ct);
+
+        return Results.Ok(new { userId, tier = user.Tier });
     }
 
     private static async Task<bool> IsAdmin(ClaimsPrincipal principal, ScribegateDbContext db, CancellationToken ct)

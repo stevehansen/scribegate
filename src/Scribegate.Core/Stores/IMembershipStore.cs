@@ -11,4 +11,6 @@ public interface IMembershipStore
     Task<RepositoryMembership> CreateAsync(RepositoryMembership membership, CancellationToken ct = default);
     Task UpdateAsync(RepositoryMembership membership, CancellationToken ct = default);
     Task DeleteAsync(Guid userId, Guid repositoryId, CancellationToken ct = default);
+    Task<int> CountRepositoriesOwnedByUserAsync(Guid userId, CancellationToken ct = default);
+    Task<int> CountMembersByRepositoryAsync(Guid repositoryId, CancellationToken ct = default);
 }

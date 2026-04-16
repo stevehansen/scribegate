@@ -64,6 +64,7 @@ public static class RepositoryEndpoints
         ScribegateDbContext db,
         ISystemSettingStore settings,
         AuditService audit,
+        TierService tierService,
         CancellationToken ct)
     {
         var errors = ValidateCreateRequest(request);
@@ -96,11 +97,11 @@ public static class RepositoryEndpoints
                 "Allowed values: Public, Private.");
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var user = await db.Users.FindAsync([userId], ct);
 
         // Account age gate: new accounts cannot create public repositories
         if (visibility == Visibility.Public)
         {
-            var user = await db.Users.FindAsync([userId], ct);
             if (user is not null && !user.IsAdmin)
             {
                 var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
@@ -123,6 +124,26 @@ public static class RepositoryEndpoints
                         }, statusCode: 403);
                     }
                 }
+            }
+        }
+
+        // Quota check: max repositories
+        if (user is not null)
+        {
+            var limits = await tierService.GetLimitsForUserAsync(user, ct);
+            if (!limits.IsUnlimited(limits.MaxRepositories))
+            {
+                var ownedRepos = await membershipStore.CountRepositoriesOwnedByUserAsync(userId, ct);
+                if (ownedRepos >= limits.MaxRepositories)
+                    return Results.Json(new
+                    {
+                        error = new ApiError
+                        {
+                            Code = ApiErrorCodes.QuotaExceeded,
+                            Message = $"You have reached the maximum of {limits.MaxRepositories} repositories for your plan.",
+                            Details = $"Your {user.Tier} plan allows up to {limits.MaxRepositories} repositories. You currently own {ownedRepos}. Upgrade your plan or delete an existing repository.",
+                        }
+                    }, statusCode: 403);
             }
         }
 
@@ -229,6 +250,14 @@ public static class RepositoryEndpoints
             }
         }
 
+        if (request.RequiredApprovals.HasValue)
+        {
+            if (request.RequiredApprovals.Value < 1 || request.RequiredApprovals.Value > 10)
+                errors.Add(new ApiFieldError { Field = "requiredApprovals", Code = ApiErrorCodes.InvalidFormat, Message = "Required approvals must be between 1 and 10." });
+            else
+                repo.RequiredApprovals = request.RequiredApprovals.Value;
+        }
+
         if (errors.Count > 0)
             return ApiResults.ValidationError(errors);
 
@@ -238,7 +267,7 @@ public static class RepositoryEndpoints
         await audit.LogAsync(
             AuditEventTypes.RepositoryUpdated, updateUserId, userContext.GetUsername(),
             "Repository", repo.Id,
-            new { name = repo.Name, slug = repo.Slug }, ct);
+            new { name = repo.Name, slug = repo.Slug, requiredApprovals = repo.RequiredApprovals }, ct);
 
         return Results.Ok(MapToResponse(repo));
     }
@@ -317,6 +346,7 @@ public static class RepositoryEndpoints
         Slug = repo.Slug,
         Description = repo.Description,
         Visibility = repo.Visibility.ToString(),
+        RequiredApprovals = repo.RequiredApprovals,
         CreatedAt = repo.CreatedAt,
     };
 }

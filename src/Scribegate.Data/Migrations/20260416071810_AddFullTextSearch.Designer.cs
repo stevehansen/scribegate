@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Scribegate.Data;
 
@@ -10,9 +11,11 @@ using Scribegate.Data;
 namespace Scribegate.Data.Migrations
 {
     [DbContext(typeof(ScribegateDbContext))]
-    partial class ScribegateDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260416071810_AddFullTextSearch")]
+    partial class AddFullTextSearch
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.6");
@@ -236,116 +239,6 @@ namespace Scribegate.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Documents");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.MediaAsset", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("RepositoryId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("SizeBytes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("StoragePath")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UploadedById")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RepositoryId");
-
-                    b.HasIndex("UploadedById");
-
-                    b.ToTable("MediaAssets");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.Notification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasMaxLength(5000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("EmailSent")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Link")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("UserId", "IsRead");
-
-                    b.ToTable("Notifications");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.NotificationPreference", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("EmailOnComment")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EmailOnMention")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EmailOnProposalActivity")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EmailOnReview")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("UserId");
-
-                    b.ToTable("NotificationPreferences");
                 });
 
             modelBuilder.Entity("Scribegate.Core.Entities.Proposal", b =>
@@ -726,47 +619,6 @@ namespace Scribegate.Data.Migrations
                     b.Navigation("CurrentRevision");
 
                     b.Navigation("Repository");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.MediaAsset", b =>
-                {
-                    b.HasOne("Scribegate.Core.Entities.Repository", "Repository")
-                        .WithMany()
-                        .HasForeignKey("RepositoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Scribegate.Core.Entities.User", "UploadedBy")
-                        .WithMany()
-                        .HasForeignKey("UploadedById")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Repository");
-
-                    b.Navigation("UploadedBy");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.Notification", b =>
-                {
-                    b.HasOne("Scribegate.Core.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Scribegate.Core.Entities.NotificationPreference", b =>
-                {
-                    b.HasOne("Scribegate.Core.Entities.User", "User")
-                        .WithOne()
-                        .HasForeignKey("Scribegate.Core.Entities.NotificationPreference", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Scribegate.Core.Entities.Proposal", b =>
