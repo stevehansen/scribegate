@@ -672,7 +672,9 @@ To work on this codebase: read `CLAUDE.md` for project-specific context, `CONTRI
 
 ## License
 
-MIT
+[FSL-1.1-MIT](LICENSE.md) — Functional Source License with MIT future license.
+
+Free to use, modify, and self-host. The only restriction is offering it as a competing hosted/managed service. Each version converts to MIT after 2 years.
 
 ## Links
 
