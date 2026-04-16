@@ -10,7 +10,7 @@ This guide walks you through setting up Scribegate, creating your first reposito
     docker run -d \
       -p 8080:8080 \
       -v scribegate-data:/data \
-      ghcr.io/scribegate/scribegate:latest
+      ghcr.io/stevehansen/scribegate:latest
     ```
 
 === "From Source"

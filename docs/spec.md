@@ -300,7 +300,7 @@ A RavenDB storage adapter is planned for self-hosted users who prefer it. It wou
 docker run -d \
   -p 8080:8080 \
   -v scribegate-data:/data \
-  scribegate/scribegate:latest
+  ghcr.io/stevehansen/scribegate:latest
 ```
 
 The container bundles:

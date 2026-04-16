@@ -21,7 +21,7 @@ docker run -d \
   -p 8080:8080 \
   -v scribegate-data:/data \
   --restart unless-stopped \
-  ghcr.io/scribegate/scribegate:latest
+  ghcr.io/stevehansen/scribegate:latest
 ```
 
 That's it. Open `http://localhost:8080`.
@@ -33,7 +33,7 @@ For more control, use a `docker-compose.yml`:
 ```yaml
 services:
   scribegate:
-    image: ghcr.io/scribegate/scribegate:latest
+    image: ghcr.io/stevehansen/scribegate:latest
     ports:
       - "8080:8080"
     volumes:
@@ -176,7 +176,7 @@ Same setup as F1, but with:
 curl -L https://fly.io/install.sh | sh
 
 # Launch
-fly launch --image ghcr.io/scribegate/scribegate:latest
+fly launch --image ghcr.io/stevehansen/scribegate:latest
 
 # Create a persistent volume
 fly volumes create scribegate_data --size 1

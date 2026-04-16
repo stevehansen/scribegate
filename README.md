@@ -26,7 +26,7 @@ Visit [scribegate.dev](https://scribegate.dev) and create an account. No setup, 
 docker run -d \
   -p 8080:8080 \
   -v scribegate-data:/data \
-  ghcr.io/scribegate/scribegate:latest
+  ghcr.io/stevehansen/scribegate:latest
 ```
 
 Open `http://localhost:8080` and you're running. Your data lives in the volume, survives container restarts, and is a single SQLite file you can back up with `cp`.
