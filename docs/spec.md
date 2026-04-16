@@ -26,6 +26,7 @@ Scribegate occupies the space between these: the editorial rigor of pull request
 2. **The repository is the truth.** There is one canonical version of every document. Proposals are ephemeral until approved.
 3. **Minimal surface area.** Ship the smallest useful thing. No CI/CD, no issue tracker, no wikis-about-wikis.
 4. **Self-hosted by default.** A single Docker container or dotnet publish, a volume for data, done.
+5. **Source-available under FSL-1.1-MIT.** Free to use, modify, and self-host. The only restriction is offering it as a competing managed service. Each version converts to MIT after 2 years.
 
 ---
 
@@ -35,7 +36,7 @@ Working backwards from the end goal — *a reader views an approved, published m
 
 ### 2.1 Repository
 
-The top-level container. An Scribegate instance can host multiple repositories (e.g., "Company Handbook", "API Docs", "Meeting Notes").
+The top-level container. A Scribegate instance can host multiple repositories (e.g., "Company Handbook", "API Docs", "Meeting Notes").
 
 | Property | Description |
 |---|---|
@@ -257,13 +258,13 @@ This is deliberately simple. No automatic merging, no conflict resolution algori
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| Backend framework | ASP.NET Core (via Vidyano) | Existing expertise; robust, performant, self-hostable |
+| Backend framework | ASP.NET Core | Mature, performant, self-hostable |
 | Database (primary) | SQLite via EF Core | Zero-config, file-based, free everywhere, trivial to host and backup |
 | Database (future) | RavenDB adapter | For teams already running RavenDB; same storage interfaces, different implementation |
 | Frontend | TypeScript + Lit components + SASS | Existing expertise; lightweight, no heavy framework overhead |
 | Markdown rendering | Server-side via Markdig (.NET) | Fast, extensible, CommonMark-compliant |
 | Diff engine | DiffPlex (.NET) | Mature .NET diff library, supports side-by-side and inline diffs |
-| Auth | ASP.NET Core Identity or Vidyano's built-in auth | Supports local accounts; extensible to OIDC/LDAP later |
+| Auth | Custom JWT + API tokens + OIDC | BCrypt password hashing, `sg_`-prefixed API tokens, OpenID Connect for SSO (all tiers) |
 
 ### 5.2 Storage Design
 
@@ -384,7 +385,6 @@ The differentiating feature: editorial workflow.
 - [x] Configurable tier/quota system (free/paid tiers, enforced or unlimited)
 - [x] Notification system with user preferences
 - [x] Expanded slug denylist (~100+ reserved words for future-proofing)
-- [ ] Export repository as a zip of markdown files
 
 ### Milestone 4 — "Ecosystem" (Future)
 
@@ -393,6 +393,8 @@ The differentiating feature: editorial workflow.
 - [ ] Git-compatible read-only access (clone the repo)
 - [ ] Static site generation from repository content
 - [ ] Markdown templates per repository
+- [ ] Export repository as a zip of markdown files (deferred from M3)
+- [ ] Share links for individual documents (time-limited, revocable, read-only URLs)
 
 ---
 

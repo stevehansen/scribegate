@@ -6,9 +6,10 @@ A simplified, self-hosted markdown collaboration platform with editorial review 
 
 - **Repo:** https://github.com/stevehansen/scribegate
 - **Domain:** scribegate.dev
-- **Stack:** ASP.NET Core (via Vidyano framework on top of ASP.NET Core), SQLite via EF Core, TypeScript + Lit components + SASS frontend
+- **Stack:** ASP.NET Core, SQLite via EF Core, TypeScript + Lit components + SASS frontend
 - **Database:** SQLite as primary (file-based, zero-config), with a storage abstraction layer so a RavenDB adapter can be added later
 - **Target:** Self-hostable via Docker or `dotnet publish`, with a future managed tier at scribegate.dev
+- **License:** FSL-1.1-MIT — free to use, modify, and self-host; restricts offering as a competing managed service; each version converts to MIT after 2 years
 
 ## Architecture Decisions
 
@@ -148,6 +149,7 @@ DELETE /api/v1/repositories/{slug}/documents/{path}          # Delete document
 POST   /api/v1/auth/register                                 # Register (returns JWT)
 POST   /api/v1/auth/login                                    # Login (returns JWT)
 GET    /api/v1/auth/me                                       # Current user info [auth]
+PUT    /api/v1/auth/preferences                              # Update user preferences (theme) [auth]
 POST   /api/v1/auth/tokens                                   # Create API token [auth]
 GET    /api/v1/auth/tokens                                   # List API tokens [auth]
 DELETE /api/v1/auth/tokens/{id}                              # Revoke API token [auth]

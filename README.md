@@ -225,7 +225,7 @@ curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/members 
 
 ## Authentication
 
-Scribegate uses dual-scheme authentication — pick whichever fits your use case:
+Scribegate supports three authentication schemes: JWT tokens for users, API tokens for services and agents, and optional SSO/OIDC. Pick whichever fits your use case:
 
 ### JWT Tokens (for users)
 
