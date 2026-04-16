@@ -9,8 +9,20 @@
     <ToolCommandName>sg</ToolCommandName>
     <PackageId>Scribegate.Cli</PackageId>
     <Version>0.1.2</Version>
-    <Description>CLI tool for the Scribegate markdown collaboration platform</Description>
+    <Authors>Steve Hansen</Authors>
+    <Description>Command-line tool (sg) for the Scribegate markdown collaboration platform — manage repositories, documents, proposals, and reviews from the terminal or from AI agents.</Description>
+    <PackageTags>scribegate;cli;markdown;collaboration;dotnet-tool</PackageTags>
+    <PackageProjectUrl>https://github.com/stevehansen/scribegate</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/stevehansen/scribegate</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
