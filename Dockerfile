@@ -23,8 +23,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 # Create non-root user
-RUN addgroup --system --gid 1001 scribegate && \
-    adduser --system --uid 1001 --ingroup scribegate scribegate
+RUN groupadd --system --gid 1001 scribegate && \
+    useradd --system --uid 1001 --gid scribegate scribegate
 
 # Create data directory
 RUN mkdir -p /data && chown scribegate:scribegate /data
