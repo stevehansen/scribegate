@@ -8,7 +8,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sg</ToolCommandName>
     <PackageId>Scribegate.Cli</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Description>CLI tool for the Scribegate markdown collaboration platform</Description>
   </PropertyGroup>
 
