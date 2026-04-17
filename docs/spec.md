@@ -406,6 +406,16 @@ GitHub-style addressing: every repository is owned by a user and reached at `{ow
 - [x] CLI accepts `owner/slug`; a bare slug still works for authenticated callers (falls back to their own username)
 - [x] Git clone served at `/{owner}/{slug}.git/...` with per-owner on-disk mirror directories
 
+### Milestone 6 — "Markdown Depth" (In Progress)
+
+Richer rendering so Scribegate handles real technical writing, not just prose.
+
+- [ ] Syntax highlighting for fenced code blocks (Markdig emits language class annotations server-side; client and static-site export pick up a single highlighter theme, light/dark aware)
+- [ ] Mermaid diagram rendering (client-side only; server leaves ```` ```mermaid ```` blocks intact; static-site export includes the Mermaid runtime)
+- [ ] Inline media previews in rendered markdown (images and video resolved from `MediaAsset` by relative path, no raw HTML permitted)
+- [ ] Soft-delete / archive for documents (resolves open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings)
+- [ ] Markdig + marked parity audit (ensure server-rendered site export and client preview match; regression tests covering tables, task lists, code, diagrams, media)
+
 ---
 
 ## 8. What Scribegate Is Not

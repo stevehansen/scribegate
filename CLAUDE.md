@@ -49,11 +49,18 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 5 — "Owner/Repo URLs" (In Progress)**
+**Milestone 6 — "Markdown Depth" (In Progress)**
 
-Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), and 4 (Ecosystem) are complete.
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), and 5 (Owner/Repo URLs) are complete.
 
-M5 progress:
+M6 progress:
+- [ ] Syntax highlighting for fenced code blocks (Markdig language class annotations server-side; single highlighter theme on client and static-site export, light/dark aware)
+- [ ] Mermaid diagram rendering (client-side only; server leaves ```` ```mermaid ```` blocks intact; static-site export bundles the runtime)
+- [ ] Inline media previews in rendered markdown (images/video resolved from `MediaAsset` by relative path, no raw HTML)
+- [ ] Soft-delete / archive for documents (resolves spec open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings and search)
+- [ ] Markdig + marked parity audit (regression tests covering tables, task lists, code, diagrams, media)
+
+M5 delivered:
 - [x] `OwnerId` FK on `Repository`, composite unique `(OwnerId, Slug)` — existing rows backfilled to the earliest admin user, migration aborts loudly if no admin exists
 - [x] API routes prefixed with `{owner}`: `/api/v1/repositories/{owner}/{slug}/...`
 - [x] SPA routes through `{owner}/{slug}` URLs
