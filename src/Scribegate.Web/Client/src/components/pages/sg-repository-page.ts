@@ -14,18 +14,23 @@ import '../shared/sg-breadcrumb.js';
 export class SgRepositoryPage extends LitElement {
   static styles = [boxReset, css`
     :host { display: block; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; }
-    .info h1 { font-size: var(--sg-font-size-2xl); margin-bottom: 0.25rem; color: var(--sg-text); }
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .info { min-width: 0; flex: 1 1 16rem; }
+    .info h1 { font-size: var(--sg-font-size-2xl); margin-bottom: 0.25rem; color: var(--sg-text); word-break: break-word; }
     .info p { font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); }
     .badge {
       font-size: var(--sg-font-size-xs); padding: 0.125rem 0.5rem; border-radius: 999px;
       background: var(--sg-bg-tertiary); color: var(--sg-text-secondary);
     }
-    .actions { display: flex; gap: 0.5rem; align-items: center; }
+    .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
     .btn {
       padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
       font-weight: 500; cursor: pointer; border: none; text-decoration: none;
       transition: background var(--sg-transition-fast);
+      white-space: nowrap;
     }
     .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); display: inline-block; }
     .btn-primary:hover { background: var(--sg-primary-hover); }

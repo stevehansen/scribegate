@@ -5,6 +5,12 @@ public sealed class SettingResponse
     public required string Key { get; init; }
     public required string Value { get; init; }
     public required DateTime UpdatedAt { get; init; }
+    public string? Group { get; init; }
+    public string? Label { get; init; }
+    public string? Type { get; init; }
+    public string? Description { get; init; }
+    public string[]? Choices { get; init; }
+    public bool Defined { get; init; }
 }
 
 public sealed class UpdateSettingRequest

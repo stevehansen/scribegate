@@ -8,6 +8,7 @@ RUN npm run build
 
 # Stage 2: Build .NET backend
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS backend
+ARG VERSION=0.0.0-dev
 WORKDIR /app
 COPY *.slnx ./
 COPY src/Scribegate.Core/*.csproj src/Scribegate.Core/
@@ -17,7 +18,8 @@ COPY src/Scribegate.Cli/*.csproj src/Scribegate.Cli/
 RUN dotnet restore
 COPY src/ src/
 COPY --from=frontend /app/client/dist/ src/Scribegate.Web/wwwroot/
-RUN dotnet publish src/Scribegate.Web -c Release -o /publish --no-restore -p:SkipClientBuild=true
+RUN dotnet publish src/Scribegate.Web -c Release -o /publish --no-restore \
+    -p:SkipClientBuild=true -p:Version=${VERSION}
 
 # Stage 3: Runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

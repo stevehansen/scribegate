@@ -11,37 +11,54 @@ export class SgAdminPage extends LitElement {
   static styles = [boxReset, css`
     :host { display: block; }
     h1 { font-size: var(--sg-font-size-2xl); margin-bottom: 1rem; color: var(--sg-text); }
-    h2 { font-size: var(--sg-font-size-lg); margin-top: 1.5rem; margin-bottom: 0.75rem; color: var(--sg-text); }
+    h2 {
+      font-size: var(--sg-font-size-lg);
+      margin-top: 2rem; margin-bottom: 0.75rem;
+      color: var(--sg-text);
+      padding-bottom: 0.375rem;
+      border-bottom: 1px solid var(--sg-border);
+    }
+    h2:first-of-type { margin-top: 1rem; }
     .settings { display: flex; flex-direction: column; gap: 0.5rem; }
     .setting {
       display: flex; justify-content: space-between; align-items: center;
+      gap: 1rem;
       padding: 0.75rem 1rem; border: 1px solid var(--sg-border); border-radius: var(--sg-radius-lg);
       background: var(--sg-bg-elevated);
     }
-    .setting-key { font-weight: 500; font-size: var(--sg-font-size-sm); color: var(--sg-text); }
-    .setting-meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); }
+    .setting-left { min-width: 0; flex: 1 1 20rem; }
+    .setting-label { font-weight: 500; font-size: var(--sg-font-size-sm); color: var(--sg-text); }
+    .setting-key {
+      font-family: var(--sg-font-mono, ui-monospace, SFMono-Regular, monospace);
+      font-size: 0.75rem; color: var(--sg-text-secondary); margin-left: 0.375rem;
+    }
+    .setting-desc { font-size: var(--sg-font-size-xs); color: var(--sg-text-secondary); margin-top: 0.125rem; }
+    .setting-status { font-size: 0.6875rem; color: var(--sg-text-secondary); margin-top: 0.25rem; }
+    .setting-status.default { color: var(--sg-text-secondary); opacity: 0.75; }
     .toggle {
       cursor: pointer; padding: 0.25rem 0.75rem; border-radius: var(--sg-radius);
       font-size: 0.8125rem; border: 1px solid var(--sg-border); background: var(--sg-bg-elevated);
       transition: background var(--sg-transition-fast), color var(--sg-transition-fast);
+      white-space: nowrap;
     }
     .toggle.on { background: var(--sg-success-light); color: var(--sg-success); border-color: var(--sg-success-border); }
     .toggle.off { background: var(--sg-danger-light); color: var(--sg-danger); border-color: var(--sg-danger-border); }
-    .value-edit { display: flex; align-items: center; gap: 0.5rem; }
+    .value-edit { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
     .value-edit input, .value-edit select {
       background: var(--sg-bg); color: var(--sg-text);
       border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
-      padding: 0.25rem 0.5rem; font-size: 0.8125rem; min-width: 10rem;
+      padding: 0.25rem 0.5rem; font-size: 0.8125rem; min-width: 12rem;
     }
     .value-edit input:focus, .value-edit select:focus { outline: none; border-color: var(--sg-primary); }
     .value-edit button {
       cursor: pointer; padding: 0.25rem 0.75rem; border-radius: var(--sg-radius);
       font-size: 0.8125rem; border: 1px solid var(--sg-border); background: var(--sg-bg-elevated);
-      color: var(--sg-text-secondary);
+      color: var(--sg-text-secondary); white-space: nowrap;
     }
     .value-edit button.primary { background: var(--sg-primary); color: var(--sg-on-primary, #fff); border-color: var(--sg-primary); }
     .value-edit button:hover { background: var(--sg-bg-secondary); }
     .value-edit button.primary:hover { opacity: 0.9; }
+    .value-edit button[disabled] { opacity: 0.4; cursor: not-allowed; }
     .setting-saved { color: var(--sg-success); font-size: 0.75rem; }
     .audit-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
     .audit-table th {
@@ -74,30 +91,16 @@ export class SgAdminPage extends LitElement {
   @state() private _smtpTestMessage = '';
   @state() private _smtpTestTo = '';
 
-  private static readonly ENUM_CHOICES: Record<string, string[]> = {
-    'instance.tier_mode': ['none', 'enforced'],
-    'instance.default_tier': ['free', 'paid'],
-  };
-
-  private static readonly SECRET_KEYS = new Set([
-    'oidc.client_secret',
-    'smtp.password',
-  ]);
-
-  private static readonly NUMERIC_KEYS = new Set([
-    'account.age_gate_hours',
-    'smtp.port',
-    'tier.free.max_repositories',
-    'tier.free.max_documents_per_repo',
-    'tier.free.max_storage_mb',
-    'tier.free.max_api_tokens',
-    'tier.free.max_members_per_repo',
-    'tier.paid.max_repositories',
-    'tier.paid.max_documents_per_repo',
-    'tier.paid.max_storage_mb',
-    'tier.paid.max_api_tokens',
-    'tier.paid.max_members_per_repo',
-  ]);
+  private static readonly GROUP_ORDER = [
+    'Instance',
+    'Registration',
+    'Accounts',
+    'SSO / OIDC',
+    'Email (SMTP)',
+    'Free tier limits',
+    'Paid tier limits',
+    'Other',
+  ];
 
   async connectedCallback() {
     super.connectedCallback();
@@ -145,8 +148,6 @@ export class SgAdminPage extends LitElement {
     return this._drafts[s.key] ?? s.value;
   }
 
-  private _isBoolean(v: string) { return v === 'true' || v === 'false'; }
-
   private async _sendSmtpTest() {
     this._smtpTestState = 'sending';
     this._smtpTestMessage = '';
@@ -181,12 +182,12 @@ export class SgAdminPage extends LitElement {
     const enabled = this._settings.find(s => s.key === 'smtp.enabled')?.value === 'true';
     if (!enabled) return '';
     return html`
-      <div class="setting" style="margin-bottom: 1rem;">
-        <div>
-          <div class="setting-key">SMTP test</div>
-          <div class="setting-meta">Sends a one-off message to verify delivery. Leave blank to use the admin address.</div>
+      <div class="setting">
+        <div class="setting-left">
+          <div class="setting-label">Send test email</div>
+          <div class="setting-desc">Dispatches a one-off message using the current SMTP settings. Leave blank to send to the admin account.</div>
           ${this._smtpTestMessage ? html`
-            <div class="setting-meta ${this._smtpTestState === 'error' ? 'error' : 'setting-saved'}">
+            <div class="setting-status ${this._smtpTestState === 'error' ? 'error' : 'setting-saved'}">
               ${this._smtpTestMessage}
             </div>` : ''}
         </div>
@@ -203,26 +204,47 @@ export class SgAdminPage extends LitElement {
   }
 
   private _renderSettings() {
+    const groups = new Map<string, SettingResponse[]>();
+    for (const s of this._settings) {
+      const g = s.group ?? 'Other';
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g)!.push(s);
+    }
+    const ordered = [
+      ...SgAdminPage.GROUP_ORDER.filter(g => groups.has(g)),
+      ...Array.from(groups.keys()).filter(g => !SgAdminPage.GROUP_ORDER.includes(g)),
+    ];
+
     return html`
       ${this._error ? html`<p class="error">${this._error}</p>` : ''}
-      ${this._renderSmtpTest()}
-      <div class="settings">
-        ${this._settings.map(s => html`
-          <div class="setting">
-            <div>
-              <div class="setting-key">${s.key}</div>
-              <div class="setting-meta">
-                ${SgAdminPage.SECRET_KEYS.has(s.key)
-                  ? html`Value: ${s.value ? '••••••••' : '(empty)'}`
-                  : html`Value: ${s.value || '(empty)'}`}
-              </div>
-            </div>
-            ${this._isBoolean(s.value) ? this._renderToggle(s) : this._renderEditor(s)}
+      ${ordered.map(g => html`
+        <h2>${g}</h2>
+        ${g === 'Email (SMTP)' ? this._renderSmtpTest() : ''}
+        <div class="settings">
+          ${(groups.get(g) ?? []).map(s => this._renderRow(s))}
+        </div>
+      `)}
+    `;
+  }
+
+  private _renderRow(s: SettingResponse) {
+    const type = s.type ?? (this._isBooleanLike(s.value) ? 'bool' : 'string');
+    return html`
+      <div class="setting">
+        <div class="setting-left">
+          <div class="setting-label">
+            ${s.label ?? s.key}
+            <span class="setting-key">${s.key}</span>
           </div>
-        `)}
+          ${s.description ? html`<div class="setting-desc">${s.description}</div>` : ''}
+          ${!s.defined ? html`<div class="setting-status default">Using default value</div>` : ''}
+        </div>
+        ${type === 'bool' ? this._renderToggle(s) : this._renderEditor(s, type)}
       </div>
     `;
   }
+
+  private _isBooleanLike(v: string) { return v === 'true' || v === 'false'; }
 
   private _renderToggle(s: SettingResponse) {
     return html`
@@ -235,19 +257,18 @@ export class SgAdminPage extends LitElement {
     `;
   }
 
-  private _renderEditor(s: SettingResponse) {
+  private _renderEditor(s: SettingResponse, type: string) {
     const draft = this._draftValue(s);
     const dirty = draft !== s.value;
-    const choices = SgAdminPage.ENUM_CHOICES[s.key];
-    const isSecret = SgAdminPage.SECRET_KEYS.has(s.key);
-    const isNumeric = SgAdminPage.NUMERIC_KEYS.has(s.key);
+    const choices = s.choices;
 
-    const input = choices
+    const input = choices && choices.length
       ? html`<select @change=${(e: Event) => this._onDraftInput(s.key, (e.target as HTMLSelectElement).value)}>
           ${choices.map(c => html`<option value=${c} ?selected=${draft === c}>${c}</option>`)}
         </select>`
       : html`<input
-          type=${isSecret ? 'password' : isNumeric ? 'number' : 'text'}
+          type=${type === 'secret' ? 'password' : type === 'number' ? 'number' : 'text'}
+          placeholder=${s.defined ? '' : (s.value || '')}
           .value=${draft}
           @input=${(e: Event) => this._onDraftInput(s.key, (e.target as HTMLInputElement).value)}
           @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' && dirty) this._saveSetting(s.key, draft); }}

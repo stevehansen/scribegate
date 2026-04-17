@@ -202,6 +202,12 @@ export interface SettingResponse {
   key: string;
   value: string;
   updatedAt: string;
+  group?: string;
+  label?: string;
+  type?: 'bool' | 'string' | 'number' | 'secret' | 'enum';
+  description?: string;
+  choices?: string[];
+  defined?: boolean;
 }
 
 export interface AuditEventResponse {

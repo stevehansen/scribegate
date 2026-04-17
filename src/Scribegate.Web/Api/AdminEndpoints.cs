@@ -98,14 +98,42 @@ public static class AdminEndpoints
         if (!await IsAdmin(principal, db, ct))
             return Forbidden();
 
-        var all = await settings.ListAsync(ct);
+        var stored = (await settings.ListAsync(ct)).ToDictionary(s => s.Key);
+        var result = new List<SettingResponse>(SettingDefinitions.All.Count + stored.Count);
 
-        return Results.Ok(all.Select(s => new SettingResponse
+        foreach (var def in SettingDefinitions.All)
         {
-            Key = s.Key,
-            Value = s.Value,
-            UpdatedAt = s.UpdatedAt,
-        }).ToList());
+            stored.TryGetValue(def.Key, out var row);
+            result.Add(new SettingResponse
+            {
+                Key = def.Key,
+                Value = row?.Value ?? def.Default,
+                UpdatedAt = row?.UpdatedAt ?? DateTime.MinValue,
+                Group = def.Group,
+                Label = def.Label,
+                Type = def.Type,
+                Description = def.Description,
+                Choices = def.Choices,
+                Defined = row is not null,
+            });
+        }
+
+        foreach (var (key, row) in stored)
+        {
+            if (SettingDefinitions.ByKey.ContainsKey(key)) continue;
+            result.Add(new SettingResponse
+            {
+                Key = key,
+                Value = row.Value,
+                UpdatedAt = row.UpdatedAt,
+                Group = "Other",
+                Label = key,
+                Type = row.Value is "true" or "false" ? "bool" : "string",
+                Defined = true,
+            });
+        }
+
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> UpdateSetting(
@@ -120,23 +148,31 @@ public static class AdminEndpoints
         if (!await IsAdmin(principal, db, ct))
             return Forbidden();
 
-        if (string.IsNullOrWhiteSpace(request.Value))
-            return ApiResults.ValidationError("value", ApiErrorCodes.Required, "Value is required.");
+        if (request.Value is null)
+            return ApiResults.ValidationError("value", ApiErrorCodes.Required, "Value is required (use an empty string to clear).");
 
+        var newValue = request.Value.Trim();
         var oldValue = await settings.GetAsync(key, ct);
-        await settings.SetAsync(key, request.Value.Trim(), ct);
+        await settings.SetAsync(key, newValue, ct);
 
         var userId = GetUserId(principal);
+        var isSecret = SettingDefinitions.ByKey.TryGetValue(key, out var def) && def.Type == "secret";
         await audit.LogAsync(
             AuditEventTypes.SettingChanged, userId, principal.FindFirstValue("username"),
             "SystemSetting", null,
-            new { key, oldValue, newValue = request.Value.Trim() }, ct);
+            new { key, oldValue = isSecret ? "***" : oldValue, newValue = isSecret ? "***" : newValue }, ct);
 
         return Results.Ok(new SettingResponse
         {
             Key = key,
-            Value = request.Value.Trim(),
+            Value = newValue,
             UpdatedAt = DateTime.UtcNow,
+            Group = def?.Group,
+            Label = def?.Label,
+            Type = def?.Type,
+            Description = def?.Description,
+            Choices = def?.Choices,
+            Defined = true,
         });
     }
 
