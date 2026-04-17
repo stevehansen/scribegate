@@ -55,7 +55,7 @@ Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ec
 
 M6 progress:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
-- [ ] Mermaid diagram rendering (client-side only; server leaves ```` ```mermaid ```` blocks intact; static-site export bundles the runtime)
+- [x] Mermaid diagram rendering — dynamic import in `sg-markdown-view`, theme tracks the app theme, failures render inline; static-site export keeps the block as code (deferred until there's demand, since the runtime would add ~3 MB per exported zip)
 - [ ] Inline media previews in rendered markdown (images/video resolved from `MediaAsset` by relative path, no raw HTML)
 - [ ] Soft-delete / archive for documents (resolves spec open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings and search)
 - [ ] Markdig + marked parity audit (regression tests covering tables, task lists, code, diagrams, media)

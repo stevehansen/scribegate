@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { boxReset } from '../../styles/shared.js';
 import { highlightAllUnder } from '../../lib/highlight.js';
+import { renderMermaidBlocks } from '../../lib/mermaid.js';
 
 // marked v15 has GFM enabled by default (tables, strikethrough, task lists, autolinks).
 // Configure sanitization for safe rendering.
@@ -97,6 +98,23 @@ export class SgMarkdownView extends LitElement {
     .token.inserted { color: var(--sg-success); }
     .token.italic { font-style: italic; }
     .token.bold { font-weight: 600; }
+    .sg-mermaid {
+      margin: 1em 0;
+      display: flex;
+      justify-content: center;
+      overflow-x: auto;
+    }
+    .sg-mermaid svg { max-width: 100%; height: auto; }
+    .sg-mermaid-error {
+      margin: 0.5em 0 1em;
+      padding: 0.5em 0.75em;
+      border: 1px solid var(--sg-danger-border);
+      background: var(--sg-danger-light);
+      color: var(--sg-danger);
+      border-radius: var(--sg-radius);
+      font-family: var(--sg-font-mono);
+      font-size: 0.875em;
+    }
     blockquote {
       border-left: 4px solid var(--sg-border);
       padding-left: 1rem;
@@ -123,9 +141,11 @@ export class SgMarkdownView extends LitElement {
     return html`${unsafeHTML(rendered)}`;
   }
 
-  updated() {
-    // Run Prism against the shadow root so <pre><code class="language-xxx">
-    // blocks get tokenised. Safe to call even when there are no code blocks.
+  async updated() {
+    // Render Mermaid diagrams first so the matching <pre> blocks are
+    // replaced before Prism scans for code; then highlight whatever remains.
+    // Both passes are safe no-ops when no matching blocks are present.
+    await renderMermaidBlocks(this.renderRoot);
     highlightAllUnder(this.renderRoot);
   }
 }
