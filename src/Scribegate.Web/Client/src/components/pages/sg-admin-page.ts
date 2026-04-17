@@ -27,6 +27,22 @@ export class SgAdminPage extends LitElement {
     }
     .toggle.on { background: var(--sg-success-light); color: var(--sg-success); border-color: var(--sg-success-border); }
     .toggle.off { background: var(--sg-danger-light); color: var(--sg-danger); border-color: var(--sg-danger-border); }
+    .value-edit { display: flex; align-items: center; gap: 0.5rem; }
+    .value-edit input, .value-edit select {
+      background: var(--sg-bg); color: var(--sg-text);
+      border: 1px solid var(--sg-border); border-radius: var(--sg-radius);
+      padding: 0.25rem 0.5rem; font-size: 0.8125rem; min-width: 10rem;
+    }
+    .value-edit input:focus, .value-edit select:focus { outline: none; border-color: var(--sg-primary); }
+    .value-edit button {
+      cursor: pointer; padding: 0.25rem 0.75rem; border-radius: var(--sg-radius);
+      font-size: 0.8125rem; border: 1px solid var(--sg-border); background: var(--sg-bg-elevated);
+      color: var(--sg-text-secondary);
+    }
+    .value-edit button.primary { background: var(--sg-primary); color: var(--sg-on-primary, #fff); border-color: var(--sg-primary); }
+    .value-edit button:hover { background: var(--sg-bg-secondary); }
+    .value-edit button.primary:hover { opacity: 0.9; }
+    .setting-saved { color: var(--sg-success); font-size: 0.75rem; }
     .audit-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
     .audit-table th {
       text-align: left; padding: 0.5rem; border-bottom: 2px solid var(--sg-border);
@@ -52,6 +68,33 @@ export class SgAdminPage extends LitElement {
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _tab = 'settings';
+  @state() private _drafts: Record<string, string> = {};
+  @state() private _savedKey: string | null = null;
+
+  private static readonly ENUM_CHOICES: Record<string, string[]> = {
+    'instance.tier_mode': ['none', 'enforced'],
+    'instance.default_tier': ['free', 'paid'],
+  };
+
+  private static readonly SECRET_KEYS = new Set([
+    'oidc.client_secret',
+    'smtp.password',
+  ]);
+
+  private static readonly NUMERIC_KEYS = new Set([
+    'account.age_gate_hours',
+    'smtp.port',
+    'tier.free.max_repositories',
+    'tier.free.max_documents_per_repo',
+    'tier.free.max_storage_mb',
+    'tier.free.max_api_tokens',
+    'tier.free.max_members_per_repo',
+    'tier.paid.max_repositories',
+    'tier.paid.max_documents_per_repo',
+    'tier.paid.max_storage_mb',
+    'tier.paid.max_api_tokens',
+    'tier.paid.max_members_per_repo',
+  ]);
 
   async connectedCallback() {
     super.connectedCallback();
@@ -73,12 +116,33 @@ export class SgAdminPage extends LitElement {
 
   private async _toggleSetting(key: string, current: string) {
     const newValue = current === 'true' ? 'false' : 'true';
+    await this._saveSetting(key, newValue);
+  }
+
+  private async _saveSetting(key: string, newValue: string) {
     try {
+      this._error = '';
       await adminApi.updateSetting(key, newValue);
       const settings = await adminApi.listSettings();
       this._settings = settings;
-    } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
+      const { [key]: _, ...rest } = this._drafts;
+      this._drafts = rest;
+      this._savedKey = key;
+      setTimeout(() => { if (this._savedKey === key) { this._savedKey = null; this.requestUpdate(); } }, 1500);
+    } catch (e) {
+      this._error = e instanceof ApiException ? e.error.message : 'Failed to save setting.';
+    }
   }
+
+  private _onDraftInput(key: string, value: string) {
+    this._drafts = { ...this._drafts, [key]: value };
+  }
+
+  private _draftValue(s: SettingResponse): string {
+    return this._drafts[s.key] ?? s.value;
+  }
+
+  private _isBoolean(v: string) { return v === 'true' || v === 'false'; }
 
   render() {
     if (this._loading) return html`<p>Loading...</p>`;
@@ -99,20 +163,59 @@ export class SgAdminPage extends LitElement {
 
   private _renderSettings() {
     return html`
+      ${this._error ? html`<p class="error">${this._error}</p>` : ''}
       <div class="settings">
         ${this._settings.map(s => html`
           <div class="setting">
             <div>
               <div class="setting-key">${s.key}</div>
-              <div class="setting-meta">Value: ${s.value}</div>
+              <div class="setting-meta">
+                ${SgAdminPage.SECRET_KEYS.has(s.key)
+                  ? html`Value: ${s.value ? '••••••••' : '(empty)'}`
+                  : html`Value: ${s.value || '(empty)'}`}
+              </div>
             </div>
-            ${s.value === 'true' || s.value === 'false' ? html`
-              <button class="toggle ${s.value === 'true' ? 'on' : 'off'}" @click=${() => this._toggleSetting(s.key, s.value)}>
-                ${s.value === 'true' ? 'Enabled' : 'Disabled'}
-              </button>
-            ` : html`<span class="badge">${s.value}</span>`}
+            ${this._isBoolean(s.value) ? this._renderToggle(s) : this._renderEditor(s)}
           </div>
         `)}
+      </div>
+    `;
+  }
+
+  private _renderToggle(s: SettingResponse) {
+    return html`
+      <div class="value-edit">
+        ${this._savedKey === s.key ? html`<span class="setting-saved">Saved</span>` : ''}
+        <button class="toggle ${s.value === 'true' ? 'on' : 'off'}" @click=${() => this._toggleSetting(s.key, s.value)}>
+          ${s.value === 'true' ? 'Enabled' : 'Disabled'}
+        </button>
+      </div>
+    `;
+  }
+
+  private _renderEditor(s: SettingResponse) {
+    const draft = this._draftValue(s);
+    const dirty = draft !== s.value;
+    const choices = SgAdminPage.ENUM_CHOICES[s.key];
+    const isSecret = SgAdminPage.SECRET_KEYS.has(s.key);
+    const isNumeric = SgAdminPage.NUMERIC_KEYS.has(s.key);
+
+    const input = choices
+      ? html`<select @change=${(e: Event) => this._onDraftInput(s.key, (e.target as HTMLSelectElement).value)}>
+          ${choices.map(c => html`<option value=${c} ?selected=${draft === c}>${c}</option>`)}
+        </select>`
+      : html`<input
+          type=${isSecret ? 'password' : isNumeric ? 'number' : 'text'}
+          .value=${draft}
+          @input=${(e: Event) => this._onDraftInput(s.key, (e.target as HTMLInputElement).value)}
+          @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter' && dirty) this._saveSetting(s.key, draft); }}
+        />`;
+
+    return html`
+      <div class="value-edit">
+        ${this._savedKey === s.key ? html`<span class="setting-saved">Saved</span>` : ''}
+        ${input}
+        <button class="primary" ?disabled=${!dirty} @click=${() => this._saveSetting(s.key, draft)}>Save</button>
       </div>
     `;
   }

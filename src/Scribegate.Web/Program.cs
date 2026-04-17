@@ -442,6 +442,7 @@ app.MapWebhookEndpoints();
 app.MapExportEndpoints();
 app.MapSiteEndpoints();
 app.MapTemplateEndpoints();
+app.MapInfoEndpoints();
 
 // Dumb-HTTP git clone endpoints. Must be registered so they're considered
 // before the SPA fallback middleware treats `.git` paths as client routes —

@@ -3,6 +3,7 @@ import { customElement } from 'lit/decorators.js';
 import { initRouter } from '../router.js';
 import { boxReset } from '../styles/shared.js';
 import './layout/sg-header.js';
+import './layout/sg-footer.js';
 
 @customElement('sg-app')
 export class SgApp extends LitElement {
@@ -30,6 +31,7 @@ export class SgApp extends LitElement {
     return html`
       <sg-header></sg-header>
       <main id="outlet"></main>
+      <sg-footer></sg-footer>
     `;
   }
 }
