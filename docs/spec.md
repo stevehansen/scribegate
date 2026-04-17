@@ -386,15 +386,25 @@ The differentiating feature: editorial workflow.
 - [x] Notification system with user preferences
 - [x] Expanded slug denylist (~100+ reserved words for future-proofing)
 
-### Milestone 4 — "Ecosystem" (In Progress)
+### Milestone 4 — "Ecosystem" ✓
 
 - [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures, on proposal/document/review/comment events)
 - [x] Export repository as a zip of markdown files (streaming, 1 GiB cap, manifest with skipped list)
 - [x] Share links for individual documents (time-limited, revocable, read-only URLs)
-- [ ] API for external integrations
+- [x] API for external integrations (REST API + OpenAPI-generated client libraries for TypeScript/JS, C#, Python; long-lived scoped API tokens; CLI tool `sg`)
 - [x] Git-compatible read-only access (clone the repo)
 - [x] Static site generation from repository content
 - [x] Markdown templates per repository
+
+### Milestone 5 — "Owner/Repo URLs" ✓
+
+GitHub-style addressing: every repository is owned by a user and reached at `{owner}/{slug}`.
+
+- [x] `OwnerId` FK on `Repository`, composite unique `(OwnerId, Slug)` index (existing rows backfilled to the earliest admin user; migration aborts loudly if no admin exists)
+- [x] API routes prefixed with `{owner}`: `/api/v1/repositories/{owner}/{slug}/...`
+- [x] SPA routes through `{owner}/{slug}` URLs
+- [x] CLI accepts `owner/slug`; a bare slug still works for authenticated callers (falls back to their own username)
+- [x] Git clone served at `/{owner}/{slug}.git/...` with per-owner on-disk mirror directories
 
 ---
 
