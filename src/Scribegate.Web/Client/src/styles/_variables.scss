@@ -53,6 +53,16 @@
   --sg-code-bg: #f1f3f5;
   --sg-pre-bg: #f8f9fa;
 
+  // Syntax highlighting (Prism tokens) — GitHub-light palette
+  --sg-syn-comment: #6a737d;
+  --sg-syn-punct: #24292e;
+  --sg-syn-tag: #22863a;
+  --sg-syn-string: #032f62;
+  --sg-syn-keyword: #d73a49;
+  --sg-syn-number: #005cc5;
+  --sg-syn-function: #6f42c1;
+  --sg-syn-variable: #e36209;
+
   // Shadows
   --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
@@ -147,6 +157,16 @@
   --sg-code-bg: #161b22;
   --sg-pre-bg: #161b22;
 
+  // Syntax highlighting (Prism tokens) — GitHub-dark palette
+  --sg-syn-comment: #8b949e;
+  --sg-syn-punct: #c9d1d9;
+  --sg-syn-tag: #7ee787;
+  --sg-syn-string: #a5d6ff;
+  --sg-syn-keyword: #ff7b72;
+  --sg-syn-number: #79c0ff;
+  --sg-syn-function: #d2a8ff;
+  --sg-syn-variable: #ffa657;
+
   --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
   --sg-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
@@ -208,6 +228,16 @@
 
     --sg-code-bg: #161b22;
     --sg-pre-bg: #161b22;
+
+    // Syntax highlighting (Prism tokens) — GitHub-dark palette
+    --sg-syn-comment: #8b949e;
+    --sg-syn-punct: #c9d1d9;
+    --sg-syn-tag: #7ee787;
+    --sg-syn-string: #a5d6ff;
+    --sg-syn-keyword: #ff7b72;
+    --sg-syn-number: #79c0ff;
+    --sg-syn-function: #d2a8ff;
+    --sg-syn-variable: #ffa657;
 
     --sg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --sg-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);

@@ -17,6 +17,9 @@ data/
 # Frontend
 node_modules/
 src/Scribegate.Web/Client/dist/
+# Regenerated on every `npm run build` (prebuild hook). Not checked in —
+# site export falls back to unhighlighted code when absent.
+src/Scribegate.Web/Client/public/prism/
 wwwroot/
 
 # OS

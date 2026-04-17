@@ -4,6 +4,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { boxReset } from '../../styles/shared.js';
+import { highlightAllUnder } from '../../lib/highlight.js';
 
 // marked v15 has GFM enabled by default (tables, strikethrough, task lists, autolinks).
 // Configure sanitization for safe rendering.
@@ -83,6 +84,19 @@ export class SgMarkdownView extends LitElement {
       margin: 1em 0;
     }
     pre code { background: none; padding: 0; border-radius: 0; }
+    /* Prism token colours — consume CSS vars so the palette tracks the app theme */
+    .token.comment, .token.prolog, .token.cdata { color: var(--sg-syn-comment); font-style: italic; }
+    .token.punctuation { color: var(--sg-syn-punct); }
+    .token.tag, .token.selector, .token.attr-name, .token.builtin { color: var(--sg-syn-tag); }
+    .token.string, .token.char, .token.attr-value, .token.regex { color: var(--sg-syn-string); }
+    .token.keyword, .token.atrule, .token.important, .token.rule, .token.boolean, .token.operator { color: var(--sg-syn-keyword); }
+    .token.number, .token.hexcode, .token.unit { color: var(--sg-syn-number); }
+    .token.function, .token.class-name { color: var(--sg-syn-function); }
+    .token.variable, .token.symbol, .token.property, .token.constant, .token.entity { color: var(--sg-syn-variable); }
+    .token.deleted { color: var(--sg-danger); }
+    .token.inserted { color: var(--sg-success); }
+    .token.italic { font-style: italic; }
+    .token.bold { font-weight: 600; }
     blockquote {
       border-left: 4px solid var(--sg-border);
       padding-left: 1rem;
@@ -107,5 +121,11 @@ export class SgMarkdownView extends LitElement {
   render() {
     const rendered = renderMarkdown(this.content);
     return html`${unsafeHTML(rendered)}`;
+  }
+
+  updated() {
+    // Run Prism against the shadow root so <pre><code class="language-xxx">
+    // blocks get tokenised. Safe to call even when there are no code blocks.
+    highlightAllUnder(this.renderRoot);
   }
 }

@@ -74,6 +74,8 @@ public static class SiteEndpoints
         AuthorizationHelper authz,
         UserContext userContext,
         AuditService audit,
+        IWebHostEnvironment env,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -96,6 +98,8 @@ public static class SiteEndpoints
 
         var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
 
+        var prism = LoadPrismAssets(env, loggerFactory.CreateLogger("SiteEndpoints"));
+
         var fileName = $"{SanitizeFilename(repo.Slug)}-site.zip";
 
         return Results.Stream(async stream =>
@@ -110,6 +114,16 @@ public static class SiteEndpoints
             {
                 // 1. Static stylesheet first — cheap, fixed size, referenced by every page.
                 totalBytes += await WriteEntryAsync(zip, "assets/style.css", StyleSheet, ct);
+
+                // Prism bundle + theme so exported pages highlight code blocks.
+                // Optional: if the client build hasn't produced them yet (dev-only
+                // dotnet run with no npm build), fall back silently — pages still
+                // render, just without highlighting.
+                if (prism is not null)
+                {
+                    totalBytes += await WriteEntryAsync(zip, "assets/prism.js", prism.Value.Script, ct);
+                    totalBytes += await WriteEntryAsync(zip, "assets/prism.css", prism.Value.Theme, ct);
+                }
 
                 // 2. Each document becomes an HTML page.
                 foreach (var doc in docs)
@@ -139,7 +153,7 @@ public static class SiteEndpoints
                     var (metadata, body) = FrontmatterService.Parse(rev.Content);
                     var title = ExtractTitle(metadata) ?? DeriveTitleFromPath(doc.Path);
                     var renderedBody = RenderMarkdown(body);
-                    var page = RenderPage(title, repo.Name, renderedBody, entryPath);
+                    var page = RenderPage(title, repo.Name, renderedBody, entryPath, prism is not null);
                     var bytes = Encoding.UTF8.GetBytes(page);
 
                     if (totalBytes + bytes.LongLength > MaxSiteBytes)
@@ -155,7 +169,7 @@ public static class SiteEndpoints
                 }
 
                 // 3. Navigation page.
-                var indexHtml = RenderIndex(repo.Name, navEntries);
+                var indexHtml = RenderIndex(repo.Name, navEntries, prism is not null);
                 totalBytes += await WriteEntryAsync(zip, "index.html", indexHtml, ct);
 
                 // 4. Manifest last — accurate totals.
@@ -194,6 +208,32 @@ public static class SiteEndpoints
                     sizeCapReached = overflow,
                 }, ct);
         }, "application/zip", fileName);
+    }
+
+    // Reads the Prism bundle + theme produced by Client/scripts/build-prism-bundle.mjs
+    // from wwwroot. Returns null if either file is missing (e.g. dev-only `dotnet run`
+    // without an `npm run build`), in which case the export just skips highlighting
+    // assets rather than failing.
+    private static (byte[] Script, byte[] Theme)? LoadPrismAssets(IWebHostEnvironment env, ILogger log)
+    {
+        try
+        {
+            var root = env.WebRootPath;
+            if (string.IsNullOrEmpty(root)) return null;
+            var scriptPath = Path.Combine(root, "prism", "prism.bundle.js");
+            var themePath = Path.Combine(root, "prism", "prism.theme.css");
+            if (!File.Exists(scriptPath) || !File.Exists(themePath))
+            {
+                log.LogInformation("Prism bundle not found in wwwroot/prism/; site export will skip syntax highlighting.");
+                return null;
+            }
+            return (File.ReadAllBytes(scriptPath), File.ReadAllBytes(themePath));
+        }
+        catch (IOException ex)
+        {
+            log.LogWarning(ex, "Failed to read Prism assets; site export will skip syntax highlighting.");
+            return null;
+        }
     }
 
     // Render markdown to HTML, then walk the AST and neutralise any link with
@@ -290,7 +330,7 @@ public static class SiteEndpoints
         return depth == 0 ? string.Empty : string.Concat(Enumerable.Repeat("../", depth));
     }
 
-    private static string RenderPage(string title, string repoName, string renderedBody, string entryPath)
+    private static string RenderPage(string title, string repoName, string renderedBody, string entryPath, bool includePrism)
     {
         var encodedTitle = WebUtility.HtmlEncode(title);
         var encodedRepoName = WebUtility.HtmlEncode(repoName);
@@ -306,11 +346,15 @@ public static class SiteEndpoints
         sb.Append("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("  <title>").Append(encodedTitle).Append(" &mdash; ").Append(encodedRepoName).Append("</title>\n");
         sb.Append("  <link rel=\"stylesheet\" href=\"").Append(relative).Append("assets/style.css\">\n");
+        if (includePrism)
+            sb.Append("  <link rel=\"stylesheet\" href=\"").Append(relative).Append("assets/prism.css\">\n");
         sb.Append("</head>\n");
         sb.Append("<body>\n");
         sb.Append("  <header><a class=\"home\" href=\"").Append(relative).Append("index.html\">").Append(encodedRepoName).Append("</a></header>\n");
         sb.Append("  <main>\n").Append(renderedBody).Append("\n  </main>\n");
         sb.Append("  <footer>Generated by Scribegate</footer>\n");
+        if (includePrism)
+            sb.Append("  <script src=\"").Append(relative).Append("assets/prism.js\"></script>\n");
         sb.Append("</body>\n");
         sb.Append("</html>\n");
         return sb.ToString();
@@ -319,7 +363,7 @@ public static class SiteEndpoints
     // Flat list of documents, sorted by HTML entry path. Each link is a relative
     // URL from the site root. Users who want folder grouping can read the path
     // prefix visually — simple is better than a half-correct tree.
-    private static string RenderIndex(string repoName, List<(string HtmlPath, string Title)> entries)
+    private static string RenderIndex(string repoName, List<(string HtmlPath, string Title)> entries, bool includePrism)
     {
         var encodedRepoName = WebUtility.HtmlEncode(repoName);
 
@@ -331,6 +375,8 @@ public static class SiteEndpoints
         sb.Append("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         sb.Append("  <title>").Append(encodedRepoName).Append("</title>\n");
         sb.Append("  <link rel=\"stylesheet\" href=\"assets/style.css\">\n");
+        if (includePrism)
+            sb.Append("  <link rel=\"stylesheet\" href=\"assets/prism.css\">\n");
         sb.Append("</head>\n");
         sb.Append("<body>\n");
         sb.Append("  <header><a class=\"home\" href=\"index.html\">").Append(encodedRepoName).Append("</a></header>\n");
