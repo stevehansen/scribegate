@@ -7,7 +7,7 @@ public static class RevisionEndpoints
 {
     public static RouteGroupBuilder MapRevisionEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/documents/{*path}")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/documents/{*path}")
             .WithTags("Revisions");
 
         // These routes need the /revisions suffix to distinguish from document CRUD.
@@ -18,14 +18,15 @@ public static class RevisionEndpoints
 
     public static void MapRevisionRoutes(this IEndpointRouteBuilder routes)
     {
-        routes.MapGet("/api/v1/repositories/{repoSlug}/revisions/{*path}", ListRevisions)
+        routes.MapGet("/api/v1/repositories/{owner}/{repoSlug}/revisions/{*path}", ListRevisions)
             .WithTags("Revisions").AllowAnonymous();
 
-        routes.MapGet("/api/v1/repositories/{repoSlug}/revisions/{documentId:guid}/{revisionId:guid}", GetRevision)
+        routes.MapGet("/api/v1/repositories/{owner}/{repoSlug}/revisions/{documentId:guid}/{revisionId:guid}", GetRevision)
             .WithTags("Revisions").AllowAnonymous();
     }
 
     private static async Task<IResult> ListRevisions(
+        string owner,
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
@@ -33,7 +34,7 @@ public static class RevisionEndpoints
         IRevisionStore revisionStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -60,6 +61,7 @@ public static class RevisionEndpoints
     }
 
     private static async Task<IResult> GetRevision(
+        string owner,
         string repoSlug,
         Guid documentId,
         Guid revisionId,
@@ -67,7 +69,7 @@ public static class RevisionEndpoints
         IRevisionStore revisionStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 

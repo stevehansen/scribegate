@@ -11,7 +11,7 @@ public static class ProposalEndpoints
 {
     public static void MapProposalEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/proposals")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/proposals")
             .WithTags("Proposals");
 
         group.MapGet("/", ListProposals).AllowAnonymous();
@@ -25,6 +25,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> ListProposals(
+        string owner,
         string repoSlug,
         string? status,
         int skip = 0,
@@ -33,7 +34,7 @@ public static class ProposalEndpoints
         IProposalStore proposalStore = default!,
         CancellationToken ct = default)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         ProposalStatus? statusFilter = null;
@@ -60,6 +61,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> GetProposal(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -69,7 +71,7 @@ public static class ProposalEndpoints
         ICommentStore commentStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -118,6 +120,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> CreateProposal(
+        string owner,
         string repoSlug,
         CreateProposalRequest request,
         IRepositoryStore repoStore,
@@ -129,7 +132,7 @@ public static class ProposalEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var errors = new List<ApiFieldError>();
@@ -192,7 +195,7 @@ public static class ProposalEndpoints
             repo.Id, userId, NotificationTypes.ProposalCreated,
             $"New proposal: {proposal.Title}",
             $"{userContext.GetUsername()} created a new proposal in {repo.Name}.",
-            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
+            $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", ct);
 
         webhooks.Dispatch(WebhookEventTypes.ProposalCreated, repo.Id, new
         {
@@ -202,7 +205,7 @@ public static class ProposalEndpoints
             timestamp = DateTime.UtcNow,
         });
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", new ProposalSummary
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", new ProposalSummary
         {
             Id = proposal.Id,
             Title = proposal.Title,
@@ -214,6 +217,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> UpdateProposal(
+        string owner,
         string repoSlug,
         Guid id,
         UpdateProposalRequest request,
@@ -222,7 +226,7 @@ public static class ProposalEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -254,6 +258,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> SubmitProposal(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
@@ -262,7 +267,7 @@ public static class ProposalEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -291,6 +296,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> WithdrawProposal(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
@@ -299,7 +305,7 @@ public static class ProposalEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -333,6 +339,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> ApproveProposal(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
@@ -348,7 +355,7 @@ public static class ProposalEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -464,7 +471,7 @@ public static class ProposalEndpoints
             proposal.CreatedById, NotificationTypes.ProposalApproved,
             $"Proposal approved: {proposal.Title}",
             $"Your proposal has been approved and merged by {userContext.GetUsername()}.",
-            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
+            $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", ct);
 
         webhooks.Dispatch(WebhookEventTypes.ProposalApproved, repo.Id, new
         {
@@ -480,6 +487,7 @@ public static class ProposalEndpoints
     }
 
     private static async Task<IResult> RejectProposal(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
@@ -491,7 +499,7 @@ public static class ProposalEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -520,7 +528,7 @@ public static class ProposalEndpoints
             proposal.CreatedById, NotificationTypes.ProposalRejected,
             $"Proposal rejected: {proposal.Title}",
             $"Your proposal was rejected by {userContext.GetUsername()}.",
-            $"/api/v1/repositories/{repoSlug}/proposals/{proposal.Id}", ct);
+            $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", ct);
 
         webhooks.Dispatch(WebhookEventTypes.ProposalRejected, repo.Id, new
         {

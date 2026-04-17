@@ -14,10 +14,10 @@ public static class RepositoryEndpoints
             .WithTags("Repositories");
 
         group.MapGet("/", ListRepositories).AllowAnonymous();
-        group.MapGet("/{slug}", GetRepository).AllowAnonymous();
+        group.MapGet("/{owner}/{slug}", GetRepository).AllowAnonymous();
         group.MapPost("/", CreateRepository).RequireAuthorization().RequireRateLimiting("content-create");
-        group.MapPut("/{slug}", UpdateRepository).RequireAuthorization();
-        group.MapDelete("/{slug}", DeleteRepository).RequireAuthorization();
+        group.MapPut("/{owner}/{slug}", UpdateRepository).RequireAuthorization();
+        group.MapDelete("/{owner}/{slug}", DeleteRepository).RequireAuthorization();
 
         return group;
     }
@@ -41,18 +41,19 @@ public static class RepositoryEndpoints
     }
 
     private static async Task<IResult> GetRepository(
+        string owner,
         string slug,
         IRepositoryStore store,
         IDocumentStore documentStore,
         CancellationToken ct)
     {
-        var repo = await store.GetBySlugAsync(slug, ct);
+        var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
 
         var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
 
-        var response = MapToResponse(repo);
+        var response = MapToResponse(repo, owner);
         return Results.Ok(response with { DocumentCount = docs.Count });
     }
 
@@ -83,14 +84,6 @@ public static class RepositoryEndpoints
                 $"The slug '{slug}' is reserved and cannot be used.",
                 "Choose a different slug. Reserved words include: api, auth, admin, settings, login, register.");
 
-        var existing = await store.GetBySlugAsync(slug, ct);
-        if (existing is not null)
-            return ApiResults.Conflict(
-                ApiErrorCodes.SlugAlreadyExists,
-                $"A repository with slug '{slug}' already exists.",
-                "Repository slugs must be unique. Try a different slug, or use GET /api/v1/repositories to find the existing one.",
-                "slug");
-
         if (!TryParseVisibility(request.Visibility, out var visibility))
             return ApiResults.ValidationError("visibility", ApiErrorCodes.InvalidFormat,
                 $"Invalid visibility value '{request.Visibility}'.",
@@ -98,6 +91,14 @@ public static class RepositoryEndpoints
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
         var user = await db.Users.FindAsync([userId], ct);
+
+        var existing = await store.GetByOwnerAndSlugAsync(userId, slug, ct);
+        if (existing is not null)
+            return ApiResults.Conflict(
+                ApiErrorCodes.SlugAlreadyExists,
+                $"A repository with slug '{slug}' already exists.",
+                "Repository slugs must be unique within your account. Try a different slug, or use GET /api/v1/repositories to find the existing one.",
+                "slug");
 
         // Account age gate: new accounts cannot create public repositories
         if (visibility == Visibility.Public)
@@ -168,15 +169,18 @@ public static class RepositoryEndpoints
         };
         await membershipStore.CreateAsync(membership, ct);
 
+        var ownerUsername = user?.Username ?? userContext.GetUsername() ?? string.Empty;
+
         await audit.LogAsync(
             AuditEventTypes.RepositoryCreated, userId, userContext.GetUsername(),
             "Repository", repo.Id,
-            new { name = repo.Name, slug = repo.Slug, visibility = repo.Visibility.ToString() }, ct);
+            new { owner = ownerUsername, name = repo.Name, slug = repo.Slug, visibility = repo.Visibility.ToString() }, ct);
 
-        return Results.Created($"/api/v1/repositories/{repo.Slug}", MapToResponse(repo));
+        return Results.Created($"/api/v1/repositories/{ownerUsername}/{repo.Slug}", MapToResponse(repo, ownerUsername));
     }
 
     private static async Task<IResult> UpdateRepository(
+        string owner,
         string slug,
         UpdateRepositoryRequest request,
         IRepositoryStore store,
@@ -186,7 +190,7 @@ public static class RepositoryEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await store.GetBySlugAsync(slug, ct);
+        var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
 
@@ -268,19 +272,20 @@ public static class RepositoryEndpoints
         await audit.LogAsync(
             AuditEventTypes.RepositoryUpdated, updateUserId, userContext.GetUsername(),
             "Repository", repo.Id,
-            new { name = repo.Name, slug = repo.Slug, requiredApprovals = repo.RequiredApprovals }, ct);
+            new { owner, name = repo.Name, slug = repo.Slug, requiredApprovals = repo.RequiredApprovals }, ct);
 
-        return Results.Ok(MapToResponse(repo));
+        return Results.Ok(MapToResponse(repo, owner));
     }
 
     private static async Task<IResult> DeleteRepository(
+        string owner,
         string slug,
         IRepositoryStore store,
         UserContext userContext,
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await store.GetBySlugAsync(slug, ct);
+        var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
 
@@ -291,7 +296,7 @@ public static class RepositoryEndpoints
         await audit.LogAsync(
             AuditEventTypes.RepositoryDeleted, deleteUserId, userContext.GetUsername(),
             "Repository", repo.Id,
-            new { name = repo.Name, slug = repo.Slug }, ct);
+            new { owner, name = repo.Name, slug = repo.Slug }, ct);
 
         return Results.NoContent();
     }
@@ -340,11 +345,12 @@ public static class RepositoryEndpoints
         return Enum.TryParse(value, ignoreCase: true, out visibility);
     }
 
-    private static RepositoryResponse MapToResponse(Repository repo) => new()
+    internal static RepositoryResponse MapToResponse(Repository repo, string? ownerUsername = null) => new()
     {
         Id = repo.Id,
         Name = repo.Name,
         Slug = repo.Slug,
+        Owner = ownerUsername ?? repo.Owner?.Username ?? string.Empty,
         Description = repo.Description,
         Visibility = repo.Visibility.ToString(),
         RequiredApprovals = repo.RequiredApprovals,

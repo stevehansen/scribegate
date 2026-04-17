@@ -12,7 +12,7 @@ public static class WebhookEndpoints
 
     public static void MapWebhookEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/webhooks")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/webhooks")
             .WithTags("Webhooks");
 
         group.MapGet("/", ListWebhooks).RequireAuthorization();
@@ -25,6 +25,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> ListWebhooks(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IWebhookStore webhookStore,
@@ -32,7 +33,7 @@ public static class WebhookEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -46,6 +47,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> GetWebhook(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -54,13 +56,14 @@ public static class WebhookEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var scoped = await LoadScoped(repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
+        var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
 
         return Results.Ok(ToResponse(scoped.Hook!));
     }
 
     private static async Task<IResult> CreateWebhook(
+        string owner,
         string repoSlug,
         CreateWebhookRequest request,
         IRepositoryStore repoStore,
@@ -71,7 +74,7 @@ public static class WebhookEndpoints
         IConfiguration config,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -99,9 +102,9 @@ public static class WebhookEndpoints
         await webhookStore.CreateAsync(hook, ct);
 
         await audit.LogAsync(AuditEventTypes.WebhookCreated, userId, userContext.GetUsername(),
-            "Webhook", hook.Id, new { repo.Slug, hook.Url, hook.Enabled, events = request.Events }, ct);
+            "Webhook", hook.Id, new { owner, repo.Slug, hook.Url, hook.Enabled, events = request.Events }, ct);
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/webhooks/{hook.Id}", new WebhookCreatedResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/webhooks/{hook.Id}", new WebhookCreatedResponse
         {
             Id = hook.Id,
             Url = hook.Url,
@@ -114,6 +117,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> UpdateWebhook(
+        string owner,
         string repoSlug,
         Guid id,
         UpdateWebhookRequest request,
@@ -125,7 +129,7 @@ public static class WebhookEndpoints
         IConfiguration config,
         CancellationToken ct)
     {
-        var scoped = await LoadScoped(repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
+        var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
         var hook = scoped.Hook!;
 
@@ -182,6 +186,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> DeleteWebhook(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -191,7 +196,7 @@ public static class WebhookEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var scoped = await LoadScoped(repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
+        var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
         var hook = scoped.Hook!;
 
@@ -205,6 +210,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> ListDeliveries(
+        string owner,
         string repoSlug,
         Guid id,
         int take,
@@ -214,7 +220,7 @@ public static class WebhookEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var scoped = await LoadScoped(repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
+        var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
         var hook = scoped.Hook!;
 
@@ -235,6 +241,7 @@ public static class WebhookEndpoints
     }
 
     private static async Task<IResult> TestWebhook(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -245,7 +252,7 @@ public static class WebhookEndpoints
         IWebhookDispatcher dispatcher,
         CancellationToken ct)
     {
-        var scoped = await LoadScoped(repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
+        var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
         var repo = scoped.Repo!;
         var hook = scoped.Hook!;
@@ -273,11 +280,11 @@ public static class WebhookEndpoints
     private record ScopedWebhook(Core.Entities.Repository? Repo, Webhook? Hook, IResult? Err);
 
     private static async Task<ScopedWebhook> LoadScoped(
-        string repoSlug, Guid id,
+        string owner, string repoSlug, Guid id,
         IRepositoryStore repoStore, IWebhookStore webhookStore,
         AuthorizationHelper authz, UserContext userContext, CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return new(null, null, ApiResults.NotFound("Repository", repoSlug));
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);

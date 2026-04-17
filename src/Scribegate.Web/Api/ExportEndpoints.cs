@@ -15,13 +15,14 @@ public static class ExportEndpoints
 
     public static void MapExportEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/export")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/export")
             .WithTags("Export");
 
         group.MapGet("/", ExportZip).RequireAuthorization();
     }
 
     private static async Task<IResult> ExportZip(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
@@ -31,7 +32,7 @@ public static class ExportEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -128,6 +129,8 @@ public static class ExportEndpoints
                 "Repository", repo.Id,
                 new
                 {
+                    owner,
+                    slug = repo.Slug,
                     documentCount = exportedCount,
                     sizeBytes = totalBytes,
                     sizeCapReached = overflow,

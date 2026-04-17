@@ -10,7 +10,7 @@ public static class CommentEndpoints
 {
     public static void MapCommentEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/proposals/{proposalId:guid}/comments")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId:guid}/comments")
             .WithTags("Comments");
 
         group.MapGet("/", ListComments).AllowAnonymous();
@@ -20,6 +20,7 @@ public static class CommentEndpoints
     }
 
     private static async Task<IResult> ListComments(
+        string owner,
         string repoSlug,
         Guid proposalId,
         IRepositoryStore repoStore,
@@ -27,7 +28,7 @@ public static class CommentEndpoints
         ICommentStore commentStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -53,6 +54,7 @@ public static class CommentEndpoints
     }
 
     private static async Task<IResult> CreateComment(
+        string owner,
         string repoSlug,
         Guid proposalId,
         CreateCommentRequest request,
@@ -64,7 +66,7 @@ public static class CommentEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -98,7 +100,7 @@ public static class CommentEndpoints
                 proposal.CreatedById, NotificationTypes.CommentAdded,
                 $"New comment on: {proposal.Title}",
                 $"{userContext.GetUsername()} commented on your proposal.",
-                $"/api/v1/repositories/{repoSlug}/proposals/{proposalId}", ct);
+                $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}", ct);
         }
 
         webhooks.Dispatch(WebhookEventTypes.CommentCreated, repo.Id, new
@@ -110,7 +112,7 @@ public static class CommentEndpoints
             timestamp = DateTime.UtcNow,
         });
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposalId}/comments", new CommentResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}/comments", new CommentResponse
         {
             Id = comment.Id,
             Body = comment.Body,
@@ -123,6 +125,7 @@ public static class CommentEndpoints
     }
 
     private static async Task<IResult> UpdateComment(
+        string owner,
         string repoSlug,
         Guid proposalId,
         Guid id,
@@ -133,7 +136,7 @@ public static class CommentEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var comment = await commentStore.GetByIdAsync(id, ct);
@@ -163,6 +166,7 @@ public static class CommentEndpoints
     }
 
     private static async Task<IResult> DeleteComment(
+        string owner,
         string repoSlug,
         Guid proposalId,
         Guid id,
@@ -172,7 +176,7 @@ public static class CommentEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var comment = await commentStore.GetByIdAsync(id, ct);

@@ -10,7 +10,7 @@ public static class ShareLinkEndpoints
 {
     public static RouteGroupBuilder MapShareLinkEndpoints(this IEndpointRouteBuilder routes)
     {
-        var repoGroup = routes.MapGroup("/api/v1/repositories/{repoSlug}/shares")
+        var repoGroup = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/shares")
             .WithTags("ShareLinks");
 
         repoGroup.MapPost("/", CreateShareLink).RequireAuthorization().RequireRateLimiting("content-create");
@@ -26,6 +26,7 @@ public static class ShareLinkEndpoints
     }
 
     private static async Task<IResult> CreateShareLink(
+        string owner,
         string repoSlug,
         CreateShareLinkRequest request,
         IRepositoryStore repoStore,
@@ -37,7 +38,7 @@ public static class ShareLinkEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         if (string.IsNullOrWhiteSpace(request.Path))
@@ -105,10 +106,10 @@ public static class ShareLinkEndpoints
         await audit.LogAsync(
             AuditEventTypes.ShareLinkCreated, userId, userContext.GetUsername(),
             "ShareLink", link.Id,
-            new { documentId = doc.Id, path = doc.Path, expiresAt, permanent = request.Permanent, pinnedRevisionId = request.RevisionId },
+            new { owner, slug = repo.Slug, documentId = doc.Id, path = doc.Path, expiresAt, permanent = request.Permanent, pinnedRevisionId = request.RevisionId },
             ct);
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/shares/{link.Id}", new ShareLinkCreatedResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/shares/{link.Id}", new ShareLinkCreatedResponse
         {
             Id = link.Id,
             Token = rawToken,
@@ -120,6 +121,7 @@ public static class ShareLinkEndpoints
     }
 
     private static async Task<IResult> ListShareLinks(
+        string owner,
         string repoSlug,
         string? path,
         IRepositoryStore repoStore,
@@ -129,7 +131,7 @@ public static class ShareLinkEndpoints
         UserContext userContext,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -181,6 +183,7 @@ public static class ShareLinkEndpoints
     }
 
     private static async Task<IResult> RevokeShareLink(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -190,7 +193,7 @@ public static class ShareLinkEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var link = await shareLinkStore.GetByIdAsync(id, ct);
@@ -222,7 +225,7 @@ public static class ShareLinkEndpoints
         await audit.LogAsync(
             AuditEventTypes.ShareLinkRevoked, userId, userContext.GetUsername(),
             "ShareLink", link.Id,
-            new { documentId = link.DocumentId },
+            new { owner, slug = repo.Slug, documentId = link.DocumentId },
             ct);
 
         return Results.NoContent();

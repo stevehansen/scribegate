@@ -59,13 +59,14 @@ public static class SiteEndpoints
 
     public static void MapSiteEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/site")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/site")
             .WithTags("Site");
 
         group.MapGet("/", GenerateSite).RequireAuthorization();
     }
 
     private static async Task<IResult> GenerateSite(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
@@ -75,7 +76,7 @@ public static class SiteEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -186,6 +187,8 @@ public static class SiteEndpoints
                 "Repository", repo.Id,
                 new
                 {
+                    owner,
+                    slug = repo.Slug,
                     documentCount = generatedCount,
                     sizeBytes = totalBytes,
                     sizeCapReached = overflow,

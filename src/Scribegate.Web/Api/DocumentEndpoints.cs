@@ -10,7 +10,7 @@ public static class DocumentEndpoints
 {
     public static RouteGroupBuilder MapDocumentEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/documents")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/documents")
             .WithTags("Documents");
 
         group.MapGet("/", ListDocuments).AllowAnonymous();
@@ -25,12 +25,13 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> ListDocuments(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -44,6 +45,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> GetDocument(
+        string owner,
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
@@ -51,7 +53,7 @@ public static class DocumentEndpoints
         IRevisionStore revisionStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -84,6 +86,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> CreateDocument(
+        string owner,
         string repoSlug,
         CreateDocumentRequest request,
         IRepositoryStore repoStore,
@@ -97,7 +100,7 @@ public static class DocumentEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -117,7 +120,7 @@ public static class DocumentEndpoints
             return ApiResults.Conflict(
                 ApiErrorCodes.PathAlreadyExists,
                 $"A document at path '{normalizedPath}' already exists in this repository.",
-                $"Use PUT /api/v1/repositories/{repoSlug}/documents/{normalizedPath} to update it, or choose a different path.",
+                $"Use PUT /api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath} to update it, or choose a different path.",
                 "path");
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -189,7 +192,7 @@ public static class DocumentEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentCreated, userId, username,
             "Document", doc.Id,
-            new { path = doc.Path, repositorySlug = repoSlug }, ct);
+            new { owner, path = doc.Path, repositorySlug = repoSlug }, ct);
 
         webhooks.Dispatch(WebhookEventTypes.DocumentCreated, repo.Id, new
         {
@@ -199,7 +202,7 @@ public static class DocumentEndpoints
             timestamp = DateTime.UtcNow,
         });
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/documents/{normalizedPath}", new DocumentResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath}", new DocumentResponse
         {
             Id = doc.Id,
             Path = doc.Path,
@@ -212,6 +215,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> UpdateDocument(
+        string owner,
         string repoSlug,
         string path,
         UpdateDocumentRequest request,
@@ -225,7 +229,7 @@ public static class DocumentEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -317,6 +321,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> DeleteDocument(
+        string owner,
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
@@ -326,7 +331,7 @@ public static class DocumentEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -343,7 +348,7 @@ public static class DocumentEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentDeleted, userId, userContext.GetUsername(),
             "Document", doc.Id,
-            new { path = normalizedPath, repositorySlug = repoSlug }, ct);
+            new { owner, path = normalizedPath, repositorySlug = repoSlug }, ct);
 
         webhooks.Dispatch(WebhookEventTypes.DocumentDeleted, repo.Id, new
         {
@@ -373,6 +378,7 @@ public static class DocumentEndpoints
     }
 
     private static async Task<IResult> MoveDocument(
+        string owner,
         string repoSlug,
         string path,
         MoveDocumentRequest request,
@@ -383,7 +389,7 @@ public static class DocumentEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
 
@@ -421,7 +427,7 @@ public static class DocumentEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentMoved, userId, userContext.GetUsername(),
             "Document", doc.Id,
-            new { oldPath, newPath = newNormalized, repositorySlug = repoSlug }, ct);
+            new { owner, oldPath, newPath = newNormalized, repositorySlug = repoSlug }, ct);
 
         webhooks.Dispatch(WebhookEventTypes.DocumentMoved, repo.Id, new
         {

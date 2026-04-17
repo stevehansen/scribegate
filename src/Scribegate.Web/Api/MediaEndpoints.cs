@@ -18,7 +18,7 @@ public static class MediaEndpoints
 
     public static RouteGroupBuilder MapMediaEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/media")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/media")
             .WithTags("Media");
 
         group.MapPost("/", UploadMedia).RequireAuthorization().RequireRateLimiting("content-create").DisableAntiforgery();
@@ -31,6 +31,7 @@ public static class MediaEndpoints
     }
 
     private static async Task<IResult> UploadMedia(
+        string owner,
         string repoSlug,
         IFormFile file,
         IRepositoryStore repoStore,
@@ -41,7 +42,7 @@ public static class MediaEndpoints
         IConfiguration config,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         // Validate file
@@ -117,21 +118,22 @@ public static class MediaEndpoints
         await audit.LogAsync(
             AuditEventTypes.MediaUploaded, userId, userContext.GetUsername(),
             "MediaAsset", asset.Id,
-            new { fileName = asset.FileName, sizeBytes = asset.SizeBytes, contentType }, ct);
+            new { owner, slug = repo.Slug, fileName = asset.FileName, sizeBytes = asset.SizeBytes, contentType }, ct);
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/media/{asset.Id}", new MediaAssetResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}", new MediaAssetResponse
         {
             Id = asset.Id,
             FileName = asset.FileName,
             ContentType = asset.ContentType,
             SizeBytes = asset.SizeBytes,
-            Url = $"/api/v1/repositories/{repoSlug}/media/{asset.Id}/download",
+            Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}/download",
             UploadedBy = userContext.GetUsername() ?? userId.ToString(),
             CreatedAt = asset.CreatedAt,
         });
     }
 
     private static async Task<IResult> ListMedia(
+        string owner,
         string repoSlug,
         int skip = 0,
         int take = 50,
@@ -139,7 +141,7 @@ public static class MediaEndpoints
         ScribegateDbContext db = default!,
         CancellationToken ct = default)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var assets = await db.MediaAssets
@@ -158,7 +160,7 @@ public static class MediaEndpoints
                 FileName = a.FileName,
                 ContentType = a.ContentType,
                 SizeBytes = a.SizeBytes,
-                Url = $"/api/v1/repositories/{repoSlug}/media/{a.Id}/download",
+                Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{a.Id}/download",
                 UploadedBy = a.UploadedBy?.Username ?? a.UploadedById.ToString(),
                 CreatedAt = a.CreatedAt,
             }).ToList(),
@@ -167,12 +169,13 @@ public static class MediaEndpoints
     }
 
     private static async Task<IResult> GetMedia(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var asset = await db.MediaAssets
@@ -187,19 +190,20 @@ public static class MediaEndpoints
             FileName = asset.FileName,
             ContentType = asset.ContentType,
             SizeBytes = asset.SizeBytes,
-            Url = $"/api/v1/repositories/{repoSlug}/media/{asset.Id}/download",
+            Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}/download",
             UploadedBy = asset.UploadedBy?.Username ?? asset.UploadedById.ToString(),
             CreatedAt = asset.CreatedAt,
         });
     }
 
     private static async Task<IResult> DownloadMedia(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var asset = await db.MediaAssets
@@ -222,6 +226,7 @@ public static class MediaEndpoints
     }
 
     private static async Task<IResult> DeleteMedia(
+        string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
@@ -229,7 +234,7 @@ public static class MediaEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var asset = await db.MediaAssets
@@ -257,7 +262,7 @@ public static class MediaEndpoints
         await audit.LogAsync(
             AuditEventTypes.MediaDeleted, userId, userContext.GetUsername(),
             "MediaAsset", asset.Id,
-            new { fileName = asset.FileName }, ct);
+            new { owner, slug = repo.Slug, fileName = asset.FileName }, ct);
 
         return Results.NoContent();
     }

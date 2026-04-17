@@ -20,6 +20,7 @@ public static class SearchEndpoints
 
     private static async Task<IResult> SearchDocuments(
         string q,
+        string? owner,
         string? repo,
         int skip = 0,
         int take = 20,
@@ -39,7 +40,11 @@ public static class SearchEndpoints
         Guid? repoId = null;
         if (!string.IsNullOrEmpty(repo))
         {
-            var repository = await repoStore.GetBySlugAsync(repo, ct);
+            Core.Entities.Repository? repository;
+            if (!string.IsNullOrEmpty(owner))
+                repository = await repoStore.GetByOwnerAndSlugAsync(owner, repo, ct);
+            else
+                repository = await repoStore.GetBySlugAsync(repo, ct);
             if (repository is null)
                 return ApiResults.NotFound("Repository", repo);
             repoId = repository.Id;

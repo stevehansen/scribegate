@@ -11,7 +11,7 @@ public static class MembershipEndpoints
 {
     public static void MapMembershipEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/members")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/members")
             .WithTags("Members");
 
         group.MapGet("/", ListMembers).AllowAnonymous();
@@ -21,12 +21,13 @@ public static class MembershipEndpoints
     }
 
     private static async Task<IResult> ListMembers(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var members = await membershipStore.ListByRepositoryAsync(repo.Id, ct);
@@ -45,6 +46,7 @@ public static class MembershipEndpoints
     }
 
     private static async Task<IResult> AddMember(
+        string owner,
         string repoSlug,
         AddMemberRequest request,
         IRepositoryStore repoStore,
@@ -55,7 +57,7 @@ public static class MembershipEndpoints
         TierService tierService,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
@@ -114,9 +116,9 @@ public static class MembershipEndpoints
 
         await audit.LogAsync(AuditEventTypes.MemberAdded, currentUserId, userContext.GetUsername(),
             "RepositoryMembership", repo.Id,
-            new { targetUser = targetUser.Username, role = role.ToString() }, ct);
+            new { owner, slug = repo.Slug, targetUser = targetUser.Username, role = role.ToString() }, ct);
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/members", new MemberResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/members", new MemberResponse
         {
             UserId = targetUser.Id,
             Username = targetUser.Username,
@@ -126,6 +128,7 @@ public static class MembershipEndpoints
     }
 
     private static async Task<IResult> UpdateMember(
+        string owner,
         string repoSlug,
         Guid userId,
         UpdateMemberRequest request,
@@ -136,7 +139,7 @@ public static class MembershipEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
@@ -160,7 +163,7 @@ public static class MembershipEndpoints
 
         await audit.LogAsync(AuditEventTypes.MemberUpdated, currentUserId, userContext.GetUsername(),
             "RepositoryMembership", repo.Id,
-            new { targetUser = membership.User.Username, oldRole = oldRole.ToString(), newRole = role.ToString() }, ct);
+            new { owner, slug = repo.Slug, targetUser = membership.User.Username, oldRole = oldRole.ToString(), newRole = role.ToString() }, ct);
 
         return Results.Ok(new MemberResponse
         {
@@ -172,6 +175,7 @@ public static class MembershipEndpoints
     }
 
     private static async Task<IResult> RemoveMember(
+        string owner,
         string repoSlug,
         Guid userId,
         IRepositoryStore repoStore,
@@ -181,7 +185,7 @@ public static class MembershipEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
@@ -198,7 +202,7 @@ public static class MembershipEndpoints
 
         await audit.LogAsync(AuditEventTypes.MemberRemoved, currentUserId, userContext.GetUsername(),
             "RepositoryMembership", repo.Id,
-            new { targetUser = membership.User.Username }, ct);
+            new { owner, slug = repo.Slug, targetUser = membership.User.Username }, ct);
 
         return Results.NoContent();
     }

@@ -10,7 +10,7 @@ public static class ReviewEndpoints
 {
     public static void MapReviewEndpoints(this IEndpointRouteBuilder routes)
     {
-        var group = routes.MapGroup("/api/v1/repositories/{repoSlug}/proposals/{proposalId:guid}/reviews")
+        var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId:guid}/reviews")
             .WithTags("Reviews");
 
         group.MapGet("/", ListReviews).AllowAnonymous();
@@ -18,6 +18,7 @@ public static class ReviewEndpoints
     }
 
     private static async Task<IResult> ListReviews(
+        string owner,
         string repoSlug,
         Guid proposalId,
         IRepositoryStore repoStore,
@@ -25,7 +26,7 @@ public static class ReviewEndpoints
         IReviewStore reviewStore,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -49,6 +50,7 @@ public static class ReviewEndpoints
     }
 
     private static async Task<IResult> CreateReview(
+        string owner,
         string repoSlug,
         Guid proposalId,
         CreateReviewRequest request,
@@ -60,7 +62,7 @@ public static class ReviewEndpoints
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -101,7 +103,7 @@ public static class ReviewEndpoints
             timestamp = DateTime.UtcNow,
         });
 
-        return Results.Created($"/api/v1/repositories/{repoSlug}/proposals/{proposalId}/reviews", new Models.ReviewResponse
+        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}/reviews", new Models.ReviewResponse
         {
             Id = review.Id,
             Verdict = review.Verdict.ToString(),

@@ -14,7 +14,7 @@ public static class TemplateEndpoints
 
     public static IEndpointRouteBuilder MapTemplateEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/v1/repositories/{repoSlug}/templates")
+        var group = app.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/templates")
             .WithTags("Templates");
 
         group.MapGet("/", ListTemplates).AllowAnonymous();
@@ -27,6 +27,7 @@ public static class TemplateEndpoints
     }
 
     private static async Task<IResult> ListTemplates(
+        string owner,
         string repoSlug,
         IRepositoryStore repoStore,
         IDocumentTemplateStore templateStore,
@@ -35,7 +36,7 @@ public static class TemplateEndpoints
         HttpContext http,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         if (!await CanReadAsync(repo, authz, userContext, http, ct))
@@ -47,6 +48,7 @@ public static class TemplateEndpoints
     }
 
     private static async Task<IResult> GetTemplate(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -56,7 +58,7 @@ public static class TemplateEndpoints
         HttpContext http,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         if (!await CanReadAsync(repo, authz, userContext, http, ct))
@@ -70,6 +72,7 @@ public static class TemplateEndpoints
     }
 
     private static async Task<IResult> CreateTemplate(
+        string owner,
         string repoSlug,
         CreateTemplateRequest request,
         IRepositoryStore repoStore,
@@ -79,7 +82,7 @@ public static class TemplateEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -129,16 +132,17 @@ public static class TemplateEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentTemplateCreated, userId, userContext.GetUsername(),
             "DocumentTemplate", template.Id,
-            new { repositorySlug = repoSlug, template.Name }, ct);
+            new { owner, repositorySlug = repoSlug, template.Name }, ct);
 
         // Re-read so the Creator nav property is populated for the response.
         var created = await templateStore.GetByIdAsync(template.Id, ct) ?? template;
         return Results.Created(
-            $"/api/v1/repositories/{repoSlug}/templates/{template.Id}",
+            $"/api/v1/repositories/{owner}/{repoSlug}/templates/{template.Id}",
             ToResponse(created));
     }
 
     private static async Task<IResult> UpdateTemplate(
+        string owner,
         string repoSlug,
         Guid id,
         UpdateTemplateRequest request,
@@ -149,7 +153,7 @@ public static class TemplateEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -204,13 +208,14 @@ public static class TemplateEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentTemplateUpdated, userId, userContext.GetUsername(),
             "DocumentTemplate", template.Id,
-            new { repositorySlug = repoSlug, template.Name }, ct);
+            new { owner, repositorySlug = repoSlug, template.Name }, ct);
 
         var updated = await templateStore.GetByIdAsync(template.Id, ct) ?? template;
         return Results.Ok(ToResponse(updated));
     }
 
     private static async Task<IResult> DeleteTemplate(
+        string owner,
         string repoSlug,
         Guid id,
         IRepositoryStore repoStore,
@@ -220,7 +225,7 @@ public static class TemplateEndpoints
         AuditService audit,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
@@ -237,7 +242,7 @@ public static class TemplateEndpoints
         await audit.LogAsync(
             AuditEventTypes.DocumentTemplateDeleted, userId, userContext.GetUsername(),
             "DocumentTemplate", template.Id,
-            new { repositorySlug = repoSlug, template.Name }, ct);
+            new { owner, repositorySlug = repoSlug, template.Name }, ct);
 
         return Results.NoContent();
     }
