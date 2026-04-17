@@ -6,9 +6,11 @@ using Markdig;
 using Markdig.Renderers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
+using Scribegate.Data;
 
 namespace Scribegate.Web.Api;
 
@@ -71,6 +73,7 @@ public static class SiteEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        ScribegateDbContext db,
         AuthorizationHelper authz,
         UserContext userContext,
         AuditService audit,
@@ -100,6 +103,17 @@ public static class SiteEndpoints
 
         var prism = LoadPrismAssets(env, loggerFactory.CreateLogger("SiteEndpoints"));
 
+        // Resolve `![alt](foo.png)` in rendered markdown by filename. Most
+        // recent upload wins when two assets share a name, matching the
+        // by-name endpoint's rule.
+        var mediaAssets = await db.MediaAssets
+            .Where(m => m.RepositoryId == repo.Id)
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync(ct);
+        var mediaByName = new Dictionary<string, MediaAsset>(StringComparer.Ordinal);
+        foreach (var asset in mediaAssets)
+            mediaByName[asset.FileName] = asset; // later CreatedAt overwrites
+
         var fileName = $"{SanitizeFilename(repo.Slug)}-site.zip";
 
         return Results.Stream(async stream =>
@@ -109,6 +123,7 @@ public static class SiteEndpoints
             long totalBytes = 0;
             var overflow = false;
             var navEntries = new List<(string HtmlPath, string Title)>();
+            var referencedMedia = new HashSet<string>(StringComparer.Ordinal);
 
             using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
             {
@@ -152,7 +167,8 @@ public static class SiteEndpoints
 
                     var (metadata, body) = FrontmatterService.Parse(rev.Content);
                     var title = ExtractTitle(metadata) ?? DeriveTitleFromPath(doc.Path);
-                    var renderedBody = RenderMarkdown(body);
+                    var relativePrefix = RelativeRoot(entryPath);
+                    var renderedBody = RenderMarkdown(body, mediaByName, relativePrefix, referencedMedia);
                     var page = RenderPage(title, repo.Name, renderedBody, entryPath, prism is not null);
                     var bytes = Encoding.UTF8.GetBytes(page);
 
@@ -172,6 +188,46 @@ public static class SiteEndpoints
                 var indexHtml = RenderIndex(repo.Name, navEntries, prism is not null);
                 totalBytes += await WriteEntryAsync(zip, "index.html", indexHtml, ct);
 
+                // 3b. Referenced media files, deduped. Each is bounded by the
+                // upload cap (10 MB) so worst-case cost is `assets * 10 MB`.
+                // The MaxSiteBytes check still applies and short-circuits the
+                // loop with a skipped-manifest entry on overflow.
+                var mediaCount = 0;
+                long mediaBytes = 0;
+                var skippedMedia = new List<object>();
+                foreach (var name in referencedMedia)
+                {
+                    if (ct.IsCancellationRequested) break;
+                    if (!mediaByName.TryGetValue(name, out var asset)) continue;
+                    if (!File.Exists(asset.StoragePath))
+                    {
+                        skippedMedia.Add(new { fileName = name, reason = "file missing on disk" });
+                        continue;
+                    }
+
+                    byte[] bytes;
+                    try
+                    {
+                        bytes = await File.ReadAllBytesAsync(asset.StoragePath, ct);
+                    }
+                    catch (IOException ioex)
+                    {
+                        skippedMedia.Add(new { fileName = name, reason = $"read failed: {ioex.GetType().Name}" });
+                        continue;
+                    }
+
+                    if (totalBytes + bytes.LongLength > MaxSiteBytes)
+                    {
+                        overflow = true;
+                        skippedMedia.Add(new { fileName = name, reason = "site size cap reached" });
+                        break;
+                    }
+
+                    totalBytes += await WriteEntryAsync(zip, "assets/media/" + name, bytes, ct);
+                    mediaBytes += bytes.LongLength;
+                    mediaCount++;
+                }
+
                 // 4. Manifest last — accurate totals.
                 var manifest = new
                 {
@@ -183,7 +239,10 @@ public static class SiteEndpoints
                     },
                     generatedAt = DateTime.UtcNow,
                     documentCount = generatedCount,
+                    mediaCount,
+                    mediaBytes,
                     skipped,
+                    skippedMedia,
                     sizeCapReached = overflow,
                 };
                 var manifestEntry = zip.CreateEntry("manifest.json", CompressionLevel.Optimal);
@@ -240,7 +299,16 @@ public static class SiteEndpoints
     // a dangerous URL scheme. DisableHtml() already blocks raw `<script>` and
     // `<iframe>` passthrough — this handler closes the `[click](javascript:…)`
     // vector that Markdig does not filter by default.
-    private static string RenderMarkdown(string body)
+    //
+    // When `mediaByName` is provided, relative `<img>` references with a bare
+    // filename that matches a MediaAsset are rewritten to `{relativePrefix}assets/media/{filename}`
+    // and the filename is added to `referencedMedia` so the caller can embed
+    // the file in the export zip.
+    private static string RenderMarkdown(
+        string body,
+        IReadOnlyDictionary<string, MediaAsset> mediaByName,
+        string relativePrefix,
+        HashSet<string> referencedMedia)
     {
         var doc = Markdown.Parse(body, MarkdownPipeline);
 
@@ -253,6 +321,14 @@ public static class SiteEndpoints
             var dynamic = link.GetDynamicUrl?.Invoke();
             if (IsDangerousScheme(dynamic))
                 link.GetDynamicUrl = () => "#";
+
+            if (link.IsImage && TryResolveBareFilename(link.Url, out var filename)
+                && mediaByName.ContainsKey(filename))
+            {
+                referencedMedia.Add(filename);
+                link.Url = relativePrefix + "assets/media/" + filename;
+                link.GetDynamicUrl = null;
+            }
         }
 
         foreach (var auto in doc.Descendants<AutolinkInline>())
@@ -267,6 +343,34 @@ public static class SiteEndpoints
         renderer.Render(doc);
         writer.Flush();
         return writer.ToString();
+    }
+
+    // Mirrors resolveRelativeMediaSrc in sg-markdown-view.ts: a bare filename
+    // (optionally prefixed with `./`), no path separators, no traversal, no
+    // URL scheme. Strips a trailing fragment so `![x](foo.png#id)` still
+    // resolves to `foo.png`.
+    private static bool TryResolveBareFilename(string? url, out string filename)
+    {
+        filename = string.Empty;
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) return false;
+        if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return false;
+        if (url.StartsWith("//") || url.StartsWith('/')) return false;
+        if (url.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return false;
+        if (url.StartsWith("blob:", StringComparison.OrdinalIgnoreCase)) return false;
+        if (url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var trimmed = url.StartsWith("./") ? url[2..] : url;
+        var hashIndex = trimmed.IndexOf('#');
+        if (hashIndex >= 0) trimmed = trimmed[..hashIndex];
+        var queryIndex = trimmed.IndexOf('?');
+        if (queryIndex >= 0) trimmed = trimmed[..queryIndex];
+        if (trimmed.Length == 0) return false;
+        if (trimmed.Contains('/') || trimmed.Contains('\\')) return false;
+        if (trimmed is "." or "..") return false;
+
+        filename = trimmed;
+        return true;
     }
 
     private static bool IsDangerousScheme(string? url)

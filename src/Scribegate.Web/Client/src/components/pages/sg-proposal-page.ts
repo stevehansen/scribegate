@@ -198,7 +198,7 @@ export class SgProposalPage extends LitElement {
       ${this._tab === 'changes' ? this._renderDiff() : ''}
       ${this._tab === 'reviews' ? this._renderReviews() : ''}
       ${this._tab === 'comments' ? this._renderComments() : ''}
-      ${this._tab === 'preview' ? html`<sg-markdown-view .content=${p.proposedContent}></sg-markdown-view>` : ''}
+      ${this._tab === 'preview' ? html`<sg-markdown-view .content=${p.proposedContent} owner=${this._owner} slug=${this._slug}></sg-markdown-view>` : ''}
     `;
   }
 

@@ -412,7 +412,7 @@ Richer rendering so Scribegate handles real technical writing, not just prose.
 
 - [x] Syntax highlighting for fenced code blocks (Prism, curated language set; SPA uses shadow-DOM token styles that consume `--sg-syn-*` vars; static-site export ships a bundled Prism runtime + theme and falls back silently if absent)
 - [x] Mermaid diagram rendering (SPA only — dynamic import so the runtime is fetched lazily when a page actually has a diagram; server leaves ```` ```mermaid ```` blocks intact; static-site export keeps the block as code and does not bundle Mermaid because the runtime would add ~3 MB to every exported zip — revisit if there's demand)
-- [ ] Inline media previews in rendered markdown (images and video resolved from `MediaAsset` by relative path, no raw HTML permitted)
+- [x] Inline media previews for images (bare-filename `![alt](foo.png)` references resolve to `MediaAsset` via the new `GET /media/by-name/{fileName}` endpoint on the SPA, and are bundled under `assets/media/` with rewritten URLs in static-site exports; video rendering and share-link media resolution deferred)
 - [ ] Soft-delete / archive for documents (resolves open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings)
 - [ ] Markdig + marked parity audit (ensure server-rendered site export and client preview match; regression tests covering tables, task lists, code, diagrams, media)
 

@@ -25,6 +25,7 @@ public static class MediaEndpoints
         group.MapGet("/", ListMedia).AllowAnonymous();
         group.MapGet("/{id:guid}", GetMedia).AllowAnonymous();
         group.MapGet("/{id:guid}/download", DownloadMedia).AllowAnonymous();
+        group.MapGet("/by-name/{fileName}", DownloadMediaByName).AllowAnonymous();
         group.MapDelete("/{id:guid}", DeleteMedia).RequireAuthorization();
 
         return group;
@@ -244,6 +245,49 @@ public static class MediaEndpoints
                     Details = "The file may have been deleted from storage.",
                 }
             }, statusCode: 500);
+
+        return Results.File(asset.StoragePath, asset.ContentType, asset.FileName);
+    }
+
+    // Resolves `![alt](diagram.png)` in rendered markdown. The filename must
+    // be a bare name (no separators, no traversal, no NUL). If multiple
+    // assets share the name, the most recent upload wins — matches the
+    // intuition that uploading "diagram.png" a second time replaces it in
+    // the author's mind. Returns the file directly with its stored content
+    // type so the browser can display images inline.
+    private static async Task<IResult> DownloadMediaByName(
+        string owner,
+        string repoSlug,
+        string fileName,
+        IRepositoryStore repoStore,
+        ScribegateDbContext db,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)
+            || fileName.Contains('/')
+            || fileName.Contains('\\')
+            || fileName.Contains('\0')
+            || fileName == "." || fileName == "..")
+            return ApiResults.NotFound("Media", fileName);
+
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
+        if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        var asset = await db.MediaAssets
+            .Where(m => m.RepositoryId == repo.Id && m.FileName == fileName)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (asset is null) return ApiResults.NotFound("Media", fileName);
+
+        if (!File.Exists(asset.StoragePath))
+            return ApiResults.NotFound("Media", fileName);
 
         return Results.File(asset.StoragePath, asset.ContentType, asset.FileName);
     }

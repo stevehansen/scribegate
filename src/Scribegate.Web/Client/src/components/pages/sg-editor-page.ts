@@ -226,7 +226,7 @@ export class SgEditorPage extends LitElement {
           ></textarea>
         </div>
         <div class="pane preview">
-          <sg-markdown-view .content=${this._content}></sg-markdown-view>
+          <sg-markdown-view .content=${this._content} owner=${this._owner} slug=${this._slug}></sg-markdown-view>
         </div>
       </div>
 

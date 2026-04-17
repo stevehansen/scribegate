@@ -94,7 +94,7 @@ export class SgProposalCreate extends LitElement {
           <textarea .value=${this._content} @input=${(e: Event) => this._content = (e.target as HTMLTextAreaElement).value} placeholder="Write your proposed markdown content..."></textarea>
         </div>
         <div class="pane preview">
-          <sg-markdown-view .content=${this._content}></sg-markdown-view>
+          <sg-markdown-view .content=${this._content} owner=${this._owner} slug=${this._slug}></sg-markdown-view>
         </div>
       </div>
 

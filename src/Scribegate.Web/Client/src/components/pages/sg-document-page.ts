@@ -101,7 +101,11 @@ export class SgDocumentPage extends LitElement {
       </div>
 
       <div class="content">
-        <sg-markdown-view content=${this._doc.content ?? ''}></sg-markdown-view>
+        <sg-markdown-view
+          content=${this._doc.content ?? ''}
+          owner=${this._owner}
+          slug=${this._slug}
+        ></sg-markdown-view>
       </div>
 
       <sg-share-dialog

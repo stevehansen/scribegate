@@ -135,6 +135,10 @@ export class SgMarkdownView extends LitElement {
   `];
 
   @property() content = '';
+  // When both are set, relative <img src> values in the rendered markdown
+  // are resolved against the repository's media-by-name endpoint.
+  @property() owner = '';
+  @property() slug = '';
 
   render() {
     const rendered = renderMarkdown(this.content);
@@ -142,10 +146,40 @@ export class SgMarkdownView extends LitElement {
   }
 
   async updated() {
-    // Render Mermaid diagrams first so the matching <pre> blocks are
-    // replaced before Prism scans for code; then highlight whatever remains.
-    // Both passes are safe no-ops when no matching blocks are present.
+    // 1) Rewrite relative <img> src values to the media endpoint so
+    //    `![diagram](foo.png)` resolves against the repo's MediaAssets.
+    // 2) Render Mermaid diagrams (replaces <pre> blocks).
+    // 3) Highlight remaining fenced code blocks via Prism.
+    // All three passes are safe no-ops when there's nothing to do.
+    this._resolveMediaReferences();
     await renderMermaidBlocks(this.renderRoot);
     highlightAllUnder(this.renderRoot);
   }
+
+  private _resolveMediaReferences() {
+    if (!this.owner || !this.slug) return;
+    const imgs = this.renderRoot.querySelectorAll<HTMLImageElement>('img');
+    for (const img of Array.from(imgs)) {
+      const src = img.getAttribute('src') ?? '';
+      const resolved = resolveRelativeMediaSrc(src, this.owner, this.slug);
+      if (resolved && resolved !== src) img.setAttribute('src', resolved);
+    }
+  }
+}
+
+// Returns a rewritten absolute URL when `src` looks like a bare or `./`-prefixed
+// filename that should resolve to a MediaAsset in the repository. Returns null
+// for anything that must pass through unchanged (absolute URL paths, scheme-
+// qualified URLs, data/blob URIs, or anything containing a path separator).
+export function resolveRelativeMediaSrc(src: string, owner: string, slug: string): string | null {
+  if (!src) return null;
+  if (src.startsWith('http://') || src.startsWith('https://')) return null;
+  if (src.startsWith('//') || src.startsWith('/')) return null;
+  if (src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('mailto:')) return null;
+
+  const trimmed = src.startsWith('./') ? src.slice(2) : src;
+  if (trimmed.includes('/') || trimmed.includes('\\') || trimmed === '..' || trimmed === '.') return null;
+  if (!trimmed) return null;
+
+  return `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/media/by-name/${encodeURIComponent(trimmed)}`;
 }

@@ -56,7 +56,7 @@ Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ec
 M6 progress:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
 - [x] Mermaid diagram rendering — dynamic import in `sg-markdown-view`, theme tracks the app theme, failures render inline; static-site export keeps the block as code (deferred until there's demand, since the runtime would add ~3 MB per exported zip)
-- [ ] Inline media previews in rendered markdown (images/video resolved from `MediaAsset` by relative path, no raw HTML)
+- [x] Inline media previews for images — new `GET /media/by-name/{fileName}` endpoint, SPA rewrites relative `<img>` src after render, static-site export bundles referenced media under `assets/media/` with URLs rewritten at Markdig AST time; video and share-link media deferred
 - [ ] Soft-delete / archive for documents (resolves spec open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings and search)
 - [ ] Markdig + marked parity audit (regression tests covering tables, task lists, code, diagrams, media)
 
@@ -233,6 +233,7 @@ POST   /api/v1/repositories/{owner}/{slug}/media                    # Upload med
 GET    /api/v1/repositories/{owner}/{slug}/media                    # List media assets
 GET    /api/v1/repositories/{owner}/{slug}/media/{id}               # Get media asset info
 GET    /api/v1/repositories/{owner}/{slug}/media/{id}/download      # Download media file
+GET    /api/v1/repositories/{owner}/{slug}/media/by-name/{fileName}  # Resolve media by filename (for `![](foo.png)` refs)
 DELETE /api/v1/repositories/{owner}/{slug}/media/{id}               # Delete media [owner/admin]
 
 POST   /api/v1/repositories/{owner}/{slug}/shares                   # Create share link [auth, contributor+]
