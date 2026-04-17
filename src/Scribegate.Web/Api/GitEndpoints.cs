@@ -49,8 +49,8 @@ public static class GitEndpoints
     {
         // The git routes deliberately sit above the API and outside any group
         // so they can use bare `.git` paths that a browser user could also
-        // hit — we want `git clone https://host/{slug}.git` to Just Work.
-        var group = routes.MapGroup("/{repoSlug}.git").WithTags("Git");
+        // hit — we want `git clone https://host/{owner}/{slug}.git` to Just Work.
+        var group = routes.MapGroup("/{owner}/{repoSlug}.git").WithTags("Git");
 
         // Rate limits: the ref/HEAD/pack-index advertisement endpoints anchor a
         // clone session (one request each), so a tight per-IP ceiling deters
@@ -77,6 +77,7 @@ public static class GitEndpoints
     }
 
     private static async Task<IResult> GetInfoRefs(
+        string owner,
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
@@ -86,7 +87,7 @@ public static class GitEndpoints
         IMemoryCache cache,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -95,7 +96,7 @@ public static class GitEndpoints
         if (!TryResolveSafePath(mirrorPath, filePath, out var safePath) || !File.Exists(safePath))
             return Results.NotFound();
 
-        await LogCloneIfFirstAsync(auth.Repo!, auth.User, http, audit, cache, ct);
+        await LogCloneIfFirstAsync(auth.Repo!, owner, auth.User, http, audit, cache, ct);
 
         // Return plain text regardless of whether the client hinted at smart
         // HTTP via ?service=git-upload-pack. Modern git falls back to dumb
@@ -105,6 +106,7 @@ public static class GitEndpoints
     }
 
     private static async Task<IResult> GetHead(
+        string owner,
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
@@ -112,7 +114,7 @@ public static class GitEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -125,6 +127,7 @@ public static class GitEndpoints
     }
 
     private static async Task<IResult> GetObjectsInfoPacks(
+        string owner,
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
@@ -132,7 +135,7 @@ public static class GitEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -144,12 +147,13 @@ public static class GitEndpoints
         return Results.File(safePath, "text/plain; charset=utf-8");
     }
 
-    private static IResult GetObjectsInfoAlternates(string repoSlug) =>
+    private static IResult GetObjectsInfoAlternates(string owner, string repoSlug) =>
         // We never link mirrors to external object stores. Returning 404
         // (not 200-empty) tells git "no alternates here" quickly.
         Results.NotFound();
 
     private static async Task<IResult> GetLooseObject(
+        string owner,
         string repoSlug,
         string hashPrefix,
         string hash,
@@ -159,7 +163,7 @@ public static class GitEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -172,6 +176,7 @@ public static class GitEndpoints
     }
 
     private static async Task<IResult> GetPackFile(
+        string owner,
         string repoSlug,
         string hash,
         HttpContext http,
@@ -180,7 +185,7 @@ public static class GitEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -193,6 +198,7 @@ public static class GitEndpoints
     }
 
     private static async Task<IResult> GetPackIndex(
+        string owner,
         string repoSlug,
         string hash,
         HttpContext http,
@@ -201,7 +207,7 @@ public static class GitEndpoints
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -219,13 +225,14 @@ public static class GitEndpoints
     // auth when the repo is private. The git CLI speaks Basic exclusively —
     // JWT Bearer tokens are not accepted here, API tokens only.
     private static async Task<AuthResult> AuthorizeAsync(
+        string owner,
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetBySlugAsync(repoSlug, ct);
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return new(null, null, Results.NotFound());
 
@@ -370,6 +377,7 @@ public static class GitEndpoints
 
     private static async Task LogCloneIfFirstAsync(
         Core.Entities.Repository repo,
+        string ownerUsername,
         User? user,
         HttpContext http,
         AuditService audit,
@@ -397,6 +405,7 @@ public static class GitEndpoints
                 targetId: repo.Id,
                 details: new
                 {
+                    owner = ownerUsername,
                     slug = repo.Slug,
                     userAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
                     visibility = repo.Visibility.ToString(),

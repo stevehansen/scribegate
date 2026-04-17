@@ -174,7 +174,7 @@ export class SgRepositoryPage extends LitElement {
   private get _cloneUrl(): string {
     // Build from the current window origin so self-hosted deployments behind
     // custom domains get the right URL without any server round-trip.
-    return `${window.location.origin}/${this._slug}.git`;
+    return `${window.location.origin}/${this._owner}/${this._slug}.git`;
   }
 
   private async _onCopyCloneUrl() {

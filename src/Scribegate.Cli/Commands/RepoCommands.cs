@@ -35,14 +35,15 @@ public static class RepoCommands
         }, nameArg, descOpt, visOpt);
 
         var viewCmd = new Command("view", "View repository details");
-        var slugArg = new Argument<string>("slug", "Repository slug");
-        viewCmd.AddArgument(slugArg);
-        viewCmd.SetHandler(async (slug) =>
+        var repoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
+        viewCmd.AddArgument(repoArg);
+        viewCmd.SetHandler(async (repoRef) =>
         {
+            var r = RepoRefParser.Parse(repoRef);
             var client = new ApiClient();
-            var result = await client.GetAsync<RepoResponse>($"/api/v1/repositories/{slug}");
+            var result = await client.GetAsync<RepoResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}");
             OutputFormatter.Print(result!);
-        }, slugArg);
+        }, repoArg);
 
         cmd.AddCommand(listCmd);
         cmd.AddCommand(createCmd);

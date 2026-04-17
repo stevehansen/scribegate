@@ -90,7 +90,13 @@ public class GitMirrorService
     /// </summary>
     public async Task<string> EnsureMirrorAsync(Core.Entities.Repository repo, CancellationToken ct)
     {
-        var mirrorPath = GetMirrorPath(repo.Id);
+        var mirrorPath = GetMirrorPath(repo);
+        // The parent (owner) directory may not exist yet for the first clone of
+        // a freshly-created user's repo; create it before the per-repo logic
+        // below assumes the tree exists.
+        var parent = Path.GetDirectoryName(mirrorPath);
+        if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+
         var gate = _locks.GetOrAdd(repo.Id, _ => new SemaphoreSlim(1, 1));
 
         await gate.WaitAsync(ct);
@@ -160,31 +166,60 @@ public class GitMirrorService
         var repos = await repoStore.ListAsync(ct);
         var live = repos.Select(r => r.Id).ToHashSet();
 
-        foreach (var dir in Directory.EnumerateDirectories(_mirrorRoot))
+        // Tree layout is <mirrorRoot>/<ownerId>/<repoId>.git. Walk one level
+        // at a time so we can prune stale repo mirrors and empty owner
+        // directories without conflating the two.
+        foreach (var ownerDir in Directory.EnumerateDirectories(_mirrorRoot))
         {
             ct.ThrowIfCancellationRequested();
 
-            var name = Path.GetFileName(dir);
-            if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-                name = name[..^4];
+            // Only descend into plausible owner-ID buckets; any other detritus
+            // at the top level gets left alone (operator-owned files, etc.).
+            if (!Guid.TryParse(Path.GetFileName(ownerDir), out _))
+                continue;
 
-            if (!Guid.TryParse(name, out var id) || !live.Contains(id))
+            foreach (var dir in Directory.EnumerateDirectories(ownerDir))
             {
-                try
+                ct.ThrowIfCancellationRequested();
+
+                var name = Path.GetFileName(dir);
+                if (name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+                    name = name[..^4];
+
+                if (!Guid.TryParse(name, out var id) || !live.Contains(id))
                 {
-                    Directory.Delete(dir, recursive: true);
-                    _logger.LogInformation("Pruned orphaned git mirror {Dir}.", dir);
+                    try
+                    {
+                        Directory.Delete(dir, recursive: true);
+                        _logger.LogInformation("Pruned orphaned git mirror {Dir}.", dir);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to prune orphaned git mirror {Dir}.", dir);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to prune orphaned git mirror {Dir}.", dir);
-                }
+            }
+
+            // If the owner directory is now empty (either pre-emptied or we
+            // just cleared its last child), remove it too so the tree doesn't
+            // accumulate dead bucket directories.
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(ownerDir).Any())
+                    Directory.Delete(ownerDir, recursive: false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to prune empty owner directory {Dir}.", ownerDir);
             }
         }
     }
 
-    private string GetMirrorPath(Guid repoId) =>
-        Path.Combine(_mirrorRoot, repoId.ToString("D") + ".git");
+    private string GetMirrorPath(Core.Entities.Repository repo) =>
+        // Group mirrors under the owner to mirror the URL structure
+        // (/{owner}/{slug}.git). Both segments are GUIDs so isolation is
+        // total — slug/username collisions across owners can never alias.
+        Path.Combine(_mirrorRoot, repo.OwnerId.ToString("D"), repo.Id.ToString("D") + ".git");
 
     private static bool IsFresh(MirrorMarker marker, int documentCount, DateTime? latestTimestamp, string contentHash)
     {

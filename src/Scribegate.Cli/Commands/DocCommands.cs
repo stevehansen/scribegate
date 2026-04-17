@@ -9,26 +9,28 @@ public static class DocCommands
         var cmd = new Command("doc", "Document management");
 
         var listCmd = new Command("list", "List documents in a repository");
-        var repoSlugArg = new Argument<string>("repo", "Repository slug");
+        var repoSlugArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         listCmd.AddArgument(repoSlugArg);
-        listCmd.SetHandler(async (repoSlug) =>
+        listCmd.SetHandler(async (repoRef) =>
         {
+            var r = RepoRefParser.Parse(repoRef);
             var client = new ApiClient();
-            var result = await client.GetAsync<DocListResponse>($"/api/v1/repositories/{repoSlug}/documents");
+            var result = await client.GetAsync<DocListResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}/documents");
             OutputFormatter.PrintTable(
                 ["Path", "Created By", "Created At"],
                 result!.Items.Select(d => new[] { d.Path, d.CreatedBy, d.CreatedAt }));
         }, repoSlugArg);
 
         var viewCmd = new Command("view", "View a document (rendered as markdown source)");
-        var viewRepoArg = new Argument<string>("repo", "Repository slug");
+        var viewRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var viewPathArg = new Argument<string>("path", "Document path");
         viewCmd.AddArgument(viewRepoArg);
         viewCmd.AddArgument(viewPathArg);
         viewCmd.SetHandler(async (repo, path) =>
         {
+            var r = RepoRefParser.Parse(repo);
             var client = new ApiClient();
-            var result = await client.GetAsync<DocResponse>($"/api/v1/repositories/{repo}/documents/{path}");
+            var result = await client.GetAsync<DocResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}/documents/{path}");
             if (OutputFormatter.JsonMode)
                 OutputFormatter.Print(result!);
             else
@@ -36,7 +38,7 @@ public static class DocCommands
         }, viewRepoArg, viewPathArg);
 
         var createCmd = new Command("create", "Create a document");
-        var createRepoArg = new Argument<string>("repo", "Repository slug");
+        var createRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var createPathArg = new Argument<string>("path", "Document path");
         var fileOpt = new Option<string?>("--file", "Read content from file (- for stdin)");
         var contentOpt = new Option<string?>("--content", "Inline content");
@@ -48,6 +50,7 @@ public static class DocCommands
         createCmd.AddOption(messageOpt);
         createCmd.SetHandler(async (repo, path, file, content, message) =>
         {
+            var r = RepoRefParser.Parse(repo);
             var body = content;
             if (file == "-")
                 body = await Console.In.ReadToEndAsync();
@@ -55,13 +58,13 @@ public static class DocCommands
                 body = await File.ReadAllTextAsync(file);
 
             var client = new ApiClient();
-            var result = await client.PostAsync<DocResponse>($"/api/v1/repositories/{repo}/documents",
+            var result = await client.PostAsync<DocResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}/documents",
                 new { path, content = body, message });
             Console.WriteLine($"Created: {result!.Path}");
         }, createRepoArg, createPathArg, fileOpt, contentOpt, messageOpt);
 
         var editCmd = new Command("edit", "Update a document");
-        var editRepoArg = new Argument<string>("repo", "Repository slug");
+        var editRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var editPathArg = new Argument<string>("path", "Document path");
         var editFileOpt = new Option<string?>("--file", "Read content from file (- for stdin)");
         var editContentOpt = new Option<string?>("--content", "Inline content");
@@ -73,6 +76,7 @@ public static class DocCommands
         editCmd.AddOption(editMessageOpt);
         editCmd.SetHandler(async (repo, path, file, content, message) =>
         {
+            var r = RepoRefParser.Parse(repo);
             var body = content;
             if (file == "-")
                 body = await Console.In.ReadToEndAsync();
@@ -80,27 +84,28 @@ public static class DocCommands
                 body = await File.ReadAllTextAsync(file);
 
             var client = new ApiClient();
-            await client.PutAsync<DocResponse>($"/api/v1/repositories/{repo}/documents/{path}",
+            await client.PutAsync<DocResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}/documents/{path}",
                 new { content = body, message });
             Console.WriteLine($"Updated: {path}");
         }, editRepoArg, editPathArg, editFileOpt, editContentOpt, editMessageOpt);
 
         var historyCmd = new Command("history", "View revision history");
-        var histRepoArg = new Argument<string>("repo", "Repository slug");
+        var histRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var histPathArg = new Argument<string>("path", "Document path");
         historyCmd.AddArgument(histRepoArg);
         historyCmd.AddArgument(histPathArg);
         historyCmd.SetHandler(async (repo, path) =>
         {
+            var r = RepoRefParser.Parse(repo);
             var client = new ApiClient();
-            var result = await client.GetAsync<RevisionListResponse>($"/api/v1/repositories/{repo}/revisions/{path}");
+            var result = await client.GetAsync<RevisionListResponse>($"/api/v1/repositories/{r.Owner}/{r.Slug}/revisions/{path}");
             OutputFormatter.PrintTable(
                 ["ID", "Message", "Author", "Date"],
-                result!.Items.Select(r => new[] { r.Id[..8], r.Message, r.CreatedBy, r.CreatedAt }));
+                result!.Items.Select(rev => new[] { rev.Id[..8], rev.Message, rev.CreatedBy, rev.CreatedAt }));
         }, histRepoArg, histPathArg);
 
         var shareCmd = new Command("share", "Create a share link for a document");
-        var shareRepoArg = new Argument<string>("repo", "Repository slug");
+        var shareRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var sharePathArg = new Argument<string>("path", "Document path");
         var shareExpiresOpt = new Option<int?>("--expires", "Days until the link expires (default 7)");
         var sharePermanentOpt = new Option<bool>("--permanent", "Create a link that never expires");
@@ -114,6 +119,7 @@ public static class DocCommands
         shareCmd.AddOption(shareRevisionOpt);
         shareCmd.SetHandler(async (repo, path, expires, permanent, description, revision) =>
         {
+            var r = RepoRefParser.Parse(repo);
             Guid? revisionId = null;
             if (!string.IsNullOrWhiteSpace(revision))
             {
@@ -124,7 +130,7 @@ public static class DocCommands
 
             var client = new ApiClient();
             var result = await client.PostAsync<ShareLinkCreatedResponse>(
-                $"/api/v1/repositories/{repo}/shares",
+                $"/api/v1/repositories/{r.Owner}/{r.Slug}/shares",
                 new { path, description, expiresInDays = expires, permanent, revisionId });
 
             var host = CliConfig.Load().Host ?? "http://localhost:5199";
@@ -141,13 +147,14 @@ public static class DocCommands
         }, shareRepoArg, sharePathArg, shareExpiresOpt, sharePermanentOpt, shareDescOpt, shareRevisionOpt);
 
         var sharesCmd = new Command("shares", "List share links for a repository or document");
-        var sharesRepoArg = new Argument<string>("repo", "Repository slug");
+        var sharesRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var sharesPathOpt = new Option<string?>("--path", "Filter to share links for a single document");
         sharesCmd.AddArgument(sharesRepoArg);
         sharesCmd.AddOption(sharesPathOpt);
         sharesCmd.SetHandler(async (repo, path) =>
         {
-            var url = $"/api/v1/repositories/{repo}/shares";
+            var r = RepoRefParser.Parse(repo);
+            var url = $"/api/v1/repositories/{r.Owner}/{r.Slug}/shares";
             if (!string.IsNullOrWhiteSpace(path))
                 url += $"?path={Uri.EscapeDataString(path)}";
 
@@ -169,16 +176,17 @@ public static class DocCommands
         }, sharesRepoArg, sharesPathOpt);
 
         var unshareCmd = new Command("unshare", "Revoke a share link");
-        var unshareRepoArg = new Argument<string>("repo", "Repository slug");
+        var unshareRepoArg = new Argument<string>("repo", "Repository reference (owner/slug)");
         var unshareIdArg = new Argument<string>("id", "Share link ID (or a unique prefix)");
         unshareCmd.AddArgument(unshareRepoArg);
         unshareCmd.AddArgument(unshareIdArg);
         unshareCmd.SetHandler(async (repo, id) =>
         {
+            var r = RepoRefParser.Parse(repo);
             var client = new ApiClient();
             if (!Guid.TryParse(id, out _))
                 throw new CliException("ID must be a full GUID. Use 'sg doc shares <repo>' to see full IDs.");
-            await client.DeleteAsync($"/api/v1/repositories/{repo}/shares/{id}");
+            await client.DeleteAsync($"/api/v1/repositories/{r.Owner}/{r.Slug}/shares/{id}");
             Console.WriteLine("Share link revoked.");
         }, unshareRepoArg, unshareIdArg);
 
