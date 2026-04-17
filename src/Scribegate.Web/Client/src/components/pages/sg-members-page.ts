@@ -58,6 +58,7 @@ export class SgMembersPage extends LitElement {
   @state() private _newUsername = '';
   @state() private _newRole = 'Reader';
 
+  private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
 
   async connectedCallback() {
@@ -66,10 +67,15 @@ export class SgMembersPage extends LitElement {
   }
 
   private async _load() {
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [repo, members] = await Promise.all([
-        repoApi.get(this._slug),
-        memberApi.list(this._slug),
+        repoApi.get(this._owner, this._slug),
+        memberApi.list(this._owner, this._slug),
       ]);
       this._repo = repo;
       this._members = members.items;
@@ -80,17 +86,17 @@ export class SgMembersPage extends LitElement {
   private async _addMember() {
     this._error = '';
     try {
-      await memberApi.add(this._slug, { username: this._newUsername, role: this._newRole });
+      await memberApi.add(this._owner, this._slug, { username: this._newUsername, role: this._newRole });
       this._newUsername = '';
-      const members = await memberApi.list(this._slug);
+      const members = await memberApi.list(this._owner, this._slug);
       this._members = members.items;
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed to add member.'; }
   }
 
   private async _removeMember(userId: string) {
     try {
-      await memberApi.remove(this._slug, userId);
-      const members = await memberApi.list(this._slug);
+      await memberApi.remove(this._owner, this._slug, userId);
+      const members = await memberApi.list(this._owner, this._slug);
       this._members = members.items;
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
@@ -100,7 +106,7 @@ export class SgMembersPage extends LitElement {
     if (!this._repo) return html``;
 
     return html`
-      <sg-breadcrumb repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
+      <sg-breadcrumb repoOwner=${this._repo.owner} repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
       <h1>Members</h1>
 
       ${this._error ? html`<div class="error">${this._error}</div>` : ''}

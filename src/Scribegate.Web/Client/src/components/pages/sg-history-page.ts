@@ -43,6 +43,10 @@ export class SgHistoryPage extends LitElement {
   @state() private _loading = true;
   @state() private _error = '';
 
+  private get _owner(): string {
+    return this.location?.params?.owner ?? '';
+  }
+
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
   }
@@ -54,10 +58,15 @@ export class SgHistoryPage extends LitElement {
 
   async connectedCallback() {
     super.connectedCallback();
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [repo, revs] = await Promise.all([
-        repoApi.get(this._slug),
-        revisionApi.list(this._slug, this._path),
+        repoApi.get(this._owner, this._slug),
+        revisionApi.list(this._owner, this._slug, this._path),
       ]);
       this._repo = repo;
       this._revisions = revs.items;
@@ -73,14 +82,17 @@ export class SgHistoryPage extends LitElement {
     if (this._error) return html`<p class="error">${this._error}</p>`;
     if (!this._repo) return html``;
 
+    const repoBase = `/${this._owner}/${this._slug}`;
+
     return html`
       <sg-breadcrumb
+        repoOwner=${this._repo.owner}
         repoSlug=${this._repo.slug}
         repoName=${this._repo.name}
         path=${this._path}
       ></sg-breadcrumb>
 
-      <a class="back" href="/${this._slug}/${this._path.replace(/\.md$/, '')}">Back to document</a>
+      <a class="back" href="${repoBase}/${this._path.replace(/\.md$/, '')}">Back to document</a>
       <h1>History: ${this._path}</h1>
 
       ${this._revisions.length === 0

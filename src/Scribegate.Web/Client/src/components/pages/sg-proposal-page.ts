@@ -90,6 +90,7 @@ export class SgProposalPage extends LitElement {
   @state() private _reviewBody = '';
   @state() private _commentBody = '';
 
+  private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
   private get _id(): string { return this.location?.params?.id ?? ''; }
 
@@ -99,11 +100,16 @@ export class SgProposalPage extends LitElement {
   }
 
   private async _load() {
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [proposal, reviews, comments] = await Promise.all([
-        proposalApi.get(this._slug, this._id),
-        reviewApi.list(this._slug, this._id),
-        commentApi.list(this._slug, this._id),
+        proposalApi.get(this._owner, this._slug, this._id),
+        reviewApi.list(this._owner, this._slug, this._id),
+        commentApi.list(this._owner, this._slug, this._id),
       ]);
       this._proposal = proposal;
       this._reviews = reviews.items;
@@ -114,30 +120,30 @@ export class SgProposalPage extends LitElement {
 
   private async _approve() {
     try {
-      await proposalApi.approve(this._slug, this._id);
+      await proposalApi.approve(this._owner, this._slug, this._id);
       await this._load();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   private async _reject() {
     try {
-      await proposalApi.reject(this._slug, this._id);
+      await proposalApi.reject(this._owner, this._slug, this._id);
       await this._load();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   private async _withdraw() {
     try {
-      await proposalApi.withdraw(this._slug, this._id);
+      await proposalApi.withdraw(this._owner, this._slug, this._id);
       await this._load();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   private async _submitReview() {
     try {
-      await reviewApi.create(this._slug, this._id, { verdict: this._reviewVerdict, body: this._reviewBody || undefined });
+      await reviewApi.create(this._owner, this._slug, this._id, { verdict: this._reviewVerdict, body: this._reviewBody || undefined });
       this._reviewBody = '';
-      const reviews = await reviewApi.list(this._slug, this._id);
+      const reviews = await reviewApi.list(this._owner, this._slug, this._id);
       this._reviews = reviews.items;
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
@@ -145,9 +151,9 @@ export class SgProposalPage extends LitElement {
   private async _submitComment() {
     if (!this._commentBody.trim()) return;
     try {
-      await commentApi.create(this._slug, this._id, { body: this._commentBody });
+      await commentApi.create(this._owner, this._slug, this._id, { body: this._commentBody });
       this._commentBody = '';
-      const comments = await commentApi.list(this._slug, this._id);
+      const comments = await commentApi.list(this._owner, this._slug, this._id);
       this._comments = comments.items;
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
@@ -161,7 +167,7 @@ export class SgProposalPage extends LitElement {
     const isOpen = p.status === 'Open';
 
     return html`
-      <a class="back" href="/${this._slug}/proposals">Back to proposals</a>
+      <a class="back" href="/${this._owner}/${this._slug}/proposals">Back to proposals</a>
       <h1>${p.title} <span class="status status-${p.status.toLowerCase()}">${p.status}</span></h1>
       <div class="meta">
         ${p.documentPath ?? p.proposedPath ?? 'new document'} &middot; by ${p.createdBy}

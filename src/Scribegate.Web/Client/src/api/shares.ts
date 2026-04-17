@@ -13,28 +13,23 @@ export interface CreateShareLinkOptions {
   revisionId?: string;
 }
 
-export function create(repoSlug: string, options: CreateShareLinkOptions) {
-  return apiFetch<ShareLinkCreatedResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/shares`,
-    {
-      method: 'POST',
-      body: JSON.stringify(options),
-    },
-  );
+const base = (owner: string, slug: string) =>
+  `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/shares`;
+
+export function create(owner: string, repoSlug: string, options: CreateShareLinkOptions) {
+  return apiFetch<ShareLinkCreatedResponse>(base(owner, repoSlug), {
+    method: 'POST',
+    body: JSON.stringify(options),
+  });
 }
 
-export function list(repoSlug: string, path?: string) {
+export function list(owner: string, repoSlug: string, path?: string) {
   const query = path ? `?path=${encodeURIComponent(path)}` : '';
-  return apiFetch<ShareLinkListResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/shares${query}`,
-  );
+  return apiFetch<ShareLinkListResponse>(`${base(owner, repoSlug)}${query}`);
 }
 
-export function revoke(repoSlug: string, id: string) {
-  return apiFetch<void>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/shares/${id}`,
-    { method: 'DELETE' },
-  );
+export function revoke(owner: string, repoSlug: string, id: string) {
+  return apiFetch<void>(`${base(owner, repoSlug)}/${id}`, { method: 'DELETE' });
 }
 
 export function resolve(token: string) {

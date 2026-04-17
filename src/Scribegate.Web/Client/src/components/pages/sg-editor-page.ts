@@ -74,6 +74,10 @@ export class SgEditorPage extends LitElement {
   @state() private _templates: TemplateSummaryResponse[] = [];
   @state() private _selectedTemplateId = '';
 
+  private get _owner(): string {
+    return this.location?.params?.owner ?? '';
+  }
+
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
   }
@@ -86,12 +90,18 @@ export class SgEditorPage extends LitElement {
     super.connectedCallback();
     this._isNew = this.location?.route?.path?.includes('/edit/new');
 
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
+
     try {
-      this._repo = await repoApi.get(this._slug);
+      this._repo = await repoApi.get(this._owner, this._slug);
 
       if (!this._isNew && this._editPath) {
         const path = this._editPath.endsWith('.md') ? this._editPath : this._editPath + '.md';
-        const doc = await docApi.get(this._slug, path);
+        const doc = await docApi.get(this._owner, this._slug, path);
         this._content = doc.content ?? '';
         this._path = doc.path;
       }
@@ -101,7 +111,7 @@ export class SgEditorPage extends LitElement {
         // (private repo, non-member) we silently hide the selector rather than
         // blocking the whole editor.
         try {
-          const res = await templateApi.list(this._slug);
+          const res = await templateApi.list(this._owner, this._slug);
           this._templates = res.items;
         } catch {
           this._templates = [];
@@ -128,7 +138,7 @@ export class SgEditorPage extends LitElement {
     }
 
     try {
-      const tpl = await templateApi.get(this._slug, id);
+      const tpl = await templateApi.get(this._owner, this._slug, id);
       this._content = tpl.content;
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Failed to load template.';
@@ -140,23 +150,27 @@ export class SgEditorPage extends LitElement {
     this._error = '';
     this._saving = true;
 
+    const repoBase = `/${this._owner}/${this._slug}`;
+
     try {
       if (this._isNew) {
         const doc = await docApi.create(
+          this._owner,
           this._slug,
           this._path,
           this._content,
           this._message || 'Initial content',
         );
-        window.location.href = `/${this._slug}/${doc.path.replace(/\.md$/, '')}`;
+        window.location.href = `${repoBase}/${doc.path.replace(/\.md$/, '')}`;
       } else {
         await docApi.update(
+          this._owner,
           this._slug,
           this._path,
           this._content,
           this._message || 'Update content',
         );
-        window.location.href = `/${this._slug}/${this._path.replace(/\.md$/, '')}`;
+        window.location.href = `${repoBase}/${this._path.replace(/\.md$/, '')}`;
       }
     } catch (err) {
       this._error = err instanceof ApiException
@@ -170,9 +184,12 @@ export class SgEditorPage extends LitElement {
   render() {
     if (this._loading) return html`<p>Loading...</p>`;
 
+    const repoBase = `/${this._owner}/${this._slug}`;
+
     return html`
       ${this._repo ? html`
         <sg-breadcrumb
+          repoOwner=${this._repo.owner}
           repoSlug=${this._repo.slug}
           repoName=${this._repo.name}
           path=${this._path}
@@ -214,7 +231,7 @@ export class SgEditorPage extends LitElement {
       </div>
 
       <div class="actions">
-        <a class="btn btn-secondary" href=${this._isNew ? `/${this._slug}` : `/${this._slug}/${this._path}`}>Cancel</a>
+        <a class="btn btn-secondary" href=${this._isNew ? repoBase : `${repoBase}/${this._path}`}>Cancel</a>
         <button class="btn btn-primary" @click=${this._save} ?disabled=${this._saving}>
           ${this._saving ? 'Saving...' : 'Save'}
         </button>

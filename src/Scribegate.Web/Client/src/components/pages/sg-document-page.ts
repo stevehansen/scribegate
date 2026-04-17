@@ -36,6 +36,10 @@ export class SgDocumentPage extends LitElement {
   @state() private _error = '';
   @state() private _shareOpen = false;
 
+  private get _owner(): string {
+    return this.location?.params?.owner ?? '';
+  }
+
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
   }
@@ -51,10 +55,15 @@ export class SgDocumentPage extends LitElement {
   }
 
   private async _load() {
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [repo, doc] = await Promise.all([
-        repoApi.get(this._slug),
-        docApi.get(this._slug, this._path),
+        repoApi.get(this._owner, this._slug),
+        docApi.get(this._owner, this._slug, this._path),
       ]);
       this._repo = repo;
       this._doc = doc;
@@ -67,11 +76,13 @@ export class SgDocumentPage extends LitElement {
 
   render() {
     if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error) return html`<div class="not-found"><p>${this._error}</p><p><a href="/${this._slug}">Back to repository</a></p></div>`;
+    const repoBase = `/${this._owner}/${this._slug}`;
+    if (this._error) return html`<div class="not-found"><p>${this._error}</p><p><a href="${repoBase}">Back to repository</a></p></div>`;
     if (!this._doc || !this._repo) return html``;
 
     return html`
       <sg-breadcrumb
+        repoOwner=${this._repo.owner}
         repoSlug=${this._repo.slug}
         repoName=${this._repo.name}
         path=${this._doc.path}
@@ -80,10 +91,10 @@ export class SgDocumentPage extends LitElement {
       <div class="meta">
         ${this._doc.updatedAt ? html`Updated <sg-time-ago datetime=${this._doc.updatedAt}></sg-time-ago>` : ''}
         ${authState.isAuthenticated
-          ? html`<a href="/${this._slug}/edit/${this._doc.path.replace(/\.md$/, '')}">Edit</a>`
+          ? html`<a href="${repoBase}/edit/${this._doc.path.replace(/\.md$/, '')}">Edit</a>`
           : ''}
-        <a href="/${this._slug}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
-        <a href="/${this._slug}/proposals">Proposals</a>
+        <a href="${repoBase}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
+        <a href="${repoBase}/proposals">Proposals</a>
         ${authState.isAuthenticated
           ? html`<a href="#" @click=${(e: Event) => { e.preventDefault(); this._shareOpen = true; }}>Share</a>`
           : ''}
@@ -95,6 +106,7 @@ export class SgDocumentPage extends LitElement {
 
       <sg-share-dialog
         ?open=${this._shareOpen}
+        repoOwner=${this._repo.owner}
         repoSlug=${this._repo.slug}
         docPath=${this._doc.path}
         @close=${() => { this._shareOpen = false; }}

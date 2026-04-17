@@ -51,19 +51,25 @@ export class SgProposalCreate extends LitElement {
   @state() private _saving = false;
   @state() private _error = '';
 
+  private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
 
   private async _save() {
     this._error = '';
     this._saving = true;
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._saving = false;
+      return;
+    }
     try {
-      const result = await proposalApi.create(this._slug, {
+      const result = await proposalApi.create(this._owner, this._slug, {
         title: this._title,
         content: this._content,
         documentPath: this._documentPath || undefined,
         description: this._description || undefined,
       });
-      window.location.href = `/${this._slug}/proposals/${result.id}`;
+      window.location.href = `/${this._owner}/${this._slug}/proposals/${result.id}`;
     } catch (err) {
       this._error = err instanceof ApiException
         ? (err.error.errors?.map(e => e.message).join(' ') || err.error.message)
@@ -93,7 +99,7 @@ export class SgProposalCreate extends LitElement {
       </div>
 
       <div class="actions">
-        <a class="btn btn-secondary" href="/${this._slug}/proposals">Cancel</a>
+        <a class="btn btn-secondary" href="/${this._owner}/${this._slug}/proposals">Cancel</a>
         <button class="btn btn-primary" @click=${this._save} ?disabled=${this._saving}>
           ${this._saving ? 'Creating...' : 'Create Proposal'}
         </button>

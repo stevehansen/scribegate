@@ -34,6 +34,7 @@ export interface RepositoryResponse {
   id: string;
   name: string;
   slug: string;
+  owner: string;
   description?: string;
   visibility: string;
   createdAt: string;

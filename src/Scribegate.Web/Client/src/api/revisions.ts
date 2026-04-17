@@ -1,14 +1,13 @@
 import { apiFetch } from './client.js';
 import type { RevisionListResponse, RevisionResponse } from './types.js';
 
-export function list(repoSlug: string, docPath: string) {
-  return apiFetch<RevisionListResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/revisions/${docPath}`,
-  );
+const base = (owner: string, slug: string) =>
+  `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/revisions`;
+
+export function list(owner: string, repoSlug: string, docPath: string) {
+  return apiFetch<RevisionListResponse>(`${base(owner, repoSlug)}/${docPath}`);
 }
 
-export function get(repoSlug: string, documentId: string, revisionId: string) {
-  return apiFetch<RevisionResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/revisions/${documentId}/${revisionId}`,
-  );
+export function get(owner: string, repoSlug: string, documentId: string, revisionId: string) {
+  return apiFetch<RevisionResponse>(`${base(owner, repoSlug)}/${documentId}/${revisionId}`);
 }

@@ -66,6 +66,7 @@ export class SgWebhooksPage extends LitElement {
     details { margin-top: 0.75rem; }
   `];
 
+  @state() private _repoOwner = '';
   @state() private _repoSlug = '';
   @state() private _hooks: WebhookResponse[] = [];
   @state() private _loading = true;
@@ -80,6 +81,7 @@ export class SgWebhooksPage extends LitElement {
   @state() private _deliveries: WebhookDeliveryResponse[] = [];
 
   onBeforeEnter(location: RouterLocation) {
+    this._repoOwner = (location.params.owner as string) ?? '';
     this._repoSlug = (location.params.slug as string) ?? '';
   }
 
@@ -95,8 +97,13 @@ export class SgWebhooksPage extends LitElement {
   private async _load() {
     this._loading = true;
     this._error = '';
+    if (!this._repoOwner || !this._repoSlug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
-      const res = await webhookApi.list(this._repoSlug);
+      const res = await webhookApi.list(this._repoOwner, this._repoSlug);
       this._hooks = res.items;
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to load webhooks.');
@@ -126,7 +133,7 @@ export class SgWebhooksPage extends LitElement {
     if (this._events.size === 0) { this._error = 'Select at least one event.'; return; }
     this._submitting = true;
     try {
-      this._created = await webhookApi.create(this._repoSlug, {
+      this._created = await webhookApi.create(this._repoOwner, this._repoSlug, {
         url: this._url.trim(),
         description: this._description.trim() || undefined,
         events: Array.from(this._events),
@@ -144,7 +151,7 @@ export class SgWebhooksPage extends LitElement {
 
   private async _onToggle(hook: WebhookResponse) {
     try {
-      await webhookApi.update(this._repoSlug, hook.id, { enabled: !hook.enabled });
+      await webhookApi.update(this._repoOwner, this._repoSlug, hook.id, { enabled: !hook.enabled });
       await this._load();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to update webhook.');
@@ -154,7 +161,7 @@ export class SgWebhooksPage extends LitElement {
   private async _onDelete(hook: WebhookResponse) {
     if (!confirm(`Delete webhook for ${hook.url}? This cannot be undone.`)) return;
     try {
-      await webhookApi.remove(this._repoSlug, hook.id);
+      await webhookApi.remove(this._repoOwner, this._repoSlug, hook.id);
       await this._load();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to delete webhook.');
@@ -163,7 +170,7 @@ export class SgWebhooksPage extends LitElement {
 
   private async _onTest(hook: WebhookResponse) {
     try {
-      await webhookApi.test(this._repoSlug, hook.id);
+      await webhookApi.test(this._repoOwner, this._repoSlug, hook.id);
       this._copyFeedback = `Ping queued for ${hook.url}`;
       setTimeout(() => { this._copyFeedback = ''; }, 2500);
     } catch (err) {
@@ -178,7 +185,7 @@ export class SgWebhooksPage extends LitElement {
       return;
     }
     try {
-      const res = await webhookApi.deliveries(this._repoSlug, hook.id);
+      const res = await webhookApi.deliveries(this._repoOwner, this._repoSlug, hook.id);
       this._deliveries = res.items;
       this._deliveriesFor = hook.id;
     } catch (err) {
@@ -204,12 +211,12 @@ export class SgWebhooksPage extends LitElement {
 
   render() {
     return html`
-      <h1>Webhooks — ${this._repoSlug}</h1>
+      <h1>Webhooks — ${this._repoOwner}/${this._repoSlug}</h1>
       <p class="help">
         Webhooks let external services react to events in this repository. Each request includes an
         <code>X-Scribegate-Signature-256</code> header (HMAC-SHA256 of the raw body using your secret).
         Verify it on your endpoint before trusting the payload.
-        <a href="/${this._repoSlug}">← back to repository</a>
+        <a href="/${this._repoOwner}/${this._repoSlug}">← back to repository</a>
       </p>
 
       ${this._created ? html`

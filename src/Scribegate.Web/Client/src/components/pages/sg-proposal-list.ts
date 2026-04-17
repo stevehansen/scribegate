@@ -65,6 +65,7 @@ export class SgProposalList extends LitElement {
   @state() private _error = '';
   @state() private _statusFilter = 'Open';
 
+  private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
 
   async connectedCallback() {
@@ -74,10 +75,15 @@ export class SgProposalList extends LitElement {
 
   private async _load() {
     this._loading = true;
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [repo, proposals] = await Promise.all([
-        repoApi.get(this._slug),
-        proposalApi.list(this._slug, this._statusFilter === 'All' ? undefined : this._statusFilter),
+        repoApi.get(this._owner, this._slug),
+        proposalApi.list(this._owner, this._slug, this._statusFilter === 'All' ? undefined : this._statusFilter),
       ]);
       this._repo = repo;
       this._proposals = proposals.items;
@@ -100,14 +106,15 @@ export class SgProposalList extends LitElement {
     if (!this._repo) return html``;
 
     const tabs = ['Open', 'Approved', 'Rejected', 'Withdrawn', 'All'];
+    const repoBase = `/${this._owner}/${this._slug}`;
 
     return html`
-      <sg-breadcrumb repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
+      <sg-breadcrumb repoOwner=${this._repo.owner} repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
 
       <div class="header">
         <h1>Proposals</h1>
         ${authState.isAuthenticated
-          ? html`<a class="btn btn-primary" href="/${this._slug}/proposals/new">New proposal</a>`
+          ? html`<a class="btn btn-primary" href="${repoBase}/proposals/new">New proposal</a>`
           : ''}
       </div>
 
@@ -124,7 +131,7 @@ export class SgProposalList extends LitElement {
             ${this._proposals.map(p => html`
               <div class="proposal">
                 <div>
-                  <a class="proposal-title" href="/${this._slug}/proposals/${p.id}">${p.title}</a>
+                  <a class="proposal-title" href="${repoBase}/proposals/${p.id}">${p.title}</a>
                   <div class="proposal-meta">
                     ${p.documentPath ?? 'new document'} &middot; by ${p.createdBy} &middot;
                     ${p.reviewCount} review${p.reviewCount !== 1 ? 's' : ''}, ${p.commentCount} comment${p.commentCount !== 1 ? 's' : ''}

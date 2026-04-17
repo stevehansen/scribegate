@@ -27,6 +27,8 @@ export class SgRepositoryList extends LitElement {
     .repo:hover { border-color: var(--sg-border-hover); border-left-color: var(--sg-primary); box-shadow: var(--sg-shadow-md); }
     .repo a { text-decoration: none; color: inherit; display: block; flex: 1; }
     .repo-name { font-weight: 600; color: var(--sg-primary); }
+    .repo-owner { color: var(--sg-text-secondary); font-weight: 500; }
+    .repo-sep { color: var(--sg-text-muted); margin: 0 0.125rem; }
     .repo-desc { font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); margin-top: 0.25rem; }
     .repo-meta { font-size: var(--sg-font-size-xs); color: var(--sg-text-muted); margin-top: 0.375rem; }
     .badge {
@@ -125,7 +127,7 @@ export class SgRepositoryList extends LitElement {
     this._dialogError = '';
 
     try {
-      await repoApi.create(
+      const created = await repoApi.create(
         data.get('name') as string,
         data.get('description') as string || undefined,
         data.get('visibility') as string,
@@ -133,7 +135,7 @@ export class SgRepositoryList extends LitElement {
       const dialog = this.renderRoot.querySelector('dialog') as HTMLDialogElement;
       dialog?.close();
       form.reset();
-      await this._load();
+      window.location.href = `/${created.owner}/${created.slug}`;
     } catch (err) {
       this._dialogError = err instanceof ApiException ? err.error.message : 'Failed to create repository.';
     }
@@ -169,8 +171,8 @@ export class SgRepositoryList extends LitElement {
           <div class="repos">
             ${this._repos.map((r) => html`
               <div class="repo">
-                <a href="/${r.slug}">
-                  <div class="repo-name">${r.name}</div>
+                <a href="/${r.owner}/${r.slug}">
+                  <div class="repo-name"><span class="repo-owner">${r.owner}</span><span class="repo-sep">/</span>${r.name}</div>
                   ${r.description ? html`<div class="repo-desc">${r.description}</div>` : ''}
                   <div class="repo-meta">${r.documentCount} document${r.documentCount !== 1 ? 's' : ''}</div>
                 </a>

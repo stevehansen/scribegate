@@ -12,17 +12,19 @@ export class SgBreadcrumb extends LitElement {
     .current { color: var(--sg-text); font-weight: 500; }
   `];
 
+  @property() repoOwner = '';
   @property() repoSlug = '';
   @property() repoName = '';
   @property() path = '';
 
   render() {
     const parts = this.path ? this.path.split('/').filter(Boolean) : [];
+    const repoBase = `/${this.repoOwner}/${this.repoSlug}`;
 
     return html`
       <a href="/">Repositories</a>
       <span class="sep">/</span>
-      <a href="/${this.repoSlug}">${this.repoName || this.repoSlug}</a>
+      <a href=${repoBase}>${this.repoName ? html`${this.repoOwner}/${this.repoName}` : `${this.repoOwner}/${this.repoSlug}`}</a>
       ${parts.map((part, i) => {
         const isLast = i === parts.length - 1;
         const partPath = parts.slice(0, i + 1).join('/');
@@ -30,7 +32,7 @@ export class SgBreadcrumb extends LitElement {
           <span class="sep">/</span>
           ${isLast
             ? html`<span class="current">${part}</span>`
-            : html`<a href="/${this.repoSlug}/${partPath}">${part}</a>`}
+            : html`<a href="${repoBase}/${partPath}">${part}</a>`}
         `;
       })}
     `;

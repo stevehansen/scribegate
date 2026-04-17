@@ -6,30 +6,31 @@ import type {
   UpdateTemplateRequest,
 } from './types.js';
 
-const base = (slug: string) => `/api/v1/repositories/${encodeURIComponent(slug)}/templates`;
+const base = (owner: string, slug: string) =>
+  `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/templates`;
 
-export function list(repoSlug: string) {
-  return apiFetch<TemplateListResponse>(base(repoSlug));
+export function list(owner: string, repoSlug: string) {
+  return apiFetch<TemplateListResponse>(base(owner, repoSlug));
 }
 
-export function get(repoSlug: string, id: string) {
-  return apiFetch<TemplateResponse>(`${base(repoSlug)}/${id}`);
+export function get(owner: string, repoSlug: string, id: string) {
+  return apiFetch<TemplateResponse>(`${base(owner, repoSlug)}/${id}`);
 }
 
-export function create(repoSlug: string, request: CreateTemplateRequest) {
-  return apiFetch<TemplateResponse>(base(repoSlug), {
+export function create(owner: string, repoSlug: string, request: CreateTemplateRequest) {
+  return apiFetch<TemplateResponse>(base(owner, repoSlug), {
     method: 'POST',
     body: JSON.stringify(request),
   });
 }
 
-export function update(repoSlug: string, id: string, request: UpdateTemplateRequest) {
-  return apiFetch<TemplateResponse>(`${base(repoSlug)}/${id}`, {
+export function update(owner: string, repoSlug: string, id: string, request: UpdateTemplateRequest) {
+  return apiFetch<TemplateResponse>(`${base(owner, repoSlug)}/${id}`, {
     method: 'PUT',
     body: JSON.stringify(request),
   });
 }
 
-export function remove(repoSlug: string, id: string) {
-  return apiFetch<void>(`${base(repoSlug)}/${id}`, { method: 'DELETE' });
+export function remove(owner: string, repoSlug: string, id: string) {
+  return apiFetch<void>(`${base(owner, repoSlug)}/${id}`, { method: 'DELETE' });
 }

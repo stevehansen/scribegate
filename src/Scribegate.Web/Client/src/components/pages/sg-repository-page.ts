@@ -114,6 +114,10 @@ export class SgRepositoryPage extends LitElement {
   @state() private _generatingSite = false;
   @state() private _cloneCopied = false;
 
+  private get _owner(): string {
+    return this.location?.params?.owner ?? '';
+  }
+
   private get _slug(): string {
     return this.location?.params?.slug ?? '';
   }
@@ -124,10 +128,15 @@ export class SgRepositoryPage extends LitElement {
   }
 
   private async _load() {
+    if (!this._owner || !this._slug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
       const [repo, docs] = await Promise.all([
-        repoApi.get(this._slug),
-        docApi.list(this._slug),
+        repoApi.get(this._owner, this._slug),
+        docApi.list(this._owner, this._slug),
       ]);
       this._repo = repo;
       this._docs = docs.items;
@@ -142,7 +151,7 @@ export class SgRepositoryPage extends LitElement {
     if (this._exporting) return;
     this._exporting = true;
     try {
-      await exportsApi.downloadRepoZip(this._slug);
+      await exportsApi.downloadRepoZip(this._owner, this._slug);
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Export failed.';
     } finally {
@@ -154,7 +163,7 @@ export class SgRepositoryPage extends LitElement {
     if (this._generatingSite) return;
     this._generatingSite = true;
     try {
-      await exportsApi.buildSite(this._slug);
+      await exportsApi.buildSite(this._owner, this._slug);
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Site generation failed.';
     } finally {
@@ -198,7 +207,7 @@ export class SgRepositoryPage extends LitElement {
     this._dialogError = '';
 
     try {
-      const updated = await repoApi.update(this._slug, {
+      const updated = await repoApi.update(this._owner, this._slug, {
         name: data.get('name') as string,
         description: data.get('description') as string || undefined,
         visibility: data.get('visibility') as string,
@@ -208,7 +217,7 @@ export class SgRepositoryPage extends LitElement {
       dialog?.close();
       // If slug changed, navigate to new URL
       if (updated.slug !== this._slug) {
-        window.history.replaceState(null, '', `/${updated.slug}`);
+        window.history.replaceState(null, '', `/${updated.owner}/${updated.slug}`);
       }
     } catch (err) {
       this._dialogError = err instanceof ApiException ? err.error.message : 'Failed to update repository.';
@@ -220,22 +229,25 @@ export class SgRepositoryPage extends LitElement {
     if (this._error) return html`<p class="error">${this._error}</p>`;
     if (!this._repo) return html``;
 
+    const repoBase = `/${this._owner}/${this._slug}`;
+
     return html`
       <sg-breadcrumb
+        repoOwner=${this._repo.owner}
         repoSlug=${this._repo.slug}
         repoName=${this._repo.name}
       ></sg-breadcrumb>
 
       <div class="header">
         <div class="info">
-          <h1>${this._repo.name} <span class="badge">${this._repo.visibility}</span></h1>
+          <h1>${this._repo.owner}/${this._repo.name} <span class="badge">${this._repo.visibility}</span></h1>
           ${this._repo.description ? html`<p>${this._repo.description}</p>` : ''}
         </div>
         <div class="actions">
-          <a class="btn btn-secondary" href="/${this._slug}/proposals">Proposals</a>
-          <a class="btn btn-secondary" href="/${this._slug}/members">Members</a>
-          <a class="btn btn-secondary" href="/${this._slug}/webhooks">Webhooks</a>
-          <a class="btn btn-secondary" href="/${this._slug}/templates">Templates</a>
+          <a class="btn btn-secondary" href="${repoBase}/proposals">Proposals</a>
+          <a class="btn btn-secondary" href="${repoBase}/members">Members</a>
+          <a class="btn btn-secondary" href="${repoBase}/webhooks">Webhooks</a>
+          <a class="btn btn-secondary" href="${repoBase}/templates">Templates</a>
           <button class="btn btn-secondary" @click=${this._onExport} ?disabled=${this._exporting}>
             ${this._exporting ? 'Exporting…' : 'Export'}
           </button>
@@ -245,7 +257,7 @@ export class SgRepositoryPage extends LitElement {
           ${authState.isAuthenticated
             ? html`
                 <button class="btn btn-secondary" @click=${this._openSettings}>Settings</button>
-                <a class="btn btn-primary" href="/${this._slug}/edit/new">New document</a>`
+                <a class="btn btn-primary" href="${repoBase}/edit/new">New document</a>`
             : ''}
         </div>
       </div>
@@ -268,6 +280,7 @@ export class SgRepositoryPage extends LitElement {
         <h2>Documents</h2>
         <sg-file-tree
           .documents=${this._docs}
+          repoOwner=${this._owner}
           repoSlug=${this._slug}
         ></sg-file-tree>
       </section>

@@ -1,57 +1,47 @@
 import { apiFetch } from './client.js';
 import type { ProposalResponse, ProposalListResponse, ProposalSummary } from './types.js';
 
-export function list(repoSlug: string, status?: string) {
+const base = (owner: string, slug: string) =>
+  `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/proposals`;
+
+export function list(owner: string, repoSlug: string, status?: string) {
   const params = status ? `?status=${status}` : '';
-  return apiFetch<ProposalListResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals${params}`,
-  );
+  return apiFetch<ProposalListResponse>(`${base(owner, repoSlug)}${params}`);
 }
 
-export function get(repoSlug: string, id: string) {
-  return apiFetch<ProposalResponse>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}`,
-  );
+export function get(owner: string, repoSlug: string, id: string) {
+  return apiFetch<ProposalResponse>(`${base(owner, repoSlug)}/${id}`);
 }
 
-export function create(repoSlug: string, data: { title: string; content: string; documentPath?: string; documentId?: string; description?: string }) {
-  return apiFetch<ProposalSummary>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals`,
-    { method: 'POST', body: JSON.stringify(data) },
-  );
+export function create(owner: string, repoSlug: string, data: { title: string; content: string; documentPath?: string; documentId?: string; description?: string }) {
+  return apiFetch<ProposalSummary>(base(owner, repoSlug), {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
-export function update(repoSlug: string, id: string, data: { title?: string; description?: string; content?: string }) {
-  return apiFetch<ProposalSummary>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}`,
-    { method: 'PUT', body: JSON.stringify(data) },
-  );
+export function update(owner: string, repoSlug: string, id: string, data: { title?: string; description?: string; content?: string }) {
+  return apiFetch<ProposalSummary>(`${base(owner, repoSlug)}/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
-export function submit(repoSlug: string, id: string) {
-  return apiFetch<{ status: string }>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}/submit`,
-    { method: 'POST' },
-  );
+export function submit(owner: string, repoSlug: string, id: string) {
+  return apiFetch<{ status: string }>(`${base(owner, repoSlug)}/${id}/submit`, { method: 'POST' });
 }
 
-export function withdraw(repoSlug: string, id: string) {
-  return apiFetch<{ status: string }>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}/withdraw`,
-    { method: 'POST' },
-  );
+export function withdraw(owner: string, repoSlug: string, id: string) {
+  return apiFetch<{ status: string }>(`${base(owner, repoSlug)}/${id}/withdraw`, { method: 'POST' });
 }
 
-export function approve(repoSlug: string, id: string) {
+export function approve(owner: string, repoSlug: string, id: string) {
   return apiFetch<{ status: string; revisionId: string }>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}/approve`,
+    `${base(owner, repoSlug)}/${id}/approve`,
     { method: 'POST' },
   );
 }
 
-export function reject(repoSlug: string, id: string) {
-  return apiFetch<{ status: string }>(
-    `/api/v1/repositories/${encodeURIComponent(repoSlug)}/proposals/${id}/reject`,
-    { method: 'POST' },
-  );
+export function reject(owner: string, repoSlug: string, id: string) {
+  return apiFetch<{ status: string }>(`${base(owner, repoSlug)}/${id}/reject`, { method: 'POST' });
 }

@@ -73,6 +73,7 @@ export class SgShareDialog extends LitElement {
   `];
 
   @property({ type: Boolean, reflect: true }) open = false;
+  @property() repoOwner = '';
   @property() repoSlug = '';
   @property() docPath = '';
 
@@ -103,7 +104,7 @@ export class SgShareDialog extends LitElement {
 
   private async _loadExisting() {
     try {
-      const result = await sharesApi.list(this.repoSlug, this.docPath);
+      const result = await sharesApi.list(this.repoOwner, this.repoSlug, this.docPath);
       this._existing = result.items;
     } catch {
       this._existing = [];
@@ -115,7 +116,7 @@ export class SgShareDialog extends LitElement {
     this._error = '';
     this._submitting = true;
     try {
-      const result = await sharesApi.create(this.repoSlug, {
+      const result = await sharesApi.create(this.repoOwner, this.repoSlug, {
         path: this.docPath,
         description: this._description.trim() || undefined,
         expiresInDays: this._permanent ? undefined : this._expiresInDays,
@@ -133,7 +134,7 @@ export class SgShareDialog extends LitElement {
   private async _onRevoke(id: string) {
     if (!confirm('Revoke this share link? Anyone using it will lose access immediately.')) return;
     try {
-      await sharesApi.revoke(this.repoSlug, id);
+      await sharesApi.revoke(this.repoOwner, this.repoSlug, id);
       await this._loadExisting();
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Failed to revoke.';

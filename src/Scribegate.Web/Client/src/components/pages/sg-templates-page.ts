@@ -61,6 +61,7 @@ export class SgTemplatesPage extends LitElement {
     .dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
   `];
 
+  @state() private _repoOwner = '';
   @state() private _repoSlug = '';
   @state() private _templates: TemplateSummaryResponse[] = [];
   @state() private _loading = true;
@@ -80,6 +81,7 @@ export class SgTemplatesPage extends LitElement {
   @state() private _editError = '';
 
   onBeforeEnter(location: RouterLocation) {
+    this._repoOwner = (location.params.owner as string) ?? '';
     this._repoSlug = (location.params.slug as string) ?? '';
   }
 
@@ -91,8 +93,13 @@ export class SgTemplatesPage extends LitElement {
   private async _load() {
     this._loading = true;
     this._error = '';
+    if (!this._repoOwner || !this._repoSlug) {
+      this._error = 'Missing repository owner or slug.';
+      this._loading = false;
+      return;
+    }
     try {
-      const res = await templateApi.list(this._repoSlug);
+      const res = await templateApi.list(this._repoOwner, this._repoSlug);
       this._templates = res.items;
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to load templates.');
@@ -116,7 +123,7 @@ export class SgTemplatesPage extends LitElement {
     if (!this._content) { this._error = 'Content is required.'; return; }
     this._submitting = true;
     try {
-      await templateApi.create(this._repoSlug, {
+      await templateApi.create(this._repoOwner, this._repoSlug, {
         name: this._name.trim(),
         description: this._description.trim() || null,
         content: this._content,
@@ -135,7 +142,7 @@ export class SgTemplatesPage extends LitElement {
   private async _onEdit(summary: TemplateSummaryResponse) {
     this._editError = '';
     try {
-      const full = await templateApi.get(this._repoSlug, summary.id);
+      const full = await templateApi.get(this._repoOwner, this._repoSlug, summary.id);
       this._editing = full;
       this._editName = full.name;
       this._editDescription = full.description ?? '';
@@ -154,7 +161,7 @@ export class SgTemplatesPage extends LitElement {
     this._editError = '';
     this._submitting = true;
     try {
-      await templateApi.update(this._repoSlug, this._editing.id, {
+      await templateApi.update(this._repoOwner, this._repoSlug, this._editing.id, {
         name: this._editName.trim(),
         description: this._editDescription.trim() || null,
         content: this._editContent,
@@ -180,7 +187,7 @@ export class SgTemplatesPage extends LitElement {
   private async _onDelete(summary: TemplateSummaryResponse) {
     if (!confirm(`Delete template "${summary.name}"? This cannot be undone.`)) return;
     try {
-      await templateApi.remove(this._repoSlug, summary.id);
+      await templateApi.remove(this._repoOwner, this._repoSlug, summary.id);
       await this._load();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to delete template.');
@@ -191,11 +198,11 @@ export class SgTemplatesPage extends LitElement {
     const canEdit = authState.isAuthenticated;
 
     return html`
-      <h1>Templates — ${this._repoSlug}</h1>
+      <h1>Templates — ${this._repoOwner}/${this._repoSlug}</h1>
       <p class="help">
         Templates prefill the editor when creating a new document. Authors can
         pick a template on the "New document" page, or start from a blank canvas.
-        <a href="/${this._repoSlug}">← back to repository</a>
+        <a href="/${this._repoOwner}/${this._repoSlug}">← back to repository</a>
       </p>
 
       ${canEdit ? html`

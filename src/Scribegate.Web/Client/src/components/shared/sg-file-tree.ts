@@ -56,12 +56,13 @@ export class SgFileTree extends LitElement {
   `];
 
   @property({ attribute: false }) documents: DocumentSummary[] = [];
+  @property() repoOwner = '';
   @property() repoSlug = '';
 
   private _renderNode(node: TreeNode): unknown {
     if (node.path) {
       const urlPath = node.path.replace(/\.md$/, '');
-      return html`<li class="file"><a href="/${this.repoSlug}/${urlPath}">${node.name}</a></li>`;
+      return html`<li class="file"><a href="/${this.repoOwner}/${this.repoSlug}/${urlPath}">${node.name}</a></li>`;
     }
     return html`
       <li class="folder">
