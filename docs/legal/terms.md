@@ -2,7 +2,7 @@
 
 _Last updated: 2026-04-17_
 
-> **Not legal advice.** This document is a starting point for the managed Scribegate service at `scribegate.dev`. Before a commercial launch, have it reviewed by a qualified lawyer. Self-hosted deployments are governed only by the software license ([FSL-1.1-MIT](../../LICENSE.md)), not by these terms.
+> **Not legal advice.** This document is a starting point for the managed Scribegate service at `scribegate.dev`. Before a commercial launch, have it reviewed by a qualified lawyer. Self-hosted deployments are governed only by the software license ([FSL-1.1-MIT](../license.md)), not by these terms.
 
 These Terms of Service ("Terms") govern your use of the managed Scribegate service at `scribegate.dev` (the "Service"), operated by:
 
@@ -60,7 +60,7 @@ If you want a copy of your content before deleting your account, use the reposit
 
 ## 9. Intellectual property
 
-Scribegate, the Scribegate name, and the `scribegate.dev` brand are ours. The Scribegate software source code is released under [FSL-1.1-MIT](../../LICENSE.md). You may run, modify, and self-host the software under those terms.
+Scribegate, the Scribegate name, and the `scribegate.dev` brand are ours. The Scribegate software source code is released under [FSL-1.1-MIT](../license.md). You may run, modify, and self-host the software under those terms.
 
 ## 10. Disclaimers and liability
 

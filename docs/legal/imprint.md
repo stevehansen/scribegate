@@ -39,7 +39,7 @@ See the [Privacy Policy](./privacy.md). The lead supervisory authority for data 
 
 ## Designated point of contact for EU authorities (DSA Art. 11)
 
-See the [Takedown Policy](./takedown.md#designated-point-of-contact-eu-dsa-art-11--art-12).
+See the [Takedown Policy](./takedown.md#designated-point-of-contact-eu-dsa-art-11-art-12).
 
 ## Liability for content
 

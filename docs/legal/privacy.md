@@ -99,7 +99,7 @@ If you believe we've handled your data incorrectly, you can complain to your loc
 
 ## 8. How we secure data
 
-See the full [Security Policy](../../SECURITY.md) for details. Summary:
+See the full [Security Policy](../security.md) for details. Summary:
 
 - TLS in transit (Let's Encrypt via Caddy)
 - Encrypted volumes at rest (Hetzner Cloud Volume encryption)

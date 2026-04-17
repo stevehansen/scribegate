@@ -8,6 +8,7 @@ on:
       - 'mkdocs.yml'
       - 'SECURITY.md'
       - 'CONTRIBUTING.md'
+      - 'LICENSE.md'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +38,7 @@ jobs:
         run: |
           cp SECURITY.md docs/security.md
           cp CONTRIBUTING.md docs/contributing.md
+          cp LICENSE.md docs/license.md
 
       - name: Build site
         run: mkdocs build --strict

@@ -42,7 +42,7 @@ We welcome good-faith security research. Please:
 - Don't access other users' data beyond the minimum needed to demonstrate the issue
 - Don't run denial-of-service tests against the production service
 
-We won't pursue legal action against researchers who operate in good faith under these principles. See [SECURITY.md](../../SECURITY.md) for the full vulnerability reporting process.
+We won't pursue legal action against researchers who operate in good faith under these principles. See [SECURITY.md](../security.md) for the full vulnerability reporting process.
 
 ## Enforcement
 
