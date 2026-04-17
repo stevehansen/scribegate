@@ -37,6 +37,7 @@ public static class MediaEndpoints
         IRepositoryStore repoStore,
         ScribegateDbContext db,
         UserContext userContext,
+        AuthorizationHelper authz,
         AuditService audit,
         TierService tierService,
         IConfiguration config,
@@ -44,6 +45,10 @@ public static class MediaEndpoints
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         // Validate file
         if (file.Length == 0)
@@ -135,14 +140,20 @@ public static class MediaEndpoints
     private static async Task<IResult> ListMedia(
         string owner,
         string repoSlug,
+        HttpContext http,
         int skip = 0,
         int take = 50,
         IRepositoryStore repoStore = default!,
         ScribegateDbContext db = default!,
+        AuthorizationHelper authz = default!,
+        UserContext userContext = default!,
         CancellationToken ct = default)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var assets = await db.MediaAssets
             .Include(m => m.UploadedBy)
@@ -173,10 +184,16 @@ public static class MediaEndpoints
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var asset = await db.MediaAssets
             .Include(m => m.UploadedBy)
@@ -201,10 +218,16 @@ public static class MediaEndpoints
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
         ScribegateDbContext db,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var asset = await db.MediaAssets
             .FirstOrDefaultAsync(m => m.Id == id && m.RepositoryId == repo.Id, ct);

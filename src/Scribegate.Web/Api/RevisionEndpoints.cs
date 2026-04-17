@@ -32,10 +32,16 @@ public static class RevisionEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
         var normalizedPath = PathHelper.NormalizePath(path);
@@ -67,10 +73,16 @@ public static class RevisionEndpoints
         Guid revisionId,
         IRepositoryStore repoStore,
         IRevisionStore revisionStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
         var revision = await revisionStore.GetByIdAsync(revisionId, ct);

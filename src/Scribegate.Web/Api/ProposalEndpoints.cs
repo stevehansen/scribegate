@@ -28,14 +28,20 @@ public static class ProposalEndpoints
         string owner,
         string repoSlug,
         string? status,
+        HttpContext http,
         int skip = 0,
         int take = 50,
         IRepositoryStore repoStore = default!,
         IProposalStore proposalStore = default!,
+        AuthorizationHelper authz = default!,
+        UserContext userContext = default!,
         CancellationToken ct = default)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         ProposalStatus? statusFilter = null;
         if (status is not null && Enum.TryParse<ProposalStatus>(status, ignoreCase: true, out var ps))
@@ -69,10 +75,16 @@ public static class ProposalEndpoints
         IRevisionStore revisionStore,
         IReviewStore reviewStore,
         ICommentStore commentStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)
@@ -127,6 +139,8 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         IDocumentStore documentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         AuditService audit,
         NotificationService notifications,
         IWebhookDispatcher webhooks,
@@ -134,6 +148,10 @@ public static class ProposalEndpoints
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var errors = new List<ApiFieldError>();
         if (string.IsNullOrWhiteSpace(request.Title))
@@ -224,10 +242,16 @@ public static class ProposalEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)
@@ -263,12 +287,18 @@ public static class ProposalEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)
@@ -278,6 +308,9 @@ public static class ProposalEndpoints
             return Error("PROPOSAL_NOT_DRAFT", "Only draft proposals can be submitted.", 422);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        if (proposal.CreatedById != userId)
+            return Forbidden("You can only submit your own proposals.");
+
         proposal.Status = ProposalStatus.Open;
         await proposalStore.UpdateAsync(proposal, ct);
 
@@ -301,12 +334,18 @@ public static class ProposalEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)

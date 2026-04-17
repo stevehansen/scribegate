@@ -29,10 +29,16 @@ public static class DocumentEndpoints
         string repoSlug,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
         var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
@@ -51,10 +57,16 @@ public static class DocumentEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
         var normalizedPath = PathHelper.NormalizePath(path);
@@ -93,6 +105,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
         UserContext userContext,
+        AuthorizationHelper authz,
         AuditService audit,
         SignatureService signatureService,
         ScribegateDbContext db,
@@ -103,6 +116,10 @@ public static class DocumentEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var errors = ValidateCreateRequest(request);
         if (errors.Count > 0)
@@ -223,6 +240,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
         UserContext userContext,
+        AuthorizationHelper authz,
         AuditService audit,
         SignatureService signatureService,
         ScribegateDbContext db,
@@ -232,6 +250,10 @@ public static class DocumentEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
@@ -327,6 +349,8 @@ public static class DocumentEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -334,6 +358,10 @@ public static class DocumentEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
@@ -385,6 +413,8 @@ public static class DocumentEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -392,6 +422,10 @@ public static class DocumentEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
         var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);

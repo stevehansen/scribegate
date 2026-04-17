@@ -10,6 +10,7 @@ public sealed class SearchResultsResponse
 public sealed class SearchResultItem
 {
     public required Guid DocumentId { get; init; }
+    public required Guid RepositoryId { get; init; }
     public required string Path { get; init; }
     public required string RepositorySlug { get; init; }
     public required string RepositoryName { get; init; }

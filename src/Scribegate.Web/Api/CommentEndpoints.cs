@@ -26,10 +26,16 @@ public static class CommentEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         ICommentStore commentStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)

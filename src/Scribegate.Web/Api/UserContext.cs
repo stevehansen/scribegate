@@ -23,6 +23,17 @@ public class UserContext(IHttpContextAccessor httpContextAccessor)
         return Task.FromResult(userId);
     }
 
+    public Guid? TryGetCurrentUserId()
+    {
+        var principal = httpContextAccessor.HttpContext?.User;
+        if (principal?.Identity?.IsAuthenticated != true) return null;
+
+        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                  ?? principal.FindFirstValue("sub");
+
+        return Guid.TryParse(sub, out var userId) ? userId : null;
+    }
+
     public string? GetUsername()
     {
         var principal = httpContextAccessor.HttpContext?.User;

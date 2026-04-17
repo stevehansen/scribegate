@@ -25,18 +25,33 @@ public static class RepositoryEndpoints
     private static async Task<IResult> ListRepositories(
         IRepositoryStore store,
         IDocumentStore documentStore,
+        IMembershipStore membershipStore,
+        UserContext userContext,
         CancellationToken ct)
     {
         var repos = await store.ListAsync(ct);
-        var counts = await documentStore.CountByRepositoriesAsync(repos.Select(r => r.Id), ct);
+
+        // Private repositories must never appear in a listing unless the caller
+        // is a member. Membership-equivalent access (server admin, etc.) is not
+        // yet modelled here — keep parity with the per-repo read check.
+        var userId = userContext.TryGetCurrentUserId();
+        HashSet<Guid> memberRepoIds = userId is null
+            ? new HashSet<Guid>()
+            : (await membershipStore.ListByUserAsync(userId.Value, ct)).Select(m => m.RepositoryId).ToHashSet();
+
+        var visible = repos
+            .Where(r => r.Visibility == Visibility.Public || memberRepoIds.Contains(r.Id))
+            .ToList();
+
+        var counts = await documentStore.CountByRepositoriesAsync(visible.Select(r => r.Id), ct);
 
         return Results.Ok(new RepositoryListResponse
         {
-            Items = repos.Select(r => MapToResponse(r) with
+            Items = visible.Select(r => MapToResponse(r) with
             {
                 DocumentCount = counts.GetValueOrDefault(r.Id),
             }).ToList(),
-            Total = repos.Count,
+            Total = visible.Count,
         });
     }
 
@@ -45,10 +60,16 @@ public static class RepositoryEndpoints
         string slug,
         IRepositoryStore store,
         IDocumentStore documentStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
+            return ApiResults.NotFound("Repository", slug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", slug);
 
         var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
@@ -187,12 +208,17 @@ public static class RepositoryEndpoints
         UserContext userContext,
         ScribegateDbContext db,
         ISystemSettingStore settings,
+        AuthorizationHelper authz,
         AuditService audit,
         CancellationToken ct)
     {
         var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.IsAdmin, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var errors = new List<ApiFieldError>();
 
@@ -282,12 +308,18 @@ public static class RepositoryEndpoints
         string slug,
         IRepositoryStore store,
         UserContext userContext,
+        ScribegateDbContext db,
+        AuthorizationHelper authz,
         AuditService audit,
         CancellationToken ct)
     {
         var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", slug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.IsAdmin, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var deleteUserId = await userContext.GetCurrentUserIdAsync(ct);
 

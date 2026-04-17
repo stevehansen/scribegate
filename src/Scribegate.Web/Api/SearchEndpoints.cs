@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
@@ -22,9 +23,13 @@ public static class SearchEndpoints
         string q,
         string? owner,
         string? repo,
+        HttpContext http,
         int skip = 0,
         int take = 20,
         IRepositoryStore repoStore = default!,
+        IMembershipStore membershipStore = default!,
+        UserContext userContext = default!,
+        AuthorizationHelper authz = default!,
         ScribegateDbContext db = default!,
         CancellationToken ct = default)
     {
@@ -47,11 +52,37 @@ public static class SearchEndpoints
                 repository = await repoStore.GetBySlugAsync(repo, ct);
             if (repository is null)
                 return ApiResults.NotFound("Repository", repo);
+
+            // Scoped search: the caller must be able to read the target repo.
+            if (!await authz.CanReadRepositoryAsync(repository, http, userContext, ct))
+                return ApiResults.NotFound("Repository", repo);
+
             repoId = repository.Id;
+        }
+
+        // Build the set of repository IDs the caller is allowed to see. For an
+        // unscoped search we filter FTS hits to this set so anonymous and
+        // non-member callers never see snippets from private repos.
+        var userId = userContext.TryGetCurrentUserId();
+        HashSet<Guid>? allowedRepoIds = null;
+        if (repoId is null)
+        {
+            var publicIds = (await repoStore.ListAsync(ct))
+                .Where(r => r.Visibility == Visibility.Public)
+                .Select(r => r.Id);
+            allowedRepoIds = new HashSet<Guid>(publicIds);
+            if (userId is not null)
+            {
+                foreach (var m in await membershipStore.ListByUserAsync(userId.Value, ct))
+                    allowedRepoIds.Add(m.RepositoryId);
+            }
         }
 
         // Query FTS5 index
         var results = await QueryFtsAsync(db, sanitized, repoId, skip, take, ct);
+
+        if (allowedRepoIds is not null)
+            results = results.Where(r => allowedRepoIds.Contains(r.RepositoryId)).ToList();
 
         return Results.Ok(new SearchResultsResponse
         {
@@ -135,6 +166,7 @@ public static class SearchEndpoints
                     {
                         DocumentId = Guid.Parse(reader.GetString(0)),
                         Path = reader.GetString(1),
+                        RepositoryId = Guid.Parse(reader.GetString(2)),
                         RepositorySlug = reader.GetString(3),
                         RepositoryName = reader.GetString(4),
                         Snippet = reader.GetString(5),

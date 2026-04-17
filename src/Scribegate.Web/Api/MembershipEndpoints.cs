@@ -25,10 +25,16 @@ public static class MembershipEndpoints
         string repoSlug,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
+        AuthorizationHelper authz,
+        UserContext userContext,
+        HttpContext http,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
+            return ApiResults.NotFound("Repository", repoSlug);
 
         var members = await membershipStore.ListByRepositoryAsync(repo.Id, ct);
 
