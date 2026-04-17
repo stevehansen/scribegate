@@ -7,11 +7,13 @@ public class Repository
     public Guid Id { get; set; }
     public required string Name { get; set; }
     public required string Slug { get; set; }
+    public Guid OwnerId { get; set; }
     public string? Description { get; set; }
     public Visibility Visibility { get; set; } = Visibility.Private;
     public int RequiredApprovals { get; set; } = 1;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    public User? Owner { get; set; }
     public ICollection<Document> Documents { get; set; } = [];
     public ICollection<RepositoryMembership> Memberships { get; set; } = [];
 }

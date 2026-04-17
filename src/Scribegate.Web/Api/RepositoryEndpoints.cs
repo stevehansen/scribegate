@@ -152,6 +152,7 @@ public static class RepositoryEndpoints
             Id = Guid.CreateVersion7(),
             Name = request.Name!.Trim(),
             Slug = slug,
+            OwnerId = userId,
             Description = request.Description?.Trim(),
             Visibility = visibility,
         };

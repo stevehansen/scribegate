@@ -12,8 +12,29 @@ public class SqliteRepositoryStore(ScribegateDbContext db) : IRepositoryStore
     public async Task<Repository?> GetBySlugAsync(string slug, CancellationToken ct = default)
         => await db.Repositories.FirstOrDefaultAsync(r => r.Slug == slug, ct);
 
+    public async Task<Repository?> GetByOwnerAndSlugAsync(Guid ownerId, string slug, CancellationToken ct = default)
+        => await db.Repositories.FirstOrDefaultAsync(r => r.OwnerId == ownerId && r.Slug == slug, ct);
+
+    public async Task<Repository?> GetByOwnerAndSlugAsync(string ownerUsername, string slug, CancellationToken ct = default)
+    {
+        var normalized = ownerUsername.ToLowerInvariant();
+        return await (from r in db.Repositories
+                      join u in db.Users on r.OwnerId equals u.Id
+                      where r.Slug == slug && u.Username.ToLower() == normalized
+                      select r).FirstOrDefaultAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Repository>> ListAsync(CancellationToken ct = default)
-        => await db.Repositories.OrderBy(r => r.Name).ToListAsync(ct);
+        => await db.Repositories
+            .Include(r => r.Owner)
+            .OrderBy(r => r.Name)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Repository>> ListByOwnerAsync(Guid ownerId, CancellationToken ct = default)
+        => await db.Repositories
+            .Where(r => r.OwnerId == ownerId)
+            .OrderBy(r => r.Name)
+            .ToListAsync(ct);
 
     public async Task<Repository> CreateAsync(Repository repository, CancellationToken ct = default)
     {
