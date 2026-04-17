@@ -24,6 +24,7 @@ A simplified, self-hosted markdown collaboration platform with editorial review 
 - **API tokens** — long-lived, scoped credentials for programmatic access (CI/CD, AI agents).
 - **CLI tool (`sg`)** — wraps the REST API, `gh`-like UX, `--json` for machine output. AI agents use the same CLI to propose edits and participate in reviews.
 - **Security first, then usability** — all endpoints authenticated by default, public access is explicit, rate limiting is surgical (only on auth endpoints), error messages are detailed and actionable.
+- **Privacy by design (managed `scribegate.dev`)** — EU-hosted (Hetzner NBG1), no third-party analytics, no access logs by default at the reverse proxy, 30-day log retention everywhere except the audit event record, 90-day prune of IP addresses from audit events (`AuditRetentionService`). Moderation is **reactive only** — no proactive content scanning. Single trust contact: `trust@scribegate.dev`.
 
 ## Code Style & Conventions
 
@@ -94,7 +95,12 @@ docs/
 | `docs/architecture.md` | Layered architecture, entity relationships, error handling philosophy |
 | `docs/design-decisions.md` | Frontmatter schema, GitHub-style URLs, share links, CLI tool design |
 | `docs/self-hosting.md` | Step-by-step deployment for every platform |
-| `SECURITY.md` | Security model, auth, validation, rate limiting philosophy |
+| `docs/legal/imprint.md` | Belgian *Wetboek van economisch recht* Art. VI.83 imprint — operator entity (Hansen Consultancy CommV, BE 0650.743.997, Boom) |
+| `docs/legal/privacy.md` | Privacy Policy (managed `scribegate.dev`) — GDPR-framed, 90-day audit IP prune, reactive-only moderation |
+| `docs/legal/terms.md` | Terms of Service for the managed service |
+| `docs/legal/acceptable-use.md` | Acceptable Use Policy — what's prohibited, reactive moderation stance |
+| `docs/legal/takedown.md` | Notice-and-action (EU DSA Art. 16) and DMCA-style copyright flow, DSA Art. 11 designated contact |
+| `SECURITY.md` | Security model, auth, validation, rate limiting philosophy, logging & retention |
 | `CONTRIBUTING.md` | Dev setup, coding conventions, commit format, agent guide |
 
 ## Conventions

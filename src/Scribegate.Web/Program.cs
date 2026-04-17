@@ -40,6 +40,11 @@ builder.Services.AddSingleton<Scribegate.Web.Services.GitMirrorService>();
 builder.Services.AddHostedService<Scribegate.Web.Services.GitMirrorPruneService>();
 builder.Services.AddMemoryCache();
 
+// Audit retention: prune IP addresses from audit events older than the
+// configured threshold (default 90 days). Event records themselves are
+// retained indefinitely; only the personal-data column is cleared.
+builder.Services.AddHostedService<Scribegate.Web.Services.AuditRetentionService>();
+
 var webhookConfig = builder.Configuration;
 builder.Services.AddHttpClient("webhooks", client =>
 {

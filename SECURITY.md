@@ -249,6 +249,32 @@ cp /data/scribegate.db /backups/scribegate-$(date +%Y%m%d).db
 
 For zero-downtime backups, use SQLite's `.backup` command or the built-in backup API endpoint (planned).
 
+### Data location (managed hosting)
+
+The `scribegate.dev` managed instance runs in Hetzner's Nuremberg (NBG1) data centre in Germany. All customer data — SQLite database, git mirrors, uploaded media, backups — is stored on EU infrastructure and does not leave the EU. Hetzner is ISO 27001 certified and operates under the EU GDPR.
+
+Self-hosted deployments are wherever you put them; data residency is entirely under your control.
+
+## Logging & Retention
+
+Scribegate keeps a deliberately small and layered logging footprint. Retention is short by default and configurable in each layer.
+
+| Layer | What's logged | Default retention | How to change |
+|---|---|---|---|
+| **Application** (`stdout`/`stderr`) | ASP.NET Core request logs, Scribegate domain events, errors with stack traces (in Development only — production emits structured errors without traces) | 30 days via Docker's `json-file` driver with `max-size: 10m` / `max-file: 3` (configured in `docker-compose.yml`) | Adjust `logging.options` on the compose service or switch to a different driver (`journald`, `fluentd`, …) |
+| **Reverse proxy access logs** (Caddy) | Disabled by default — Caddy writes no access logs unless the `log` directive is explicitly enabled | N/A (no logs kept) | Opt in by adding a `log` block to the Caddyfile with `roll_keep_for 720h` (30 days) |
+| **Reverse proxy errors** (Caddy) | Cert renewal failures, upstream errors, TLS handshake issues | Docker default (30 days per the rotation above) | Same as application |
+| **Operating system** (`journald`) | sshd, systemd, kernel messages | Distribution default (rotated by `systemd-journald.conf`) | `/etc/systemd/journald.conf` → `MaxRetentionSec=2592000` for 30 days |
+| **Audit events** (database, `AuditEvent` table) | Every mutation: actor, action, target, timestamp, IP address, JSON details | Event record retained indefinitely by design (it's a compliance and security feature); **IP address column pruned automatically after 90 days** | `Scribegate:Audit:IpRetentionDays` setting (default 90) |
+| **Email delivery records** | SMTP send results, bounces, dispatch status | 30 days | SMTP provider's retention settings |
+
+Principles:
+
+- **Default to none.** Access logs are off by default. If you don't need them for debugging or abuse investigation, leave them off
+- **Short retention when on.** 30 days is the ceiling for everything except the audit event record
+- **Audit separates data from metadata.** The event "user X edited document Y at time T" is preserved; the IP address attached to it is removed after 90 days. Satisfies the audit purpose without retaining personal data longer than necessary
+- **Structured logging.** Application logs are JSON when the `ASPNETCORE_ENVIRONMENT` is `Production`, so you can pipe them into your SIEM without scraping free-form text
+
 ## Vulnerability Reporting
 
 If you find a security vulnerability:

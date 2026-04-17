@@ -20,6 +20,8 @@ Scribegate is what you get when a wiki and a Git forge have a baby: contributors
 
 Visit [scribegate.dev](https://scribegate.dev) and create an account. No setup, no infrastructure, no maintenance.
 
+Hosted in the EU (Nuremberg, Germany) on Hetzner. Your data stays on EU soil — GDPR-friendly by default. Operated by [Hansen Consultancy CommV](docs/legal/imprint.md) (BE 0650.743.997), Boom, Belgium. See the [Privacy Policy](docs/legal/privacy.md), [Terms of Service](docs/legal/terms.md), [Acceptable Use Policy](docs/legal/acceptable-use.md), and [Takedown & Notice-and-Action process](docs/legal/takedown.md) for the full picture.
+
 ### Option B: Self-Host with Docker
 
 ```bash

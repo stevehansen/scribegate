@@ -43,6 +43,8 @@ The app creates a `data/` directory with the SQLite database on first run. No ex
 
 Visit [scribegate.dev](https://scribegate.dev) for the hosted version — no setup, no infrastructure, no maintenance.
 
+Hosted in the EU (Nuremberg, Germany) on Hetzner. Your data stays on EU soil — GDPR-friendly by default.
+
 ---
 
 ## Core Workflow

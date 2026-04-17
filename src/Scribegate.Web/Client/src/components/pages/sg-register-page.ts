@@ -65,11 +65,13 @@ export class SgRegisterPage extends LitElement {
     }
     .tos-label {
       flex-direction: row;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.5rem;
       font-weight: 400;
     }
-    .tos-label input[type="checkbox"] { width: auto; margin: 0; }
+    .tos-label input[type="checkbox"] { width: auto; margin: 0; margin-top: 0.15rem; flex-shrink: 0; }
+    .tos-label a { color: var(--sg-primary); text-decoration: none; }
+    .tos-label a:hover { text-decoration: underline; }
     .link { text-align: center; font-size: var(--sg-font-size-sm); color: var(--sg-text-secondary); }
     .link a { color: var(--sg-primary); text-decoration: none; }
     .link a:hover { text-decoration: underline; }
@@ -122,7 +124,12 @@ export class SgRegisterPage extends LitElement {
         </label>
         <label class="tos-label">
           <input type="checkbox" name="acceptTos" value="true" required />
-          I accept the Terms of Service
+          <span>
+            I accept the
+            <a href="https://docs.scribegate.dev/legal/terms/" target="_blank" rel="noopener">Terms of Service</a>
+            and
+            <a href="https://docs.scribegate.dev/legal/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
+          </span>
         </label>
         <button type="submit" ?disabled=${this._loading}>
           ${this._loading ? 'Creating account...' : 'Create account'}

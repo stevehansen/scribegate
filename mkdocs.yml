@@ -75,6 +75,12 @@ nav:
       - Architecture: architecture.md
       - Security: security.md
       - Contributing: contributing.md
+  - Legal:
+      - Imprint: legal/imprint.md
+      - Privacy Policy: legal/privacy.md
+      - Terms of Service: legal/terms.md
+      - Acceptable Use: legal/acceptable-use.md
+      - Takedown & Notice-and-Action: legal/takedown.md
 
 extra:
   social:

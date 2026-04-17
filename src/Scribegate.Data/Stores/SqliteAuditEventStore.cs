@@ -29,6 +29,13 @@ public class SqliteAuditEventStore(ScribegateDbContext db) : IAuditEventStore
         return await query.CountAsync(ct);
     }
 
+    public async Task<int> PruneIpAddressesOlderThanAsync(DateTime cutoff, CancellationToken ct)
+    {
+        return await db.AuditEvents
+            .Where(e => e.IpAddress != null && e.CreatedAt < cutoff)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.IpAddress, (string?)null), ct);
+    }
+
     private static IQueryable<AuditEvent> ApplyFilter(IQueryable<AuditEvent> query, AuditEventFilter filter)
     {
         if (filter.EventType is not null)

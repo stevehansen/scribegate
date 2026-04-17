@@ -7,6 +7,14 @@ public interface IAuditEventStore
     Task CreateAsync(AuditEvent evt, CancellationToken ct = default);
     Task<IReadOnlyList<AuditEvent>> ListAsync(AuditEventFilter filter, CancellationToken ct = default);
     Task<int> CountAsync(AuditEventFilter filter, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets <see cref="AuditEvent.IpAddress"/> to <c>null</c> on every event
+    /// created strictly before <paramref name="cutoff"/>. The event record
+    /// itself is preserved; only the personal-data column is cleared.
+    /// </summary>
+    /// <returns>Number of rows affected.</returns>
+    Task<int> PruneIpAddressesOlderThanAsync(DateTime cutoff, CancellationToken ct = default);
 }
 
 public class AuditEventFilter
