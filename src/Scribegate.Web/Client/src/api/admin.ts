@@ -16,6 +16,13 @@ export function updateSetting(key: string, value: string) {
   });
 }
 
+export function sendSmtpTest(toEmail?: string) {
+  return apiFetch<{ sent: boolean; toEmail: string }>('/api/v1/admin/smtp/test', {
+    method: 'POST',
+    body: JSON.stringify({ toEmail: toEmail || null }),
+  });
+}
+
 export function listAuditEvents(params?: { eventType?: string; targetType?: string; skip?: number; take?: number }) {
   const query = new URLSearchParams();
   if (params?.eventType) query.set('eventType', params.eventType);

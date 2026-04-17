@@ -70,6 +70,9 @@ export class SgAdminPage extends LitElement {
   @state() private _tab = 'settings';
   @state() private _drafts: Record<string, string> = {};
   @state() private _savedKey: string | null = null;
+  @state() private _smtpTestState: 'idle' | 'sending' | 'sent' | 'error' = 'idle';
+  @state() private _smtpTestMessage = '';
+  @state() private _smtpTestTo = '';
 
   private static readonly ENUM_CHOICES: Record<string, string[]> = {
     'instance.tier_mode': ['none', 'enforced'],
@@ -144,6 +147,19 @@ export class SgAdminPage extends LitElement {
 
   private _isBoolean(v: string) { return v === 'true' || v === 'false'; }
 
+  private async _sendSmtpTest() {
+    this._smtpTestState = 'sending';
+    this._smtpTestMessage = '';
+    try {
+      const res = await adminApi.sendSmtpTest(this._smtpTestTo || undefined);
+      this._smtpTestState = 'sent';
+      this._smtpTestMessage = `Sent to ${res.toEmail}.`;
+    } catch (e) {
+      this._smtpTestState = 'error';
+      this._smtpTestMessage = e instanceof ApiException ? e.error.message : 'Test failed.';
+    }
+  }
+
   render() {
     if (this._loading) return html`<p>Loading...</p>`;
     if (this._error && !this._settings.length) return html`<p class="error">${this._error}</p>`;
@@ -161,9 +177,35 @@ export class SgAdminPage extends LitElement {
     `;
   }
 
+  private _renderSmtpTest() {
+    const enabled = this._settings.find(s => s.key === 'smtp.enabled')?.value === 'true';
+    if (!enabled) return '';
+    return html`
+      <div class="setting" style="margin-bottom: 1rem;">
+        <div>
+          <div class="setting-key">SMTP test</div>
+          <div class="setting-meta">Sends a one-off message to verify delivery. Leave blank to use the admin address.</div>
+          ${this._smtpTestMessage ? html`
+            <div class="setting-meta ${this._smtpTestState === 'error' ? 'error' : 'setting-saved'}">
+              ${this._smtpTestMessage}
+            </div>` : ''}
+        </div>
+        <div class="value-edit">
+          <input type="email" placeholder="recipient@example.com"
+            .value=${this._smtpTestTo}
+            @input=${(e: Event) => this._smtpTestTo = (e.target as HTMLInputElement).value} />
+          <button class="primary" ?disabled=${this._smtpTestState === 'sending'} @click=${() => this._sendSmtpTest()}>
+            ${this._smtpTestState === 'sending' ? 'Sending…' : 'Send test email'}
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   private _renderSettings() {
     return html`
       ${this._error ? html`<p class="error">${this._error}</p>` : ''}
+      ${this._renderSmtpTest()}
       <div class="settings">
         ${this._settings.map(s => html`
           <div class="setting">

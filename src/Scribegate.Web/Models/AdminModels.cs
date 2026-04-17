@@ -17,6 +17,11 @@ public sealed class SetUserTierRequest
     public string? Tier { get; init; }
 }
 
+public sealed class SendTestEmailRequest
+{
+    public string? ToEmail { get; init; }
+}
+
 public sealed class AuditEventResponse
 {
     public required Guid Id { get; init; }

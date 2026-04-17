@@ -19,8 +19,66 @@ public static class AdminEndpoints
         group.MapPut("/settings/{key}", UpdateSetting);
         group.MapGet("/settings/registration", GetRegistrationStatus).AllowAnonymous();
         group.MapPut("/users/{userId:guid}/tier", SetUserTier);
+        group.MapPost("/smtp/test", SendTestEmail);
 
         return group;
+    }
+
+    private static async Task<IResult> SendTestEmail(
+        SendTestEmailRequest? request,
+        ClaimsPrincipal principal,
+        ScribegateDbContext db,
+        EmailService email,
+        ISystemSettingStore settings,
+        AuditService audit,
+        CancellationToken ct)
+    {
+        if (!await IsAdmin(principal, db, ct))
+            return Forbidden();
+
+        if (!await email.IsEnabledAsync(ct))
+            return ApiResults.ValidationError("smtp.enabled", ApiErrorCodes.InvalidFormat,
+                "SMTP is disabled.",
+                "Enable smtp.enabled and configure smtp.host / smtp.from_address before sending a test.");
+
+        var userId = GetUserId(principal);
+        var user = userId is null ? null : await db.Users.FindAsync([userId.Value], ct);
+        var toEmail = request?.ToEmail?.Trim();
+        if (string.IsNullOrWhiteSpace(toEmail)) toEmail = user?.Email;
+        if (string.IsNullOrWhiteSpace(toEmail))
+            return ApiResults.ValidationError("toEmail", ApiErrorCodes.Required,
+                "No recipient available.",
+                "Provide toEmail in the request body, or set an email on the admin account.");
+
+        var instanceName = await settings.GetAsync(SystemSettingKeys.InstanceName, ct) ?? "Scribegate";
+        var html = $"""
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #1a1a1a;">SMTP test from {System.Net.WebUtility.HtmlEncode(instanceName)}</h2>
+                <p style="color: #4a4a4a; line-height: 1.6;">If you can read this, outbound email is working.</p>
+                <p style="color: #9a9a9a; font-size: 12px;">Sent by the admin panel at {DateTime.UtcNow:u}.</p>
+            </div>
+            """;
+
+        var sent = await email.TrySendAsync(toEmail, user?.Username ?? "admin",
+            $"[{instanceName}] SMTP test", html, ct);
+
+        await audit.LogAsync(
+            AuditEventTypes.SettingChanged, userId, principal.FindFirstValue("username"),
+            "Smtp", null,
+            new { action = "test", toEmail, success = sent.Success, error = sent.Error }, ct);
+
+        if (!sent.Success)
+            return Results.Json(new
+            {
+                error = new ApiError
+                {
+                    Code = "SMTP_SEND_FAILED",
+                    Message = "SMTP delivery failed.",
+                    Details = sent.Error ?? "See server logs for details.",
+                }
+            }, statusCode: 502);
+
+        return Results.Ok(new { sent = true, toEmail });
     }
 
     private static async Task<IResult> GetRegistrationStatus(
