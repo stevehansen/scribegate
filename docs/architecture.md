@@ -18,7 +18,7 @@ Scribegate uses a layered architecture with three projects, each with a clear re
 ```
 
 **Scribegate.Core** has zero external dependencies. It defines:
-- Domain entities (`Repository`, `Document`, `Revision`, `Proposal`, `Review`, `Comment`, `User`, `RepositoryMembership`, `ApiToken`, `AuditEvent`, `ContentReport`, `RevisionSignature`, `SystemSetting`, `MediaAsset`, `Notification`, `NotificationPreference`)
+- Domain entities (`Repository`, `Document`, `Revision`, `Proposal`, `Review`, `Comment`, `User`, `RepositoryMembership`, `ApiToken`, `AuditEvent`, `ContentReport`, `RevisionSignature`, `SystemSetting`, `MediaAsset`, `Notification`, `NotificationPreference`, `DocumentTemplate`, `ShareLink`, `Webhook`, `WebhookDelivery`)
 - Value objects (`TierLimits`)
 - Enums (`Visibility`, `RepositoryRole`, `ProposalStatus`, `ReviewVerdict`, `ReportStatus`)
 - Storage interfaces (one per entity group)
@@ -73,6 +73,9 @@ ContentReport (references any target by type + ID)
 MediaAsset ──→ Repository, User (uploaded files with MIME validation)
 Notification ──→ User (in-app + email notifications)
 NotificationPreference ──→ User (per-user email preferences)
+DocumentTemplate ──→ Repository (markdown starter templates for new documents)
+ShareLink ──→ Repository, Document (time-limited revocable read-only tokens)
+Webhook ──→ Repository ── (*) WebhookDelivery (HMAC-signed outbound events, auto-disable after 10 consecutive failures)
 ```
 
 ### Entity Details
@@ -826,12 +829,18 @@ Endpoint receives authenticated user (same as JWT)
 
 Create `Scribegate.Data.RavenDB` implementing the same store interfaces. Register it in DI instead of the SQLite implementations. No other code changes needed.
 
-### Multi-Tenancy (Managed Hosting)
+### Multi-User Ownership (Delivered in M5)
 
-The current design supports multi-tenancy by:
-- Using per-tenant SQLite databases (one file per workspace)
-- Resolving tenant from subdomain or path prefix
-- Applying tenant-specific limits (max documents, max users)
+Repositories carry an `OwnerId` FK to `User`, with a composite unique index on `(OwnerId, Slug)`. URLs and CLI references use `{owner}/{slug}` so two users can hold the same slug independently. This is the multi-user model that the managed instance runs on — a single shared database, per-user namespacing at the URL and uniqueness layer, tier limits applied per owner.
+
+### Multi-Tenancy (Future, Dedicated Hosting)
+
+Distinct from multi-user ownership: a future tenancy model could offer fully isolated tenants (e.g. enterprise customers on their own subdomain with their own data). The owner/slug routing already leaves room for this — a tenant segment could prefix the owner, or a dedicated managed instance could be a single-tenant deployment behind a CNAME. Implementation would add:
+- Per-tenant SQLite files (or per-tenant RavenDB databases via the future adapter), resolved from the host header or a path prefix
+- Tenant-scoped admin settings, audit logs, and tier defaults
+- Tenant-level quotas on top of the existing per-user limits
+
+The domain model does not currently carry a `TenantId`; that would be the first change if we commit to this direction.
 
 ### SSO/OIDC Integration
 

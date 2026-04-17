@@ -18,7 +18,6 @@ title: Vacation Policy 2026
 description: Guidelines for requesting and approving time off
 tags: [hr, policy, benefits]
 author: jane@example.com
-reviewers: [bob@example.com, alice@example.com]
 status: published
 created: 2026-01-15
 updated: 2026-04-10
@@ -37,7 +36,6 @@ The actual markdown content starts here...
 | `description` | string | Short summary for listings and search | No, authored |
 | `tags` | string[] | Categorization and filtering | No, authored |
 | `author` | string | Original author's email | Yes, set on creation |
-| `reviewers` | string[] | Suggested reviewers for proposals | No, authored |
 | `status` | string | Document lifecycle (`draft`, `published`, `archived`, `deprecated`) | Semi-auto (set on approval/archival) |
 | `created` | date | Creation timestamp | Yes, auto |
 | `updated` | date | Last revision timestamp | Yes, auto |
@@ -123,7 +121,8 @@ The slug generation rules:
 - Replace spaces and special characters with hyphens
 - Collapse multiple hyphens
 - Strip leading/trailing hyphens
-- Check against reserved words (`api`, `auth`, `admin`, `settings`, `healthz`, `_`, `-`)
+- Check against the reserved-slug denylist in `src/Scribegate.Web/Api/SlugHelper.cs` (~150 entries covering platform routes, system/brand identity, user/account keywords, app routes, resource keywords, auth integrations, infrastructure, commercial tiers, abuse-reporting terms, and future features — e.g. `api`, `admin`, `login`, `scribegate`, `billing`, `me`, `dashboard`, `webhooks`, `marketplace`)
+- The same denylist governs usernames, so a user can never register a name that would shadow a platform route or a future-reserved URL segment
 - Check uniqueness within the owner's namespace
 
 For documents, the path is more flexible:
