@@ -54,7 +54,7 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), and 5 (Owner/Repo URLs) are complete.
 
 M6 progress:
-- [ ] Syntax highlighting for fenced code blocks (Markdig language class annotations server-side; single highlighter theme on client and static-site export, light/dark aware)
+- [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
 - [ ] Mermaid diagram rendering (client-side only; server leaves ```` ```mermaid ```` blocks intact; static-site export bundles the runtime)
 - [ ] Inline media previews in rendered markdown (images/video resolved from `MediaAsset` by relative path, no raw HTML)
 - [ ] Soft-delete / archive for documents (resolves spec open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings and search)

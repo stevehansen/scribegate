@@ -410,7 +410,7 @@ GitHub-style addressing: every repository is owned by a user and reached at `{ow
 
 Richer rendering so Scribegate handles real technical writing, not just prose.
 
-- [ ] Syntax highlighting for fenced code blocks (Markdig emits language class annotations server-side; client and static-site export pick up a single highlighter theme, light/dark aware)
+- [x] Syntax highlighting for fenced code blocks (Prism, curated language set; SPA uses shadow-DOM token styles that consume `--sg-syn-*` vars; static-site export ships a bundled Prism runtime + theme and falls back silently if absent)
 - [ ] Mermaid diagram rendering (client-side only; server leaves ```` ```mermaid ```` blocks intact; static-site export includes the Mermaid runtime)
 - [ ] Inline media previews in rendered markdown (images and video resolved from `MediaAsset` by relative path, no raw HTML permitted)
 - [ ] Soft-delete / archive for documents (resolves open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings)
