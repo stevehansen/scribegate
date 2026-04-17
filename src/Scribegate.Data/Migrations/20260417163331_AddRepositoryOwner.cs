@@ -23,8 +23,9 @@ namespace Scribegate.Data.Migrations
                 defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
 
             // Backfill: assign existing repositories to the earliest admin user.
-            // If no admin exists the migration aborts — the non-nullable FK constraint
-            // would fail anyway and leaving empty GUIDs would hide the problem.
+            // If no admin exists, OwnerId stays as the empty GUID and the FK add
+            // below will fail with a FOREIGN KEY violation — that is the desired
+            // loud failure rather than silently orphaning repos.
             migrationBuilder.Sql(@"
                 UPDATE Repositories
                 SET OwnerId = (
@@ -34,15 +35,6 @@ namespace Scribegate.Data.Migrations
                     LIMIT 1
                 )
                 WHERE OwnerId = '00000000-0000-0000-0000-000000000000';
-            ");
-
-            // Abort if any repository is still unowned (e.g. no admin user exists).
-            migrationBuilder.Sql(@"
-                SELECT RAISE(ABORT, 'AddRepositoryOwner migration: no admin user found to own existing repositories. Create an admin user first, then reapply migrations.')
-                WHERE EXISTS (
-                    SELECT 1 FROM Repositories
-                    WHERE OwnerId = '00000000-0000-0000-0000-000000000000'
-                );
             ");
 
             migrationBuilder.CreateIndex(
