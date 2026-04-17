@@ -46,81 +46,81 @@ All endpoints require authentication unless marked otherwise. Use either:
 |--------|------|------|-------------|
 | `GET` | `/api/v1/repositories` | No | List all repositories |
 | `POST` | `/api/v1/repositories` | Yes | Create repository |
-| `GET` | `/api/v1/repositories/{slug}` | No | Get repository by slug |
-| `PUT` | `/api/v1/repositories/{slug}` | Yes | Update repository (name, visibility, requiredApprovals) |
-| `DELETE` | `/api/v1/repositories/{slug}` | Yes | Delete repository |
+| `GET` | `/api/v1/repositories/{owner}/{slug}` | No | Get repository by slug |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}` | Yes | Update repository (name, visibility, requiredApprovals) |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}` | Yes | Delete repository |
 
 ### Documents
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/documents` | No | List documents (file tree) |
-| `POST` | `/api/v1/repositories/{slug}/documents` | Yes | Create document |
-| `GET` | `/api/v1/repositories/{slug}/documents/{path}` | No | Get document with content |
-| `PUT` | `/api/v1/repositories/{slug}/documents/{path}` | Yes | Update document (creates revision) |
-| `DELETE` | `/api/v1/repositories/{slug}/documents/{path}` | Yes | Delete document |
-| `POST` | `/api/v1/repositories/{slug}/documents/move/{path}` | Yes | Rename/move document |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/documents` | No | List documents (file tree) |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/documents` | Yes | Create document |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | No | Get document with content |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | Yes | Update document (creates revision) |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | Yes | Delete document |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/documents/move/{path}` | Yes | Rename/move document |
 
 ### Revisions
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/revisions/{path}` | Yes | List revision history |
-| `GET` | `/api/v1/repositories/{slug}/revisions/{docId}/{revId}` | Yes | Get specific revision |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/revisions/{path}` | Yes | List revision history |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/revisions/{docId}/{revId}` | Yes | Get specific revision |
 
 ### Proposals
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/proposals` | No | List proposals |
-| `POST` | `/api/v1/repositories/{slug}/proposals` | Yes | Create proposal |
-| `GET` | `/api/v1/repositories/{slug}/proposals/{id}` | No | Get proposal with diff |
-| `PUT` | `/api/v1/repositories/{slug}/proposals/{id}` | Yes | Update draft proposal |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/submit` | Yes | Submit draft to open |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/withdraw` | Yes | Withdraw proposal |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/approve` | Reviewer+ | Approve (auto-merges when threshold met) |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/reject` | Reviewer+ | Reject proposal |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/proposals` | No | List proposals |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals` | Yes | Create proposal |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}` | No | Get proposal with diff |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}` | Yes | Update draft proposal |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/submit` | Yes | Submit draft to open |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/withdraw` | Yes | Withdraw proposal |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/approve` | Reviewer+ | Approve (auto-merges when threshold met) |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/reject` | Reviewer+ | Reject proposal |
 
 ### Reviews
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/proposals/{id}/reviews` | No | List reviews |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/reviews` | Yes | Submit review |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/reviews` | No | List reviews |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/reviews` | Yes | Submit review |
 
 ### Comments
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/proposals/{id}/comments` | No | List comments |
-| `POST` | `/api/v1/repositories/{slug}/proposals/{id}/comments` | Yes | Add comment (supports line references) |
-| `PUT` | `/api/v1/repositories/{slug}/proposals/{id}/comments/{cid}` | Owner | Edit comment |
-| `DELETE` | `/api/v1/repositories/{slug}/proposals/{id}/comments/{cid}` | Owner/Admin | Delete comment |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/comments` | No | List comments |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/comments` | Yes | Add comment (supports line references) |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/comments/{cid}` | Owner | Edit comment |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/proposals/{id}/comments/{cid}` | Owner/Admin | Delete comment |
 
 ### Members
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/repositories/{slug}/members` | No | List members |
-| `POST` | `/api/v1/repositories/{slug}/members` | Admin | Add member |
-| `PUT` | `/api/v1/repositories/{slug}/members/{userId}` | Admin | Update role |
-| `DELETE` | `/api/v1/repositories/{slug}/members/{userId}` | Admin | Remove member |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/members` | No | List members |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/members` | Admin | Add member |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/members/{userId}` | Admin | Update role |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/members/{userId}` | Admin | Remove member |
 
 ### Media
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/v1/repositories/{slug}/media` | Yes | Upload media file (multipart) |
-| `GET` | `/api/v1/repositories/{slug}/media` | No | List media assets |
-| `GET` | `/api/v1/repositories/{slug}/media/{id}` | No | Get media asset info |
-| `GET` | `/api/v1/repositories/{slug}/media/{id}/download` | No | Download media file |
-| `DELETE` | `/api/v1/repositories/{slug}/media/{id}` | Owner/Admin | Delete media |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/media` | Yes | Upload media file (multipart) |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/media` | No | List media assets |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/media/{id}` | No | Get media asset info |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/media/{id}/download` | No | Download media file |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/media/{id}` | Owner/Admin | Delete media |
 
 ### Search
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/search?q={query}&repo={slug}` | No | Full-text search across documents |
+| `GET` | `/api/v1/search?q={query}&repo={owner}/{slug}` | No | Full-text search across documents |
 
 ### Notifications
 

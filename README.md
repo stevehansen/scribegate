@@ -98,7 +98,7 @@ curl -X POST http://localhost:8080/api/v1/repositories \
 Documents are markdown files organized in a folder structure. Each document automatically gets its first revision.
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/documents \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/documents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -113,7 +113,7 @@ curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/document
 Instead of editing the live document directly, contributors create proposals — like a pull request, but for a single document. This is the core of Scribegate's editorial workflow.
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/proposals \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -130,7 +130,7 @@ Reviewers see the diff between the current document and the proposed changes. Th
 
 ```bash
 # A reviewer approves the proposal
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals/{id}/approve \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/proposals/{id}/approve \
   -H "Authorization: Bearer $REVIEWER_TOKEN"
 
 # This:
@@ -149,7 +149,7 @@ That's the complete cycle: **write → propose → review → publish**.
 
 The top-level container for a collection of documents. Think of it as a project or a handbook.
 
-- Has a unique slug for URL-friendly access (`/company-handbook`)
+- Has a unique slug for URL-friendly access (`/jane/company-handbook`)
 - Can be **Public** (anyone can read) or **Private** (authenticated users only)
 - Contains documents organized in a folder structure
 - Has its own set of members with assigned roles
@@ -219,7 +219,7 @@ Roles are assigned per repository. A user can be an Admin in one repository and 
 
 ```bash
 # Add a contributor to the repository
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/members \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/members \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"userId": "user-guid-here", "role": "Contributor"}'
@@ -315,7 +315,7 @@ scribegate.dev/acme-corp/handbook/hr/vacation.md
              └─ owner ──┘└─ repo ┘└── path ────┘
 ```
 
-Self-hosted instances use implicit single-owner mode: `docs.example.com/handbook/hr/vacation.md`
+Self-hosted instances use the same shape — the owner is your username (or the repo creator's username): `docs.example.com/jane/handbook/hr/vacation.md`.
 
 ## Sharing
 
@@ -338,7 +338,7 @@ Share a single document from a private repository without granting access to the
 # Web UI: open a document → click "Share" → copy the link
 
 # API
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/shares \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/shares \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"path": "hr/vacation.md", "expiresInDays": 7, "description": "Q2 review copy"}'
@@ -374,7 +374,7 @@ Events you can subscribe to: `proposal.created`, `proposal.submitted`, `proposal
 
 ```bash
 # Create
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/webhooks \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/webhooks \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"url": "https://ci.example.com/hook", "events": ["proposal.approved", "document.updated"]}'
@@ -408,10 +408,10 @@ Per-repository markdown templates give authors a starting point for common docum
 
 ```bash
 # Web UI: open a repository → Templates → New template
-# (admin-only page at /{slug}/templates)
+# (admin-only page at /{owner}/{slug}/templates)
 
 # API — create a template
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/templates \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/templates \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -433,7 +433,7 @@ Download the entire content of a repository as a zip of markdown files, with a `
 # API
 curl -o export.zip \
   -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/repositories/company-handbook/export
+  http://localhost:8080/api/v1/repositories/jane/company-handbook/export
 ```
 
 Members of a repo (any role) can export; public repos are also exportable by any authenticated user. The response streams directly — no server-side buffering — with a 1 GiB hard cap.
@@ -448,7 +448,7 @@ Turn a repository into a self-contained static site — a zip containing rendere
 # API
 curl -o site.zip \
   -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/repositories/company-handbook/site
+  http://localhost:8080/api/v1/repositories/jane/company-handbook/site
 ```
 
 The zip contains:
@@ -470,13 +470,13 @@ Scribegate exposes every repository over the Git dumb-HTTP protocol as a **read-
 
 ```bash
 # Public repository — no auth
-git clone https://your-scribegate.example/myrepo.git
+git clone https://your-scribegate.example/jane/myrepo.git
 ```
 
 For private repositories, authenticate with an `sg_` API token as the HTTP Basic password (the username is ignored — use anything):
 
 ```bash
-git clone https://your-scribegate.example/myrepo.git
+git clone https://your-scribegate.example/jane/myrepo.git
 # When prompted:
 #   Username: x
 #   Password: sg_yourapitoken
@@ -485,7 +485,7 @@ git clone https://your-scribegate.example/myrepo.git
 Or embed the credential in the URL (useful for CI and credential managers):
 
 ```bash
-git clone https://x:sg_yourapitoken@your-scribegate.example/myrepo.git
+git clone https://x:sg_yourapitoken@your-scribegate.example/jane/myrepo.git
 ```
 
 **What you get:** a single synthetic commit containing the current state of every document. Re-clones show a fresh snapshot — Scribegate is not tracking your `git fetch` history, so subsequent fetches will see a forced update. This is expected. Scribegate is a markdown collaboration platform, not a git server; clone is a convenience for mirroring, archiving, and integrating with static-site generators or AI tooling that speaks git.
@@ -506,20 +506,20 @@ All interactions go through a versioned REST API at `/api/v1/`. Every endpoint i
 |---|---|---|
 | **Auth** | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `GET /auth/me/quota`, `PUT /auth/preferences`, CRUD `/auth/tokens` | Varies |
 | **SSO/OIDC** | `GET /auth/oidc/config`, `GET /auth/oidc/login`, `GET /auth/oidc/callback` | No |
-| **Repositories** | `GET/POST /repositories`, `GET/PUT/DELETE /repositories/{slug}` | Yes (except public reads) |
-| **Documents** | `GET/POST /repositories/{slug}/documents`, `GET/PUT/DELETE .../{path}`, `POST .../move/{path}` | Yes (except public reads) |
-| **Revisions** | `GET /repositories/{slug}/revisions/{path}`, `GET .../{docId}/{revId}` | Yes |
-| **Proposals** | CRUD `/repositories/{slug}/proposals`, plus `/submit`, `/approve`, `/reject`, `/withdraw` actions | Yes |
-| **Reviews** | `GET/POST /repositories/{slug}/proposals/{id}/reviews` | Yes |
-| **Comments** | CRUD `/repositories/{slug}/proposals/{id}/comments` | Yes |
-| **Members** | CRUD `/repositories/{slug}/members` | Admin |
-| **Media** | `POST/GET /repositories/{slug}/media`, `GET/DELETE .../{id}`, `GET .../{id}/download` | Yes |
+| **Repositories** | `GET/POST /repositories`, `GET/PUT/DELETE /repositories/{owner}/{slug}` | Yes (except public reads) |
+| **Documents** | `GET/POST /repositories/{owner}/{slug}/documents`, `GET/PUT/DELETE .../{path}`, `POST .../move/{path}` | Yes (except public reads) |
+| **Revisions** | `GET /repositories/{owner}/{slug}/revisions/{path}`, `GET .../{docId}/{revId}` | Yes |
+| **Proposals** | CRUD `/repositories/{owner}/{slug}/proposals`, plus `/submit`, `/approve`, `/reject`, `/withdraw` actions | Yes |
+| **Reviews** | `GET/POST /repositories/{owner}/{slug}/proposals/{id}/reviews` | Yes |
+| **Comments** | CRUD `/repositories/{owner}/{slug}/proposals/{id}/comments` | Yes |
+| **Members** | CRUD `/repositories/{owner}/{slug}/members` | Admin |
+| **Media** | `POST/GET /repositories/{owner}/{slug}/media`, `GET/DELETE .../{id}`, `GET .../{id}/download` | Yes |
 | **Search** | `GET /search?q=...&repo=...` | No |
-| **Share Links** | `POST/GET /repositories/{slug}/shares`, `DELETE .../{id}`, `GET /shares/{token}` | Yes (resolve is anonymous) |
-| **Webhooks** | CRUD `/repositories/{slug}/webhooks`, `POST .../{id}/test`, `GET .../{id}/deliveries` | Repo admin |
-| **Export** | `GET /repositories/{slug}/export` | Yes (member or public) |
-| **Static site** | `GET /repositories/{slug}/site` | Yes (member or public) |
-| **Templates** | `GET/POST /repositories/{slug}/templates`, `GET/PUT/DELETE .../{id}` | Yes (mutations: repo admin) |
+| **Share Links** | `POST/GET /repositories/{owner}/{slug}/shares`, `DELETE .../{id}`, `GET /shares/{token}` | Yes (resolve is anonymous) |
+| **Webhooks** | CRUD `/repositories/{owner}/{slug}/webhooks`, `POST .../{id}/test`, `GET .../{id}/deliveries` | Repo admin |
+| **Export** | `GET /repositories/{owner}/{slug}/export` | Yes (member or public) |
+| **Static site** | `GET /repositories/{owner}/{slug}/site` | Yes (member or public) |
+| **Templates** | `GET/POST /repositories/{owner}/{slug}/templates`, `GET/PUT/DELETE .../{id}` | Yes (mutations: repo admin) |
 | **Notifications** | `GET /notifications`, `POST .../{id}/read`, `POST .../read-all`, `GET/PUT .../preferences` | Yes |
 | **Admin** | `GET/PUT /admin/settings`, `GET /admin/audit`, `PUT /admin/users/{id}/tier` | Admin |
 | **Reports** | `POST /reports`, `GET/PUT /reports/{id}` | Yes |
@@ -729,7 +729,7 @@ Full-text search across all documents, powered by SQLite FTS5:
 curl "http://localhost:8080/api/v1/search?q=vacation+policy"
 
 # Search within a specific repository
-curl "http://localhost:8080/api/v1/search?q=vacation&repo=company-handbook"
+curl "http://localhost:8080/api/v1/search?q=vacation&repo=jane/company-handbook"
 ```
 
 Results include highlighted snippets showing matching text in context.
@@ -758,7 +758,7 @@ Upload images and files to repositories for use in markdown documents:
 
 ```bash
 # Upload an image
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/media \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/media \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@diagram.png"
 
@@ -766,11 +766,11 @@ curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/media \
 {
   "id": "...",
   "fileName": "diagram.png",
-  "url": "/api/v1/repositories/company-handbook/media/{id}/download"
+  "url": "/api/v1/repositories/jane/company-handbook/media/{id}/download"
 }
 ```
 
-Reference uploaded media in your markdown: `![Diagram](/api/v1/repositories/company-handbook/media/{id}/download)`
+Reference uploaded media in your markdown: `![Diagram](/api/v1/repositories/jane/company-handbook/media/{id}/download)`
 
 Supported types: JPEG, PNG, GIF, WebP, SVG, PDF. Max file size: 10MB. Storage quota enforced per user tier.
 

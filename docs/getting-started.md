@@ -60,7 +60,8 @@ curl -X POST http://localhost:8080/api/v1/repositories \
 ## 4. Create a Document
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/documents \
+# URLs include the owner (your username, "jane" in this example)
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/documents \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -75,7 +76,7 @@ curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/document
 Register a second user (the contributor), then create a proposal:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/proposals \
   -H "Authorization: Bearer $CONTRIBUTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -91,7 +92,7 @@ curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposal
 As the admin (who has Reviewer role), approve the proposal:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/repositories/company-handbook/proposals/{id}/approve \
+curl -X POST http://localhost:8080/api/v1/repositories/jane/company-handbook/proposals/{id}/approve \
   -H "Authorization: Bearer $TOKEN"
 ```
 

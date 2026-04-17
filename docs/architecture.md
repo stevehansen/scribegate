@@ -85,8 +85,9 @@ The top-level container. Each repository has its own set of documents, proposals
 public class Repository
 {
     public Guid Id { get; set; }
+    public Guid OwnerId { get; set; }                // FK to User; composite unique (OwnerId, Slug)
     public required string Name { get; set; }        // "Company Handbook"
-    public required string Slug { get; set; }        // "company-handbook" (unique, URL-safe)
+    public required string Slug { get; set; }        // "company-handbook" (URL-safe, unique per owner)
     public string? Description { get; set; }
     public Visibility Visibility { get; set; }       // Public or Private
     public int RequiredApprovals { get; set; } = 1;  // Configurable 1-10
@@ -94,7 +95,7 @@ public class Repository
 }
 ```
 
-Slugs are the primary lookup key in the API (`/api/v1/repositories/{slug}`). They must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`.
+Repositories are looked up by `(owner, slug)` in the API (`/api/v1/repositories/{owner}/{slug}`). The slug itself must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, and `(OwnerId, Slug)` is the composite unique index (two different owners can reuse a slug).
 
 #### Document
 
@@ -381,7 +382,7 @@ All interface methods:
 public interface IRepositoryStore
 {
     Task<Repository?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<Repository?> GetBySlugAsync(string slug, CancellationToken ct = default);
+    Task<Repository?> GetByOwnerAndSlugAsync(Guid ownerId, string slug, CancellationToken ct = default);
     Task<IReadOnlyList<Repository>> ListAsync(CancellationToken ct = default);
     Task<Repository> CreateAsync(Repository repository, CancellationToken ct = default);
     Task UpdateAsync(Repository repository, CancellationToken ct = default);
@@ -399,8 +400,8 @@ public class SqliteRepositoryStore(ScribegateDbContext db) : IRepositoryStore
     public async Task<Repository?> GetByIdAsync(Guid id, CancellationToken ct = default)
         => await db.Repositories.FindAsync([id], ct);
 
-    public async Task<Repository?> GetBySlugAsync(string slug, CancellationToken ct = default)
-        => await db.Repositories.FirstOrDefaultAsync(r => r.Slug == slug, ct);
+    public async Task<Repository?> GetByOwnerAndSlugAsync(Guid ownerId, string slug, CancellationToken ct = default)
+        => await db.Repositories.FirstOrDefaultAsync(r => r.OwnerId == ownerId && r.Slug == slug, ct);
 
     public async Task<IReadOnlyList<Repository>> ListAsync(CancellationToken ct = default)
         => await db.Repositories.OrderBy(r => r.Name).ToListAsync(ct);
@@ -442,7 +443,7 @@ Each configuration class defines primary keys, property constraints, indexes, re
 
 | Index | Type | Purpose |
 |---|---|---|
-| `Repository.Slug` | Unique | URL-based lookup |
+| `Repository.(OwnerId, Slug)` | Unique | URL-based lookup (owner/slug) |
 | `Document.(RepositoryId, Path)` | Unique | File tree navigation, duplicate prevention |
 | `User.Username` | Unique | Login lookup |
 | `User.Email` | Unique | Login lookup, invitation dedup |
@@ -758,12 +759,12 @@ Auto-migration means:
 ### Creating a Document
 
 ```
-Client POST /api/v1/repositories/{slug}/documents
+Client POST /api/v1/repositories/{owner}/{slug}/documents
     │
     ▼
 DocumentEndpoints.cs
     │ 1. Validate request (path format, content size)
-    │ 2. Resolve repository by slug (IRepositoryStore)
+    │ 2. Resolve repository by (owner, slug) (IRepositoryStore)
     │ 3. Check auth + role (must be Contributor+)
     │ 4. Parse frontmatter from markdown content
     │ 5. Create Document entity
@@ -779,7 +780,7 @@ SQLite (via EF Core SaveChangesAsync)
 ### Approving a Proposal
 
 ```
-Client POST /api/v1/repositories/{slug}/proposals/{id}/approve
+Client POST /api/v1/repositories/{owner}/{slug}/proposals/{id}/approve
     │
     ▼
 ProposalEndpoints.cs

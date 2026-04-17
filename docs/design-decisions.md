@@ -75,7 +75,7 @@ The `audit` fields enable compliance and knowledge management workflows:
 
 ### Decision
 
-URLs follow the `domain/owner/repo/path-to-document` pattern, similar to GitHub.
+URLs follow the `domain/owner/repo/path-to-document` pattern, similar to GitHub. **Implemented in M5.**
 
 ### URL Patterns
 
@@ -86,29 +86,28 @@ scribegate.dev/acme-corp/handbook                  # Repository root (file tree)
 scribegate.dev/acme-corp/handbook/onboarding.md    # Document view
 scribegate.dev/acme-corp/handbook/hr/vacation.md   # Nested document
 
-# Self-hosted
-docs.example.com/handbook                          # Single-owner mode (implicit owner)
-docs.example.com/handbook/onboarding.md            # Document view
+# Self-hosted — same shape, owner is the user who created the repo
+docs.example.com/jane/handbook
+docs.example.com/jane/handbook/onboarding.md
 ```
 
-### Owner Concept
+### Ownership
 
-An **owner** is either a user or an organization. For the managed hosted version, this provides namespace isolation:
+Every repository has an **owner** — either a user or an organization (organizations arrive later; for now the owner is always a user). Implementation:
+
+- `Repository.OwnerId` is an FK to `User`, with a composite unique index on `(OwnerId, Slug)`. Two different owners can reuse the same slug.
+- On repository creation the caller becomes the owner.
+- **Backfill:** when the M5 migration runs against an existing database, all pre-M5 repositories are assigned to the earliest admin user (lowest `CreatedAt` with `IsAdmin = true`). If no admin exists the migration aborts loudly — the operator is expected to bootstrap an admin user before upgrading.
+- **Git clone** is served from `/{owner}/{slug}.git/...` with per-owner on-disk mirror directories so owner namespaces stay isolated on disk.
+
+### Owner Concept
 
 | Concept | Example | Description |
 |---|---|---|
 | User owner | `scribegate.dev/janedoe/notes` | Personal repositories |
-| Org owner | `scribegate.dev/acme-corp/handbook` | Shared team repositories |
+| Org owner | `scribegate.dev/acme-corp/handbook` | Shared team repositories (future) |
 
-For self-hosted instances, the owner is implicit (the instance itself). A single-owner mode hides the owner segment from URLs:
-
-```
-# Self-hosted: owner is implicit
-docs.example.com/handbook/onboarding.md
-
-# Managed: owner is explicit
-scribegate.dev/acme-corp/handbook/onboarding.md
-```
+Self-hosted instances use the same explicit-owner URL shape; the single-admin "bare slug" form is only a CLI convenience (see §4 below), not a URL mode.
 
 ### Slug Generation (Guided Naming)
 
@@ -134,13 +133,16 @@ For documents, the path is more flexible:
 
 ### API Routing
 
+Repository-scoped API routes are prefixed with `{owner}/{slug}` under `/api/v1/repositories/`:
+
 ```
-GET    /api/v1/{owner}/{repo}                    # Repository details
-GET    /api/v1/{owner}/{repo}/tree               # File tree
-GET    /api/v1/{owner}/{repo}/docs/{**path}      # Document content
-GET    /api/v1/{owner}/{repo}/raw/{**path}       # Raw markdown
-GET    /api/v1/{owner}/{repo}/revisions/{**path} # Revision history
+GET    /api/v1/repositories/{owner}/{slug}                    # Repository details
+GET    /api/v1/repositories/{owner}/{slug}/documents          # File tree
+GET    /api/v1/repositories/{owner}/{slug}/documents/{path}   # Document content
+GET    /api/v1/repositories/{owner}/{slug}/revisions/{path}   # Revision history
 ```
+
+See `CLAUDE.md` for the full route list.
 
 ---
 
@@ -193,10 +195,10 @@ Share links are:
 **Endpoints.**
 
 ```
-POST   /api/v1/repositories/{slug}/shares          # Create link [auth, contributor+]
-GET    /api/v1/repositories/{slug}/shares          # List links (repo-wide or ?path=)
-DELETE /api/v1/repositories/{slug}/shares/{id}     # Revoke (creator or repo admin)
-GET    /api/v1/shares/{token}                      # Public resolver [anonymous, rate-limited]
+POST   /api/v1/repositories/{owner}/{slug}/shares          # Create link [auth, contributor+]
+GET    /api/v1/repositories/{owner}/{slug}/shares          # List links (repo-wide or ?path=)
+DELETE /api/v1/repositories/{owner}/{slug}/shares/{id}     # Revoke (creator or repo admin)
+GET    /api/v1/shares/{token}                              # Public resolver [anonymous, rate-limited]
 ```
 
 The SPA serves `/s/:token` as a read-only document view that consumes the public resolver and renders the markdown with a banner showing the source repository and expiry.
@@ -212,15 +214,15 @@ For programmatic access (CI/CD, AI agents, scripts), documents are fetchable via
 ```bash
 # Fetch rendered HTML
 curl -H "Authorization: Bearer $TOKEN" \
-  https://scribegate.dev/api/v1/acme-corp/handbook/docs/onboarding.md
+  https://scribegate.dev/api/v1/repositories/acme-corp/handbook/documents/onboarding.md
 
-# Fetch raw markdown
+# Fetch raw markdown (same route; content is returned as markdown)
 curl -H "Authorization: Bearer $TOKEN" \
-  https://scribegate.dev/api/v1/acme-corp/handbook/raw/onboarding.md
+  https://scribegate.dev/api/v1/repositories/acme-corp/handbook/documents/onboarding.md
 
 # Fetch with frontmatter metadata
 curl -H "Authorization: Bearer $TOKEN" \
-  https://scribegate.dev/api/v1/acme-corp/handbook/docs/onboarding.md?include=metadata
+  https://scribegate.dev/api/v1/repositories/acme-corp/handbook/documents/onboarding.md?include=metadata
 ```
 
 **API tokens** are long-lived, scoped credentials for programmatic access:
@@ -246,6 +248,8 @@ Scribegate ships a CLI tool (`sg`) for power users and AI agents. The CLI wraps 
 4. **Agentic AI friendly.** Every operation that can be done in the UI can be done via CLI, with structured output that AI agents can parse and act on.
 
 ### Command Structure
+
+Repository-scoped commands take `owner/repo`. As a convenience, a bare `repo` (no slash) is resolved against the authenticated caller's username — useful for personal repositories and scripting on self-hosted instances.
 
 ```bash
 sg auth login                           # Authenticate (browser-based)

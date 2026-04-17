@@ -19,7 +19,7 @@ A simplified, self-hosted markdown collaboration platform with editorial review 
 - **Staleness over merge conflicts** — no three-way merge. If the base revision is outdated, the author manually rebases.
 - **Multi-tenant ready** — even for self-hosted (single implicit tenant), the data layer should support tenant isolation for the future managed hosting.
 - **YAML frontmatter** — documents support optional frontmatter for metadata (title, description, tags, audit fields). Auto-managed fields (created, updated, next-review) are system-controlled. Unknown fields are preserved.
-- **GitHub-style URLs** — `domain/owner/repo/path` pattern. Self-hosted uses implicit single owner. Managed hosting uses explicit user/org owners.
+- **GitHub-style URLs** — `domain/owner/repo/path` pattern, implemented in M5. Every repository has an `OwnerId` (FK to `User`) with a composite unique `(OwnerId, Slug)` index. Self-hosted and managed hosting both use explicit owners in URLs; see `docs/design-decisions.md` for the full URL and ownership model.
 - **Share links** — individual documents can be shared via time-limited, revocable, read-only links (even from private repos).
 - **API tokens** — long-lived, scoped credentials for programmatic access (CI/CD, AI agents).
 - **CLI tool (`sg`)** — wraps the REST API, `gh`-like UX, `--json` for machine output. AI agents use the same CLI to propose edits and participate in reviews.
@@ -49,11 +49,18 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 4 — "Ecosystem" (In Progress)**
+**Milestone 5 — "Owner/Repo URLs" (In Progress)**
 
-Milestones 1 (Read & Write), 2 (Propose & Review), and 3 (Polish & Integrate) are complete.
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), and 4 (Ecosystem) are complete.
 
-M4 progress:
+M5 progress:
+- [x] `OwnerId` FK on `Repository`, composite unique `(OwnerId, Slug)` — existing rows backfilled to the earliest admin user, migration aborts loudly if no admin exists
+- [x] API routes prefixed with `{owner}`: `/api/v1/repositories/{owner}/{slug}/...`
+- [x] SPA routes through `{owner}/{slug}` URLs
+- [x] CLI accepts `owner/slug`; a bare slug still works when the caller is authenticated (falls back to their own username)
+- [x] Git clone served at `/{owner}/{slug}.git/...` with per-owner on-disk mirror directories
+
+M4 delivered:
 - [x] Share links for individual documents (time-limited, revocable, read-only `/s/{token}` URLs)
 - [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures)
 - [x] Export repository as a zip of markdown files (streaming; public repos + members)
@@ -148,17 +155,17 @@ docs/
 GET    /healthz                                              # Health check
 GET    /swagger                                              # Interactive API docs
 
-GET    /api/v1/repositories                                  # List all repositories
-POST   /api/v1/repositories                                  # Create repository (auto-generates slug)
-GET    /api/v1/repositories/{slug}                           # Get repository by slug
-PUT    /api/v1/repositories/{slug}                           # Update repository
-DELETE /api/v1/repositories/{slug}                           # Delete repository
+GET    /api/v1/repositories                                         # List all repositories
+POST   /api/v1/repositories                                         # Create repository (auto-generates slug, owner = caller)
+GET    /api/v1/repositories/{owner}/{slug}                          # Get repository by owner/slug
+PUT    /api/v1/repositories/{owner}/{slug}                          # Update repository
+DELETE /api/v1/repositories/{owner}/{slug}                          # Delete repository
 
-GET    /api/v1/repositories/{slug}/documents                 # List documents (file tree)
-POST   /api/v1/repositories/{slug}/documents                 # Create document (auto-creates revision)
-GET    /api/v1/repositories/{slug}/documents/{path}          # Get document with content
-PUT    /api/v1/repositories/{slug}/documents/{path}          # Update document (creates new revision)
-DELETE /api/v1/repositories/{slug}/documents/{path}          # Delete document
+GET    /api/v1/repositories/{owner}/{slug}/documents                # List documents (file tree)
+POST   /api/v1/repositories/{owner}/{slug}/documents                # Create document (auto-creates revision)
+GET    /api/v1/repositories/{owner}/{slug}/documents/{path}         # Get document with content
+PUT    /api/v1/repositories/{owner}/{slug}/documents/{path}         # Update document (creates new revision)
+DELETE /api/v1/repositories/{owner}/{slug}/documents/{path}         # Delete document
 
 POST   /api/v1/auth/register                                 # Register (returns JWT)
 POST   /api/v1/auth/login                                    # Login (returns JWT)
@@ -168,8 +175,8 @@ POST   /api/v1/auth/tokens                                   # Create API token 
 GET    /api/v1/auth/tokens                                   # List API tokens [auth]
 DELETE /api/v1/auth/tokens/{id}                              # Revoke API token [auth]
 
-GET    /api/v1/repositories/{slug}/revisions/{path}          # List revision history
-GET    /api/v1/repositories/{slug}/revisions/{docId}/{revId} # Get specific revision
+GET    /api/v1/repositories/{owner}/{slug}/revisions/{path}        # List revision history
+GET    /api/v1/repositories/{owner}/{slug}/revisions/{docId}/{revId} # Get specific revision
 
 GET    /api/v1/admin/settings/registration                   # Registration status (anonymous)
 GET    /api/v1/admin/settings                                # List all settings [admin]
@@ -177,27 +184,27 @@ PUT    /api/v1/admin/settings/{key}                          # Update setting [a
 GET    /api/v1/admin/audit                                   # Audit event log [admin]
 GET    /api/v1/admin/audit/{id}                              # Get audit event [admin]
 
-GET    /api/v1/repositories/{slug}/proposals                 # List proposals
-POST   /api/v1/repositories/{slug}/proposals                 # Create proposal [auth]
-GET    /api/v1/repositories/{slug}/proposals/{id}            # Get proposal with diff
-PUT    /api/v1/repositories/{slug}/proposals/{id}            # Update draft proposal [auth]
-POST   /api/v1/repositories/{slug}/proposals/{id}/submit     # Submit draft → open [auth]
-POST   /api/v1/repositories/{slug}/proposals/{id}/withdraw   # Withdraw proposal [auth]
-POST   /api/v1/repositories/{slug}/proposals/{id}/approve    # Approve (creates revision) [reviewer+]
-POST   /api/v1/repositories/{slug}/proposals/{id}/reject     # Reject proposal [reviewer+]
+GET    /api/v1/repositories/{owner}/{slug}/proposals                # List proposals
+POST   /api/v1/repositories/{owner}/{slug}/proposals                # Create proposal [auth]
+GET    /api/v1/repositories/{owner}/{slug}/proposals/{id}           # Get proposal with diff
+PUT    /api/v1/repositories/{owner}/{slug}/proposals/{id}           # Update draft proposal [auth]
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/submit    # Submit draft → open [auth]
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/withdraw  # Withdraw proposal [auth]
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/approve   # Approve (creates revision) [reviewer+]
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/reject    # Reject proposal [reviewer+]
 
-GET    /api/v1/repositories/{slug}/proposals/{id}/reviews    # List reviews
-POST   /api/v1/repositories/{slug}/proposals/{id}/reviews    # Submit review [auth]
+GET    /api/v1/repositories/{owner}/{slug}/proposals/{id}/reviews   # List reviews
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/reviews   # Submit review [auth]
 
-GET    /api/v1/repositories/{slug}/proposals/{id}/comments   # List comments
-POST   /api/v1/repositories/{slug}/proposals/{id}/comments   # Add comment [auth]
-PUT    /api/v1/repositories/{slug}/proposals/{id}/comments/{cid}    # Edit comment [owner]
-DELETE /api/v1/repositories/{slug}/proposals/{id}/comments/{cid}    # Delete comment [owner/admin]
+GET    /api/v1/repositories/{owner}/{slug}/proposals/{id}/comments  # List comments
+POST   /api/v1/repositories/{owner}/{slug}/proposals/{id}/comments  # Add comment [auth]
+PUT    /api/v1/repositories/{owner}/{slug}/proposals/{id}/comments/{cid}    # Edit comment [owner]
+DELETE /api/v1/repositories/{owner}/{slug}/proposals/{id}/comments/{cid}    # Delete comment [owner/admin]
 
-GET    /api/v1/repositories/{slug}/members                   # List members
-POST   /api/v1/repositories/{slug}/members                   # Add member [admin]
-PUT    /api/v1/repositories/{slug}/members/{userId}          # Update role [admin]
-DELETE /api/v1/repositories/{slug}/members/{userId}          # Remove member [admin]
+GET    /api/v1/repositories/{owner}/{slug}/members                  # List members
+POST   /api/v1/repositories/{owner}/{slug}/members                  # Add member [admin]
+PUT    /api/v1/repositories/{owner}/{slug}/members/{userId}         # Update role [admin]
+DELETE /api/v1/repositories/{owner}/{slug}/members/{userId}         # Remove member [admin]
 
 POST   /api/v1/reports                                       # Report content [auth, rate-limited]
 GET    /api/v1/reports                                       # List reports [admin]
@@ -211,37 +218,37 @@ GET    /api/v1/auth/oidc/callback                            # OIDC callback (is
 
 PUT    /api/v1/admin/users/{userId}/tier                     # Set user tier [admin]
 
-GET    /api/v1/search?q={query}&repo={slug}                  # Full-text search across documents
+GET    /api/v1/search?q={query}&repo={owner}/{slug}                 # Full-text search across documents
 
-POST   /api/v1/repositories/{slug}/documents/move/{path}     # Rename/move document [auth]
+POST   /api/v1/repositories/{owner}/{slug}/documents/move/{path}    # Rename/move document [auth]
 
-POST   /api/v1/repositories/{slug}/media                     # Upload media file [auth]
-GET    /api/v1/repositories/{slug}/media                     # List media assets
-GET    /api/v1/repositories/{slug}/media/{id}                # Get media asset info
-GET    /api/v1/repositories/{slug}/media/{id}/download       # Download media file
-DELETE /api/v1/repositories/{slug}/media/{id}                # Delete media [owner/admin]
+POST   /api/v1/repositories/{owner}/{slug}/media                    # Upload media file [auth]
+GET    /api/v1/repositories/{owner}/{slug}/media                    # List media assets
+GET    /api/v1/repositories/{owner}/{slug}/media/{id}               # Get media asset info
+GET    /api/v1/repositories/{owner}/{slug}/media/{id}/download      # Download media file
+DELETE /api/v1/repositories/{owner}/{slug}/media/{id}               # Delete media [owner/admin]
 
-POST   /api/v1/repositories/{slug}/shares                    # Create share link [auth, contributor+]
-GET    /api/v1/repositories/{slug}/shares                    # List share links (?path= for one doc) [auth]
-DELETE /api/v1/repositories/{slug}/shares/{id}               # Revoke share link [creator/admin]
-GET    /api/v1/shares/{token}                                # Resolve public share link (anonymous, rate-limited)
+POST   /api/v1/repositories/{owner}/{slug}/shares                   # Create share link [auth, contributor+]
+GET    /api/v1/repositories/{owner}/{slug}/shares                   # List share links (?path= for one doc) [auth]
+DELETE /api/v1/repositories/{owner}/{slug}/shares/{id}              # Revoke share link [creator/admin]
+GET    /api/v1/shares/{token}                                       # Resolve public share link (anonymous, rate-limited)
 
-POST   /api/v1/repositories/{slug}/webhooks                  # Create webhook [repo admin]
-GET    /api/v1/repositories/{slug}/webhooks                  # List webhooks [repo admin]
-GET    /api/v1/repositories/{slug}/webhooks/{id}             # Get webhook [repo admin]
-PUT    /api/v1/repositories/{slug}/webhooks/{id}             # Update webhook (optionally ?resetSecret) [repo admin]
-DELETE /api/v1/repositories/{slug}/webhooks/{id}             # Delete webhook [repo admin]
-GET    /api/v1/repositories/{slug}/webhooks/{id}/deliveries  # Recent delivery attempts [repo admin]
-POST   /api/v1/repositories/{slug}/webhooks/{id}/test        # Send ping event (direct) [repo admin, rate-limited]
+POST   /api/v1/repositories/{owner}/{slug}/webhooks                 # Create webhook [repo admin]
+GET    /api/v1/repositories/{owner}/{slug}/webhooks                 # List webhooks [repo admin]
+GET    /api/v1/repositories/{owner}/{slug}/webhooks/{id}            # Get webhook [repo admin]
+PUT    /api/v1/repositories/{owner}/{slug}/webhooks/{id}            # Update webhook (optionally ?resetSecret) [repo admin]
+DELETE /api/v1/repositories/{owner}/{slug}/webhooks/{id}            # Delete webhook [repo admin]
+GET    /api/v1/repositories/{owner}/{slug}/webhooks/{id}/deliveries # Recent delivery attempts [repo admin]
+POST   /api/v1/repositories/{owner}/{slug}/webhooks/{id}/test       # Send ping event (direct) [repo admin, rate-limited]
 
-GET    /api/v1/repositories/{slug}/export                    # Download repo as zip (streaming) [auth, member or public]
-GET    /api/v1/repositories/{slug}/site                      # Generate static HTML site as zip (streaming) [auth, member or public]
+GET    /api/v1/repositories/{owner}/{slug}/export                   # Download repo as zip (streaming) [auth, member or public]
+GET    /api/v1/repositories/{owner}/{slug}/site                     # Generate static HTML site as zip (streaming) [auth, member or public]
 
-GET    /api/v1/repositories/{slug}/templates                 # List markdown templates
-POST   /api/v1/repositories/{slug}/templates                 # Create template [repo admin]
-GET    /api/v1/repositories/{slug}/templates/{id}            # Get template
-PUT    /api/v1/repositories/{slug}/templates/{id}            # Update template [repo admin]
-DELETE /api/v1/repositories/{slug}/templates/{id}            # Delete template [repo admin]
+GET    /api/v1/repositories/{owner}/{slug}/templates                # List markdown templates
+POST   /api/v1/repositories/{owner}/{slug}/templates                # Create template [repo admin]
+GET    /api/v1/repositories/{owner}/{slug}/templates/{id}           # Get template
+PUT    /api/v1/repositories/{owner}/{slug}/templates/{id}           # Update template [repo admin]
+DELETE /api/v1/repositories/{owner}/{slug}/templates/{id}           # Delete template [repo admin]
 
 GET    /api/v1/notifications                                 # List notifications [auth]
 POST   /api/v1/notifications/{id}/read                       # Mark notification as read [auth]
@@ -250,7 +257,7 @@ GET    /api/v1/notifications/preferences                     # Get notification 
 PUT    /api/v1/notifications/preferences                     # Update notification preferences [auth]
 ```
 
-Git-compatible read-only clone is served outside `/api/v1/` as a dumb-HTTP transport at `/{slug}.git/info/refs`, `/{slug}.git/HEAD`, and `/{slug}.git/objects/...`. Public repos are anonymous; private repos require HTTP Basic with an `sg_` API token as the password (username is ignored). Per-repo on-disk mirror with SHA-256 content-hash staleness. Rate limits: 60 req/min/IP on refs, 2000 req/min/IP on objects. A `repository.cloned` audit event is logged on the first `info/refs` per (repo, user-agent) in a 60s window.
+Git-compatible read-only clone is served outside `/api/v1/` as a dumb-HTTP transport at `/{owner}/{slug}.git/info/refs`, `/{owner}/{slug}.git/HEAD`, and `/{owner}/{slug}.git/objects/...`. Public repos are anonymous; private repos require HTTP Basic with an `sg_` API token as the password (username is ignored). Per-owner on-disk mirror directory with SHA-256 content-hash staleness. Rate limits: 60 req/min/IP on refs, 2000 req/min/IP on objects. A `repository.cloned` audit event is logged on the first `info/refs` per (repo, user-agent) in a 60s window.
 
 ## Design Principles
 
