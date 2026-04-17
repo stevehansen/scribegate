@@ -23,7 +23,10 @@ RUN dotnet publish src/Scribegate.Web -c Release -o /publish --no-restore -p:Ski
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Create non-root user
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 1001 scribegate && \
     useradd --system --uid 1001 --gid scribegate scribegate
 
