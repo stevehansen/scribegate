@@ -11,25 +11,29 @@ public class SqliteDocumentStore(ScribegateDbContext db) : IDocumentStore
             .Include(d => d.CurrentRevision)
             .FirstOrDefaultAsync(d => d.Id == id, ct);
 
-    public async Task<IReadOnlyList<Document>> ListByRepositoryAsync(Guid repositoryId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Document>> ListByRepositoryAsync(Guid repositoryId, bool includeArchived = false, CancellationToken ct = default)
         => await db.Documents
-            .Where(d => d.RepositoryId == repositoryId)
+            .Where(d => d.RepositoryId == repositoryId && (includeArchived || !d.IsArchived))
             .OrderBy(d => d.Path)
             .ToListAsync(ct);
 
     public async Task<Dictionary<Guid, int>> CountByRepositoriesAsync(IEnumerable<Guid> repositoryIds, CancellationToken ct = default)
     {
         var ids = repositoryIds.ToList();
+        // Archived docs don't count against the per-repo document quota — the
+        // whole point of archive is that it shouldn't block new writes.
         return await db.Documents
-            .Where(d => ids.Contains(d.RepositoryId))
+            .Where(d => ids.Contains(d.RepositoryId) && !d.IsArchived)
             .GroupBy(d => d.RepositoryId)
             .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
     }
 
-    public async Task<Document?> GetByPathAsync(Guid repositoryId, string path, CancellationToken ct = default)
+    public async Task<Document?> GetByPathAsync(Guid repositoryId, string path, bool includeArchived = false, CancellationToken ct = default)
         => await db.Documents
             .Include(d => d.CurrentRevision)
-            .FirstOrDefaultAsync(d => d.RepositoryId == repositoryId && d.Path == path, ct);
+            .FirstOrDefaultAsync(d => d.RepositoryId == repositoryId
+                && d.Path == path
+                && (includeArchived || !d.IsArchived), ct);
 
     public async Task<Document> CreateAsync(Document document, CancellationToken ct = default)
     {

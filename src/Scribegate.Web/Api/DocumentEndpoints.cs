@@ -18,8 +18,11 @@ public static class DocumentEndpoints
         group.MapPost("/", CreateDocument).RequireAuthorization().RequireRateLimiting("content-create");
         group.MapPut("/{*path}", UpdateDocument).RequireAuthorization();
         group.MapDelete("/{*path}", DeleteDocument).RequireAuthorization();
-        // Move endpoint uses action query parameter since catch-all must be last segment
+        // Move/archive/unarchive endpoints live under /{action}/{*path} because
+        // the catch-all path segment must be last in the route template.
         group.MapPost("/move/{*path}", MoveDocument).RequireAuthorization();
+        group.MapPost("/archive/{*path}", ArchiveDocument).RequireAuthorization();
+        group.MapPost("/unarchive/{*path}", UnarchiveDocument).RequireAuthorization();
 
         return group;
     }
@@ -27,12 +30,13 @@ public static class DocumentEndpoints
     private static async Task<IResult> ListDocuments(
         string owner,
         string repoSlug,
+        HttpContext http,
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        HttpContext http,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool includeArchived = false)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
@@ -41,7 +45,7 @@ public static class DocumentEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+        var docs = await documentStore.ListByRepositoryAsync(repo.Id, includeArchived, ct: ct);
 
         return Results.Ok(new DocumentListResponse
         {
@@ -71,7 +75,7 @@ public static class DocumentEndpoints
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
 
@@ -132,7 +136,7 @@ public static class DocumentEndpoints
                 $"The path '{normalizedPath}' is not valid.",
                 "Paths must use forward slashes, contain only letters, numbers, dots, hyphens, and underscores, and end with .md. No '..' traversal allowed.");
 
-        var existing = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        var existing = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
         if (existing is not null)
             return ApiResults.Conflict(
                 ApiErrorCodes.PathAlreadyExists,
@@ -150,7 +154,7 @@ public static class DocumentEndpoints
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxDocumentsPerRepo))
             {
-                var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+                var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
                 if (docs.Count >= limits.MaxDocumentsPerRepo)
                     return Results.Json(new
                     {
@@ -257,7 +261,7 @@ public static class DocumentEndpoints
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
 
@@ -342,7 +346,25 @@ public static class DocumentEndpoints
         });
     }
 
+    // DELETE is now soft — it archives the document, preserving revisions,
+    // FTS entries, and audit history. Archived docs are hidden from listings
+    // and search until they are restored via /unarchive/{path}. Hard delete
+    // is reserved for admin tooling and is not exposed via this route.
     private static async Task<IResult> DeleteDocument(
+        string owner,
+        string repoSlug,
+        string path,
+        IRepositoryStore repoStore,
+        IDocumentStore documentStore,
+        UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
+        AuditService audit,
+        IWebhookDispatcher webhooks,
+        CancellationToken ct)
+        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, db, audit, webhooks, ct);
+
+    private static async Task<IResult> ArchiveDocument(
         string owner,
         string repoSlug,
         string path,
@@ -365,26 +387,83 @@ public static class DocumentEndpoints
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        // Archiving an already-archived doc is a no-op from the caller's
+        // point of view, so peek at the archived row too and return early.
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, includeArchived: true, ct: ct);
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
+        if (doc.IsArchived) return Results.NoContent();
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
 
-        await documentStore.DeleteAsync(doc.Id, ct);
+        doc.IsArchived = true;
+        doc.ArchivedAt = DateTime.UtcNow;
+        doc.ArchivedById = userId;
+        await documentStore.UpdateAsync(doc, ct);
 
         await audit.LogAsync(
-            AuditEventTypes.DocumentDeleted, userId, userContext.GetUsername(),
+            AuditEventTypes.DocumentArchived, userId, userContext.GetUsername(),
             "Document", doc.Id,
             new { owner, path = normalizedPath, repositorySlug = repoSlug }, ct);
 
         webhooks.Dispatch(WebhookEventTypes.DocumentDeleted, repo.Id, new
         {
             repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            document = new { id = doc.Id, path = normalizedPath },
+            document = new { id = doc.Id, path = normalizedPath, archived = true },
             actor = new { id = userId, username = userContext.GetUsername() },
             timestamp = DateTime.UtcNow,
         });
+
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> UnarchiveDocument(
+        string owner,
+        string repoSlug,
+        string path,
+        IRepositoryStore repoStore,
+        IDocumentStore documentStore,
+        UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
+        AuditService audit,
+        CancellationToken ct)
+    {
+        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
+        if (repo is null)
+            return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+        if (denied is not null) return denied;
+
+        var normalizedPath = PathHelper.NormalizePath(path);
+
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, includeArchived: true, ct: ct);
+        if (doc is null)
+            return ApiResults.NotFound("Document", normalizedPath);
+        if (!doc.IsArchived) return Results.NoContent();
+
+        // A non-archived doc may have been created at the same path while this
+        // one was archived. Don't silently collide — tell the caller to move
+        // the live one out of the way first.
+        var live = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
+        if (live is not null && live.Id != doc.Id)
+            return ApiResults.Conflict(
+                ApiErrorCodes.PathAlreadyExists,
+                $"A non-archived document at path '{normalizedPath}' already exists.",
+                "Rename or archive the live document before restoring this one.", "path");
+
+        doc.IsArchived = false;
+        doc.ArchivedAt = null;
+        doc.ArchivedById = null;
+        await documentStore.UpdateAsync(doc, ct);
+
+        var userId = await userContext.GetCurrentUserIdAsync(ct);
+        await audit.LogAsync(
+            AuditEventTypes.DocumentUnarchived, userId, userContext.GetUsername(),
+            "Document", doc.Id,
+            new { owner, path = normalizedPath, repositorySlug = repoSlug }, ct);
 
         return Results.NoContent();
     }
@@ -428,7 +507,7 @@ public static class DocumentEndpoints
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
 
@@ -446,7 +525,7 @@ public static class DocumentEndpoints
             return ApiResults.ValidationError("newPath", ApiErrorCodes.InvalidFormat,
                 "New path must be different from the current path.");
 
-        var existing = await documentStore.GetByPathAsync(repo.Id, newNormalized, ct);
+        var existing = await documentStore.GetByPathAsync(repo.Id, newNormalized, ct: ct);
         if (existing is not null)
             return ApiResults.Conflict(
                 ApiErrorCodes.PathAlreadyExists,

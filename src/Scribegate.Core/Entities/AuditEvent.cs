@@ -25,6 +25,8 @@ public static class AuditEventTypes
     public const string DocumentUpdated = "document.updated";
     public const string DocumentDeleted = "document.deleted";
     public const string DocumentMoved = "document.moved";
+    public const string DocumentArchived = "document.archived";
+    public const string DocumentUnarchived = "document.unarchived";
 
     // Revision
     public const string RevisionCreated = "revision.created";

@@ -413,7 +413,7 @@ Richer rendering so Scribegate handles real technical writing, not just prose.
 - [x] Syntax highlighting for fenced code blocks (Prism, curated language set; SPA uses shadow-DOM token styles that consume `--sg-syn-*` vars; static-site export ships a bundled Prism runtime + theme and falls back silently if absent)
 - [x] Mermaid diagram rendering (SPA only — dynamic import so the runtime is fetched lazily when a page actually has a diagram; server leaves ```` ```mermaid ```` blocks intact; static-site export keeps the block as code and does not bundle Mermaid because the runtime would add ~3 MB to every exported zip — revisit if there's demand)
 - [x] Inline media previews for images (bare-filename `![alt](foo.png)` references resolve to `MediaAsset` via the new `GET /media/by-name/{fileName}` endpoint on the SPA, and are bundled under `assets/media/` with rewritten URLs in static-site exports; video rendering and share-link media resolution deferred)
-- [ ] Soft-delete / archive for documents (resolves open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings)
+- [x] Soft-delete / archive for documents (resolves open question #5 — `IsArchived`/`ArchivedAt`/`ArchivedById` on Document, new `POST /documents/archive/{path}` and `/unarchive/{path}` endpoints, DELETE is now a soft-archive, store-level filters hide archived docs from listings/search/exports/proposals/share links, per-repo document quota only counts live docs, audit events `document.archived` and `document.unarchived`)
 - [ ] Markdig + marked parity audit (ensure server-rendered site export and client preview match; regression tests covering tables, task lists, code, diagrams, media)
 
 ---
@@ -440,7 +440,7 @@ Clarity on boundaries prevents scope creep:
 
 4. **Markdown extensions.** Which extensions beyond CommonMark? (Recommendation: GFM tables, task lists, syntax highlighting, and Mermaid diagrams. Align with what Markdig supports out of the box.)
 
-5. **Delete semantics.** Can documents be deleted, or only archived? (Recommendation: soft-delete/archive. The revision history should never lose data.)
+5. ~~**Delete semantics.**~~ Resolved in Milestone 6: documents are soft-archived. Revisions are preserved, an `/unarchive` endpoint restores them, and DELETE now archives rather than hard-deleting.
 
 ---
 

@@ -57,7 +57,7 @@ M6 progress:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
 - [x] Mermaid diagram rendering — dynamic import in `sg-markdown-view`, theme tracks the app theme, failures render inline; static-site export keeps the block as code (deferred until there's demand, since the runtime would add ~3 MB per exported zip)
 - [x] Inline media previews for images — new `GET /media/by-name/{fileName}` endpoint, SPA rewrites relative `<img>` src after render, static-site export bundles referenced media under `assets/media/` with URLs rewritten at Markdig AST time; video and share-link media deferred
-- [ ] Soft-delete / archive for documents (resolves spec open question #5 — revisions preserved, unarchive path, audit trail, hidden from default listings and search)
+- [x] Soft-delete / archive for documents — `IsArchived`/`ArchivedAt`/`ArchivedById` on `Document`, new `/archive` and `/unarchive` endpoints, DELETE now soft-archives, archived docs hidden from list/search/exports/proposals/share, quota counts only live docs, audit events `document.archived`/`document.unarchived`
 - [ ] Markdig + marked parity audit (regression tests covering tables, task lists, code, diagrams, media)
 
 M5 delivered:
@@ -228,6 +228,8 @@ PUT    /api/v1/admin/users/{userId}/tier                     # Set user tier [ad
 GET    /api/v1/search?q={query}&repo={owner}/{slug}                 # Full-text search across documents
 
 POST   /api/v1/repositories/{owner}/{slug}/documents/move/{path}    # Rename/move document [auth]
+POST   /api/v1/repositories/{owner}/{slug}/documents/archive/{path} # Soft-delete (archive) document [auth]
+POST   /api/v1/repositories/{owner}/{slug}/documents/unarchive/{path} # Restore archived document [auth]
 
 POST   /api/v1/repositories/{owner}/{slug}/media                    # Upload media file [auth]
 GET    /api/v1/repositories/{owner}/{slug}/media                    # List media assets

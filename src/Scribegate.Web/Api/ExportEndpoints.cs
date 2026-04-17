@@ -50,7 +50,7 @@ public static class ExportEndpoints
                 }
             }, statusCode: 403);
 
-        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
 
         var skipped = new List<object>();
         var exportedCount = 0;

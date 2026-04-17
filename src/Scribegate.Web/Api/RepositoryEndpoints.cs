@@ -72,7 +72,7 @@ public static class RepositoryEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", slug);
 
-        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
 
         var response = MapToResponse(repo, owner);
         return Results.Ok(response with { DocumentCount = docs.Count });

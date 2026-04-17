@@ -116,7 +116,9 @@ public static class SearchEndpoints
                     FROM DocumentFts fts
                     JOIN Documents d ON d.Id = fts.DocumentId
                     JOIN Repositories r ON r.Id = d.RepositoryId
-                    WHERE DocumentFts MATCH @query AND d.RepositoryId = @repoId
+                    WHERE DocumentFts MATCH @query
+                      AND d.RepositoryId = @repoId
+                      AND d.IsArchived = 0
                     ORDER BY rank
                     LIMIT @take OFFSET @skip
                     """;
@@ -135,6 +137,7 @@ public static class SearchEndpoints
                     JOIN Documents d ON d.Id = fts.DocumentId
                     JOIN Repositories r ON r.Id = d.RepositoryId
                     WHERE DocumentFts MATCH @query
+                      AND d.IsArchived = 0
                     ORDER BY rank
                     LIMIT @take OFFSET @skip
                     """;

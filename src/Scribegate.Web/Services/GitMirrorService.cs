@@ -106,7 +106,7 @@ public class GitMirrorService
             var documentStore = scope.ServiceProvider.GetRequiredService<IDocumentStore>();
             var revisionStore = scope.ServiceProvider.GetRequiredService<IRevisionStore>();
 
-            var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+            var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
             var latestTimestamp = await ComputeLatestRevisionTimestampAsync(docs, revisionStore, ct);
             var contentHash = ComputeContentHash(docs);
 

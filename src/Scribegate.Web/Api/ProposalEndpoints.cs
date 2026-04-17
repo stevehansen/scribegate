@@ -175,7 +175,7 @@ public static class ProposalEndpoints
         else if (!string.IsNullOrWhiteSpace(request.DocumentPath))
         {
             var normalizedPath = PathHelper.NormalizePath(request.DocumentPath);
-            var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+            var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
             if (doc is not null)
             {
                 documentId = doc.Id;

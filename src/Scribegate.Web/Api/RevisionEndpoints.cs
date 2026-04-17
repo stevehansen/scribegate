@@ -46,7 +46,7 @@ public static class RevisionEndpoints
 
         var normalizedPath = PathHelper.NormalizePath(path);
 
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct);
+        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
         if (doc is null)
             return ApiResults.NotFound("Document", normalizedPath);
 

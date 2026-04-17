@@ -99,7 +99,7 @@ public static class SiteEndpoints
                 }
             }, statusCode: 403);
 
-        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct);
+        var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
 
         var prism = LoadPrismAssets(env, loggerFactory.CreateLogger("SiteEndpoints"));
 
