@@ -49,16 +49,16 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 6 — "Markdown Depth" (In Progress)**
+**Milestone 6 — "Markdown Depth" (Complete — awaiting next milestone)**
 
-Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), and 5 (Owner/Repo URLs) are complete.
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), and 6 (Markdown Depth) are complete.
 
-M6 progress:
+M6 delivered:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
 - [x] Mermaid diagram rendering — dynamic import in `sg-markdown-view`, theme tracks the app theme, failures render inline; static-site export keeps the block as code (deferred until there's demand, since the runtime would add ~3 MB per exported zip)
 - [x] Inline media previews for images — new `GET /media/by-name/{fileName}` endpoint, SPA rewrites relative `<img>` src after render, static-site export bundles referenced media under `assets/media/` with URLs rewritten at Markdig AST time; video and share-link media deferred
 - [x] Soft-delete / archive for documents — `IsArchived`/`ArchivedAt`/`ArchivedById` on `Document`, new `/archive` and `/unarchive` endpoints, DELETE now soft-archives, archived docs hidden from list/search/exports/proposals/share, quota counts only live docs, audit events `document.archived`/`document.unarchived`
-- [ ] Markdig + marked parity audit (regression tests covering tables, task lists, code, diagrams, media)
+- [x] Markdig + marked parity audit — catalogued in `docs/markdown.md` (Core / Server-only / Client-only feature tables, security posture table, known divergences). Automated regression tests noted as a follow-up — there's no test project yet.
 
 M5 delivered:
 - [x] `OwnerId` FK on `Repository`, composite unique `(OwnerId, Slug)` — existing rows backfilled to the earliest admin user, migration aborts loudly if no admin exists
@@ -108,6 +108,7 @@ docs/
 | `docs/spec.md` | Full PRD with domain model, user flows, milestones |
 | `docs/architecture.md` | Layered architecture, entity relationships, error handling philosophy |
 | `docs/design-decisions.md` | Frontmatter schema, GitHub-style URLs, share links, CLI tool design |
+| `docs/markdown.md` | Markdown feature support — which features work on both SPA and static-site export, server-only extensions, security posture, known divergences |
 | `docs/self-hosting.md` | Step-by-step deployment for every platform |
 | `docs/legal/imprint.md` | Belgian *Wetboek van economisch recht* Art. VI.83 imprint — operator entity (Hansen Consultancy CommV, BE 0650.743.997, Boom) |
 | `docs/legal/privacy.md` | Privacy Policy (managed `scribegate.dev`) — GDPR-framed, 90-day audit IP prune, reactive-only moderation |

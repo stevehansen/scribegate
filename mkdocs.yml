@@ -70,6 +70,7 @@ nav:
   - Guide:
       - Product Spec: spec.md
       - Design Decisions: design-decisions.md
+      - Markdown Support: markdown.md
       - API Reference: api.md
   - Technical:
       - Architecture: architecture.md

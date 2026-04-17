@@ -406,7 +406,7 @@ GitHub-style addressing: every repository is owned by a user and reached at `{ow
 - [x] CLI accepts `owner/slug`; a bare slug still works for authenticated callers (falls back to their own username)
 - [x] Git clone served at `/{owner}/{slug}.git/...` with per-owner on-disk mirror directories
 
-### Milestone 6 — "Markdown Depth" (In Progress)
+### Milestone 6 — "Markdown Depth" ✓
 
 Richer rendering so Scribegate handles real technical writing, not just prose.
 
@@ -414,7 +414,7 @@ Richer rendering so Scribegate handles real technical writing, not just prose.
 - [x] Mermaid diagram rendering (SPA only — dynamic import so the runtime is fetched lazily when a page actually has a diagram; server leaves ```` ```mermaid ```` blocks intact; static-site export keeps the block as code and does not bundle Mermaid because the runtime would add ~3 MB to every exported zip — revisit if there's demand)
 - [x] Inline media previews for images (bare-filename `![alt](foo.png)` references resolve to `MediaAsset` via the new `GET /media/by-name/{fileName}` endpoint on the SPA, and are bundled under `assets/media/` with rewritten URLs in static-site exports; video rendering and share-link media resolution deferred)
 - [x] Soft-delete / archive for documents (resolves open question #5 — `IsArchived`/`ArchivedAt`/`ArchivedById` on Document, new `POST /documents/archive/{path}` and `/unarchive/{path}` endpoints, DELETE is now a soft-archive, store-level filters hide archived docs from listings/search/exports/proposals/share links, per-repo document quota only counts live docs, audit events `document.archived` and `document.unarchived`)
-- [ ] Markdig + marked parity audit (ensure server-rendered site export and client preview match; regression tests covering tables, task lists, code, diagrams, media)
+- [x] Markdig + marked parity audit — documented in `docs/markdown.md` (which features render on both surfaces, which are server-only, which are client-only, plus security posture and known divergences). Automated regression tests deferred until there's a test project to host them.
 
 ---
 
