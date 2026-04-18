@@ -1,11 +1,13 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, unsafeCSS } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import katexStyles from 'katex/dist/katex.min.css?inline';
 import { boxReset } from '../../styles/shared.js';
 import { highlightAllUnder } from '../../lib/highlight.js';
 import { renderMermaidBlocks } from '../../lib/mermaid.js';
+import '../../lib/markdown-extensions.js';
 
 // marked v15 has GFM enabled by default (tables, strikethrough, task lists, autolinks).
 // Configure sanitization for safe rendering.
@@ -25,12 +27,24 @@ const PURIFY_CONFIG = {
     'img',
     'input', // for task list checkboxes
     'div', 'span',
+    'dl', 'dt', 'dd', // definition lists
+    'section', // footnotes wrapper
+    // KaTeX MathML accessibility tree (rendered alongside the visual HTML spans)
+    'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext', 'mspace',
+    'mfrac', 'msqrt', 'mroot', 'msub', 'msup', 'msubsup', 'mover', 'munder',
+    'munderover', 'mtable', 'mtr', 'mtd', 'mstyle', 'mpadded', 'mphantom',
+    'annotation',
   ],
   ALLOWED_ATTR: [
     'href', 'title', 'alt', 'src',
     'class', 'id',
     'type', 'checked', 'disabled', // task list checkboxes
     'align', 'colspan', 'rowspan', // tables
+    'style', // required by KaTeX for positioning glyphs (DOMPurify sanitizes CSS values)
+    'aria-hidden', 'aria-label', 'role', // accessibility
+    'data-footnote-ref', 'data-footnote-backref', // marked-footnote hooks
+    // MathML
+    'xmlns', 'encoding', 'display', 'mathvariant', 'stretchy', 'fence', 'separator', 'accent',
   ],
   ALLOW_DATA_ATTR: false,
   // Force all links to open safely
@@ -60,7 +74,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 @customElement('sg-markdown-view')
 export class SgMarkdownView extends LitElement {
-  static styles = [boxReset, css`
+  static styles = [boxReset, unsafeCSS(katexStyles), css`
     :host { display: block; line-height: 1.7; color: var(--sg-text); }
     h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; line-height: 1.3; color: var(--sg-text); }
     h1 { font-size: 1.875rem; border-bottom: 1px solid var(--sg-border); padding-bottom: 0.375rem; }
@@ -132,6 +146,19 @@ export class SgMarkdownView extends LitElement {
     hr { border: none; border-top: 1px solid var(--sg-border); margin: 1.5em 0; }
     img { max-width: 100%; border-radius: var(--sg-radius); }
     del { text-decoration: line-through; color: var(--sg-text-secondary); }
+    dl { margin: 0.75em 0; }
+    dt { font-weight: 600; margin-top: 0.75em; }
+    dd { margin: 0.25em 0 0.5em 1.5em; }
+    .footnotes {
+      margin-top: 2em;
+      padding-top: 0.75em;
+      border-top: 1px solid var(--sg-border);
+      font-size: 0.875em;
+      color: var(--sg-text-secondary);
+    }
+    .footnotes ol { padding-left: 1.25em; }
+    sup.footnote-ref { margin: 0 0.1em; }
+    a[data-footnote-backref] { margin-left: 0.25em; text-decoration: none; }
   `];
 
   @property() content = '';

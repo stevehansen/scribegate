@@ -34,6 +34,7 @@ public class ParityTheoryTests
         .UseDefinitionLists()
         .UseFigures()
         .UseMediaLinks()
+        .UseEmojiAndSmiley(enableSmileys: false)
         .DisableHtml()
         .Build();
 

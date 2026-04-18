@@ -56,6 +56,7 @@ public static class SiteEndpoints
         .UseDefinitionLists()
         .UseFigures()
         .UseMediaLinks()
+        .UseEmojiAndSmiley(enableSmileys: false)
         .DisableHtml()
         .Build();
 

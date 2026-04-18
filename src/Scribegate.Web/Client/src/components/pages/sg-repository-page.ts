@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, DocumentSummary } from '../../api/types.js';
+import type { RepositoryResponse, DocumentSummary, DocumentResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import * as exportsApi from '../../api/exports.js';
@@ -9,6 +9,13 @@ import { ApiException } from '../../api/client.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-file-tree.js';
 import '../shared/sg-breadcrumb.js';
+import '../shared/sg-markdown-view.js';
+
+// GitHub-style auto-render: if a repo's root contains a README.md (any case),
+// render it inline below the document list.
+function findReadme(docs: DocumentSummary[]): DocumentSummary | undefined {
+  return docs.find((d) => /^readme\.md$/i.test(d.path));
+}
 
 @customElement('sg-repository-page')
 export class SgRepositoryPage extends LitElement {
@@ -107,11 +114,28 @@ export class SgRepositoryPage extends LitElement {
       color: var(--sg-text-secondary);
       font-size: var(--sg-font-size-xs);
     }
+
+    .readme { margin-top: 1.5rem; }
+    .readme-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      gap: 1rem;
+    }
+    .readme-header h2 { margin: 0; }
+    .readme-header a {
+      font-size: var(--sg-font-size-sm);
+      color: var(--sg-text-secondary);
+      text-decoration: none;
+    }
+    .readme-header a:hover { text-decoration: underline; color: var(--sg-primary); }
   `];
 
   @property() location: any;
   @state() private _repo: RepositoryResponse | null = null;
   @state() private _docs: DocumentSummary[] = [];
+  @state() private _readme: DocumentResponse | null = null;
   @state() private _loading = true;
   @state() private _error = '';
   @state() private _dialogError = '';
@@ -145,6 +169,16 @@ export class SgRepositoryPage extends LitElement {
       ]);
       this._repo = repo;
       this._docs = docs.items;
+
+      const readme = findReadme(this._docs);
+      if (readme) {
+        try {
+          this._readme = await docApi.get(this._owner, this._slug, readme.path);
+        } catch {
+          // Non-fatal: repo page still renders without the inline README.
+          this._readme = null;
+        }
+      }
     } catch {
       this._error = 'Repository not found.';
     } finally {
@@ -289,6 +323,21 @@ export class SgRepositoryPage extends LitElement {
           repoSlug=${this._slug}
         ></sg-file-tree>
       </section>
+
+      ${this._readme && this._readme.content !== undefined
+        ? html`
+            <section class="readme">
+              <div class="readme-header">
+                <h2>${this._readme.path}</h2>
+                <a href="${repoBase}/${this._readme.path.replace(/\.md$/, '')}">Open →</a>
+              </div>
+              <sg-markdown-view
+                .content=${this._readme.content ?? ''}
+                owner=${this._owner}
+                slug=${this._slug}
+              ></sg-markdown-view>
+            </section>`
+        : ''}
 
       <dialog>
         <h2>Repository settings</h2>

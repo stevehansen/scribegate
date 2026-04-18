@@ -26,6 +26,9 @@ These features should be safe to use in any document. Authors should expect them
 | Pipe tables | `UsePipeTables()` server / GFM default client |
 | Autolinks `<https://…>` and bare URLs | |
 | Inline images `![alt](foo.png)` | Bare filenames resolve to `MediaAsset` via `/media/by-name/{fileName}` on the SPA. Static-site export bundles referenced media under `assets/media/` and rewrites URLs at AST time. |
+| **Footnotes** (`[^1]`, `[^1]: …`) | Markdig `UseFootnotes()` server / `marked-footnote` client |
+| **Definition lists** (`term` / `: definition`) | Markdig `UseDefinitionLists()` server / custom `marked` extension client |
+| **Emoji shortcodes** (`:rocket:`, `:sparkles:`) | Markdig `UseEmojiAndSmiley(enableSmileys: false)` server / `node-emoji` via a custom `marked` extension client |
 | Mermaid diagrams (```` ```mermaid ````) | **SPA only** (see below). Static-site export leaves the block as code. |
 | Relative links between documents | Treated as bare paths on both; behaviour depends on the host page URL. |
 
@@ -33,9 +36,7 @@ These features should be safe to use in any document. Authors should expect them
 
 Markdig enables several extensions that `marked` does not ship by default. These render in exported zip sites but show as plain markdown (or the closest GFM interpretation) in the SPA:
 
-- **Footnotes** (`[^1]`, `[^1]: …`)
 - **Abbreviations** (`*[HTML]: HyperText Markup Language`)
-- **Definition lists** (`term` / `: definition`)
 - **Citations** (`""quoted""` → `<cite>`)
 - **Custom containers** (`:::` fenced blocks)
 - **Figures** (blockquotes with attribution become `<figure>`)
@@ -49,8 +50,7 @@ Authors who export static sites may use these; authors who work primarily in the
 
 ## Client-only
 
-None currently. The SPA's rendering is a subset of the server's plus two runtime-only enhancements:
-
+- **Math (KaTeX)** (`$inline$`, `$$block$$`) — the SPA uses `marked-katex-extension` + KaTeX CSS. Markdig's `UseMathematics()` is deliberately **not** enabled on the server because MathML is out of scope for the zip export; math blocks render as literal `$…$` in the exported HTML.
 - **Mermaid diagrams** — ```` ```mermaid ```` blocks are rendered as inline SVG via a lazily-imported Mermaid runtime. The static-site export does not bundle Mermaid (~3 MB per zip) and leaves the block as code.
 - **Syntax highlighting at runtime** — Prism runs after the SPA's DOMPurify pass. The static-site export bundles the same Prism core + language set, so the end result is visually equivalent.
 
@@ -74,3 +74,4 @@ Both surfaces treat document content as untrusted and apply defence in depth:
 1. **`UseMediaLinks` on server, plain `<img>` on client** — a video reference like `![demo](demo.mp4)` shows a broken image on the SPA. Either add a client post-process that upgrades `<img src="*.mp4">` to `<video>`, or drop `UseMediaLinks` on the server. Tracked as a follow-up.
 2. **Share-link pages** (`/s/{token}`) do not resolve relative media references because the public share payload omits `repositoryOwner`. Fix requires either exposing the owner on the share payload or adding a share-scoped media endpoint.
 3. **No automated regression tests** — this document catalogues the intended behaviour but there is no test project yet. A small xUnit project with golden-HTML fixtures per Core feature would be the natural next step.
+4. **KaTeX is eagerly bundled** — importing `katex` into the main SPA chunk added ~270 KB (gzip). Fine for a docs-heavy app, but a candidate for dynamic-import gating ("only load when the document contains `$…$`") if startup weight becomes a concern.

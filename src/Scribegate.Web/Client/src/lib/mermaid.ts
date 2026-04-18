@@ -14,6 +14,12 @@ async function load(): Promise<MermaidModule['default']> {
         theme: detectTheme(),
         securityLevel: 'strict',
         fontFamily: 'inherit',
+        // Flowchart labels default to HTML inside <foreignObject>, which
+        // DOMPurify's SVG profile strips as belt-and-braces XSS protection,
+        // leaving the nodes without any visible text. Force native <text>
+        // labels — sequence, git, and journey diagrams already render text
+        // natively, which is why they survived the same pipeline.
+        flowchart: { htmlLabels: false },
       });
       return mod.default;
     });
