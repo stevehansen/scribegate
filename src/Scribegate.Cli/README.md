@@ -16,25 +16,34 @@ dotnet tool update -g Scribegate.Cli
 
 ## Authenticate
 
-With email and password:
+The CLI targets `https://scribegate.dev` by default. Point it at a different instance with `sg auth host` or the `--host` option on `login`/`token`.
 
 ```bash
+sg auth host                                  # show current host
+sg auth host https://scribegate.example.com   # validate via /healthz and save
+```
+
+With email and password (host optional — saved on success):
+
+```bash
+sg auth login me@example.com my-password
 sg auth login me@example.com my-password --host https://scribegate.example.com
 ```
 
-Or set an API token directly (for CI, agents, scripts — tokens start with `sg_`):
+Or set an API token directly (for CI, agents, scripts — tokens start with `sg_`). The token is verified against the server before it is persisted, so a token from `https://scribegate.dev` won't silently land in a config pointed at `localhost`:
 
 ```bash
 sg auth token sg_xxxxxxxxxxxxxxxx
+sg auth token sg_xxxxxxxxxxxxxxxx --host https://scribegate.dev
 ```
 
-Verify:
+Verify — `status` always prints the host, even when not authenticated:
 
 ```bash
 sg auth status
 ```
 
-The host and token are saved to the OS user profile.
+`SCRIBEGATE_HOST` and `SCRIBEGATE_TOKEN` environment variables override the saved config. Otherwise both are stored in the OS user profile.
 
 ## Commands
 

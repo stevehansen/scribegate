@@ -599,14 +599,19 @@ dotnet tool update -g Scribegate.Cli
 
 ### Authenticate
 
-```bash
-# Point the CLI at your instance and log in with email + password
-sg auth login me@example.com my-password --host https://scribegate.example.com
+The CLI targets `https://scribegate.dev` by default. Point it at a different instance with `sg auth host` or pass `--host` on `login`/`token`.
 
-# Or configure it with an existing API token (sg_... prefix) — ideal for CI and agents
+```bash
+# Optional: switch to your own instance (validated via /healthz before saving)
+sg auth host https://scribegate.example.com
+
+# Log in with email + password (--host also accepted here)
+sg auth login me@example.com my-password
+
+# Or configure an API token (sg_... prefix) — validated against the server before it's saved
 sg auth token sg_abc123...
 
-# Verify
+# Verify — always shows the current host, even when not authenticated
 sg auth status
 ```
 

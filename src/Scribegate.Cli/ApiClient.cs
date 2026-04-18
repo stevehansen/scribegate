@@ -13,16 +13,25 @@ public class ApiClient
         PropertyNameCaseInsensitive = true,
     };
 
-    public ApiClient()
+    public string Host { get; }
+
+    public ApiClient() : this(null, null) { }
+
+    public ApiClient(string? hostOverride, string? tokenOverride)
     {
         var config = CliConfig.Load();
+        var host = hostOverride is not null
+            ? CliConfig.NormalizeHost(hostOverride)
+            : config.ResolvedHost;
+        Host = host;
+
         _http = new HttpClient
         {
-            BaseAddress = new Uri(config.Host ?? "http://localhost:5199"),
+            BaseAddress = new Uri(host),
         };
 
-        var token = config.Token ?? Environment.GetEnvironmentVariable("SCRIBEGATE_TOKEN");
-        if (token is not null)
+        var token = tokenOverride ?? config.Token ?? Environment.GetEnvironmentVariable("SCRIBEGATE_TOKEN");
+        if (!string.IsNullOrEmpty(token))
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 

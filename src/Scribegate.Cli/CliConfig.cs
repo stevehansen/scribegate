@@ -4,8 +4,12 @@ namespace Scribegate.Cli;
 
 public class CliConfig
 {
+    public const string DefaultHost = "https://scribegate.dev";
+
     public string? Host { get; set; }
     public string? Token { get; set; }
+
+    public string ResolvedHost => string.IsNullOrWhiteSpace(Host) ? DefaultHost : Host!;
 
     private static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -48,5 +52,13 @@ public class CliConfig
         Directory.CreateDirectory(ConfigDir);
         var json = JsonSerializer.Serialize(this, JsonOptions);
         File.WriteAllText(ConfigFile, json);
+    }
+
+    public static string NormalizeHost(string host)
+    {
+        var trimmed = host.Trim().TrimEnd('/');
+        if (!trimmed.Contains("://", StringComparison.Ordinal))
+            trimmed = "https://" + trimmed;
+        return trimmed;
     }
 }
