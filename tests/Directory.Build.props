@@ -1,0 +1,10 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- xUnit v3 recommends threading TestContext.Current.CancellationToken
+         through every async call. For the seed tests we keep things minimal;
+         suppressing is documented and a follow-up item for later. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+</Project>

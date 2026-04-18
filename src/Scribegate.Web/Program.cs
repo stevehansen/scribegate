@@ -451,3 +451,7 @@ app.MapInfoEndpoints();
 app.MapGitEndpoints();
 
 app.Run();
+
+// Exposed so `WebApplicationFactory<Program>` in tests/Scribegate.Web.Tests
+// can bootstrap the real host for integration tests.
+public partial class Program { }

@@ -9,12 +9,79 @@ on:
     paths-ignore: ['docs/**', '*.md']
 
 jobs:
-  build:
-    name: Build & Test
+  test-dotnet:
+    name: .NET Tests
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Scribegate.slnx
+
+      - name: Build
+        run: dotnet build Scribegate.slnx --no-restore -c Release -p:SkipClientBuild=true
+
+      # xUnit v3 uses Microsoft.Testing.Platform, not VSTest. The test
+      # projects are executables and run directly via `dotnet run`.
+      # Coverage collection through MTP requires an additional extension
+      # (Microsoft.Testing.Extensions.CodeCoverage) — tracked as a
+      # follow-up; see docs/testing.md. For now we run tests without
+      # coverage gating, matching the M7 design.
+      - name: Test — Core
+        run: dotnet run --no-build -c Release --project tests/Scribegate.Core.Tests
+        shell: bash
+
+      - name: Test — Data
+        run: dotnet run --no-build -c Release --project tests/Scribegate.Data.Tests
+        shell: bash
+
+      - name: Test — Web
+        run: dotnet run --no-build -c Release --project tests/Scribegate.Web.Tests
+        shell: bash
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: src/Scribegate.Web/Client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/Scribegate.Web/Client
+        run: npm ci --ignore-scripts
+
+      - name: TypeScript check
+        working-directory: src/Scribegate.Web/Client
+        run: npx tsc --noEmit
+
+      - name: Unit + parity tests
+        working-directory: src/Scribegate.Web/Client
+        run: npm run test:run
+
+      - name: Parity-only (sanity)
+        working-directory: src/Scribegate.Web/Client
+        run: npm run test:parity
+
+  publish-check:
+    name: Publish (integration check)
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -34,16 +101,9 @@ jobs:
       - name: Restore .NET dependencies
         run: dotnet restore
 
-      - name: Build .NET
-        run: dotnet build --no-restore
-
       - name: Install frontend dependencies
         working-directory: src/Scribegate.Web/Client
         run: npm ci --ignore-scripts
-
-      - name: TypeScript check
-        working-directory: src/Scribegate.Web/Client
-        run: npx tsc --noEmit
 
       - name: Build frontend
         working-directory: src/Scribegate.Web/Client

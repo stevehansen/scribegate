@@ -5,4 +5,9 @@
     <Project Path="src/Scribegate.Web/Scribegate.Web.csproj" />
     <Project Path="src/Scribegate.Cli/Scribegate.Cli.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Scribegate.Core.Tests/Scribegate.Core.Tests.csproj" />
+    <Project Path="tests/Scribegate.Data.Tests/Scribegate.Data.Tests.csproj" />
+    <Project Path="tests/Scribegate.Web.Tests/Scribegate.Web.Tests.csproj" />
+  </Folder>
 </Solution>

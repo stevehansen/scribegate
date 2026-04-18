@@ -1,0 +1,42 @@
+[
+  {
+    "id": "paragraph-plain",
+    "description": "Plain paragraph",
+    "markdown": "Hello world."
+  },
+  {
+    "id": "heading-atx-h2",
+    "description": "ATX heading level 2",
+    "markdown": "## Section title"
+  },
+  {
+    "id": "code-fenced-no-lang",
+    "description": "Fenced code block with no language",
+    "markdown": "```\nlet x = 1;\n```"
+  },
+  {
+    "id": "code-fenced-csharp",
+    "description": "Fenced code block with language=csharp",
+    "markdown": "```csharp\nvar x = 1;\n```"
+  },
+  {
+    "id": "table-gfm",
+    "description": "GFM pipe table",
+    "markdown": "| Col | Val |\n| --- | --- |\n| a   | 1   |"
+  },
+  {
+    "id": "task-list",
+    "description": "GFM task list",
+    "markdown": "- [x] done\n- [ ] todo"
+  },
+  {
+    "id": "link-inline",
+    "description": "Inline link",
+    "markdown": "See [the site](https://scribegate.dev) for details."
+  },
+  {
+    "id": "image-bare-filename",
+    "description": "Image with bare filename (media-by-name resolution candidate)",
+    "markdown": "![diagram](diagram.png)"
+  }
+]

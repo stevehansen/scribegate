@@ -416,6 +416,18 @@ Richer rendering so Scribegate handles real technical writing, not just prose.
 - [x] Soft-delete / archive for documents (resolves open question #5 — `IsArchived`/`ArchivedAt`/`ArchivedById` on Document, new `POST /documents/archive/{path}` and `/unarchive/{path}` endpoints, DELETE is now a soft-archive, store-level filters hide archived docs from listings/search/exports/proposals/share links, per-repo document quota only counts live docs, audit events `document.archived` and `document.unarchived`)
 - [x] Markdig + marked parity audit — documented in `docs/markdown.md` (which features render on both surfaces, which are server-only, which are client-only, plus security posture and known divergences). Automated regression tests deferred until there's a test project to host them.
 
+### Milestone 7 — "Proof & Prevention"
+
+A real automated-test harness and the guardrails that keep future milestones safe. Pure foundation work: no user-visible feature changes, but every subsequent milestone (multi-document proposals, RavenDB adapter, performance work) becomes cheaper and less risky once this lands.
+
+- [ ] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
+- [ ] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas
+- [ ] Web API integration tests via `WebApplicationFactory<Program>` — auth (JWT + API token + OIDC stub), RBAC, owner/slug routing, share links, webhook signing, static-site/export streaming, rate limiting
+- [ ] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` driven by both xUnit theories (Markdig) and Vitest (marked + DOMPurify under jsdom), with golden-output snapshots per side and a divergence-allow-list cross-check against `docs/markdown.md`
+- [ ] SPA Vitest + `@open-wc/testing` unit/component tests, colocated alongside components; plus one jsdom-driven "simulated happy path" (register → create repo → create doc → propose → review → approve) exercising the router + editor + markdown view stack
+- [ ] CI gating — tests run on every PR, coverage tracked (Cobertura artifact upload, no threshold gate yet — revisit in M8), parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, and `docs/testing.md` describing conventions, flake-quarantine policy, and how to add tests for each layer
+- [ ] Playwright E2E deferred to M8 — M7 ships a Vitest/jsdom simulated happy-path instead (see `docs/testing.md`)
+
 ---
 
 ## 8. What Scribegate Is Not
