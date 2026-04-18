@@ -113,8 +113,8 @@ public static class SearchEndpoints
                     SELECT d.Id, d.Path, d.RepositoryId, r.Slug AS RepoSlug, r.Name AS RepoName,
                            snippet(DocumentFts, 0, '<mark>', '</mark>', '...', 32) AS Snippet,
                            rank
-                    FROM DocumentFts fts
-                    JOIN Documents d ON d.Id = fts.DocumentId
+                    FROM DocumentFts
+                    JOIN Documents d ON d.rowid = DocumentFts.rowid
                     JOIN Repositories r ON r.Id = d.RepositoryId
                     WHERE DocumentFts MATCH @query
                       AND d.RepositoryId = @repoId
@@ -133,8 +133,8 @@ public static class SearchEndpoints
                     SELECT d.Id, d.Path, d.RepositoryId, r.Slug AS RepoSlug, r.Name AS RepoName,
                            snippet(DocumentFts, 0, '<mark>', '</mark>', '...', 32) AS Snippet,
                            rank
-                    FROM DocumentFts fts
-                    JOIN Documents d ON d.Id = fts.DocumentId
+                    FROM DocumentFts
+                    JOIN Documents d ON d.rowid = DocumentFts.rowid
                     JOIN Repositories r ON r.Id = d.RepositoryId
                     WHERE DocumentFts MATCH @query
                       AND d.IsArchived = 0
