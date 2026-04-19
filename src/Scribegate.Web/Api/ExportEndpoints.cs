@@ -18,7 +18,7 @@ public static class ExportEndpoints
         var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/export")
             .WithTags("Export");
 
-        group.MapGet("/", ExportZip).RequireAuthorization();
+        group.MapGet("", ExportZip).RequireAuthorization();
     }
 
     private static async Task<IResult> ExportZip(
@@ -59,9 +59,13 @@ public static class ExportEndpoints
 
         var fileName = $"{SanitizeFilename(repo.Slug)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
 
-        return Results.Stream(async stream =>
+        // ZipArchive writes its central directory synchronously during Dispose().
+        // Build into a temp file first so the HTTP response stays fully async.
+        var tempStream = DeleteOnDisposeFileStream.CreateTemporary();
+
+        try
         {
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            using (var zip = new ZipArchive(tempStream, ZipArchiveMode.Create, leaveOpen: true))
             {
                 foreach (var doc in docs)
                 {
@@ -122,20 +126,29 @@ public static class ExportEndpoints
                 }, ct);
             }
 
-            // Audit after the zip has been fully composed so totals reflect what
-            // the caller actually received — mirrors SiteEndpoints.GenerateSite.
-            await audit.LogAsync(
-                AuditEventTypes.RepositoryExported, userId, userContext.GetUsername(),
-                "Repository", repo.Id,
-                new
-                {
-                    owner,
-                    slug = repo.Slug,
-                    documentCount = exportedCount,
-                    sizeBytes = totalBytes,
-                    sizeCapReached = overflow,
-                }, ct);
-        }, "application/zip", fileName);
+            tempStream.Position = 0;
+        }
+        catch
+        {
+            await tempStream.DisposeAsync();
+            throw;
+        }
+
+        // Audit after the zip has been fully composed so totals reflect what
+        // the caller actually received — mirrors SiteEndpoints.GenerateSite.
+        await audit.LogAsync(
+            AuditEventTypes.RepositoryExported, userId, userContext.GetUsername(),
+            "Repository", repo.Id,
+            new
+            {
+                owner,
+                slug = repo.Slug,
+                documentCount = exportedCount,
+                sizeBytes = totalBytes,
+                sizeCapReached = overflow,
+            }, ct);
+
+        return Results.Stream(tempStream, "application/zip", fileName);
     }
 
     // Wraps ZipPathSafety with the markdown-specific extension guarantee.

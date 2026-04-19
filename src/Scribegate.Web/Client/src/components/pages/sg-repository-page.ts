@@ -35,14 +35,16 @@ export class SgRepositoryPage extends LitElement {
     .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
     .btn {
       padding: 0.5rem 1rem; border-radius: var(--sg-radius); font-size: var(--sg-font-size-sm);
-      font-weight: 500; cursor: pointer; border: none; text-decoration: none;
+      font-weight: 500; font-family: inherit; line-height: 1.2; cursor: pointer; border: none; text-decoration: none;
+      appearance: none; display: inline-flex; align-items: center; justify-content: center;
       transition: background var(--sg-transition-fast);
       white-space: nowrap;
     }
-    .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); display: inline-block; }
+    .btn-primary { background: var(--sg-primary); color: var(--sg-primary-text); }
     .btn-primary:hover { background: var(--sg-primary-hover); }
-    .btn-secondary { background: var(--sg-bg-tertiary); color: var(--sg-text-secondary); display: inline-block; }
+    .btn-secondary { background: var(--sg-bg-tertiary); color: var(--sg-text-secondary); }
     .btn-secondary:hover { background: var(--sg-border); }
+    .btn:disabled { opacity: 0.7; cursor: progress; }
     section {
       border: 1px solid var(--sg-border);
       border-radius: var(--sg-radius-lg);

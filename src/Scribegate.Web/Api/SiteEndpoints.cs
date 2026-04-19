@@ -65,7 +65,7 @@ public static class SiteEndpoints
         var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/site")
             .WithTags("Site");
 
-        group.MapGet("/", GenerateSite).RequireAuthorization();
+        group.MapGet("", GenerateSite).RequireAuthorization();
     }
 
     private static async Task<IResult> GenerateSite(
@@ -117,16 +117,23 @@ public static class SiteEndpoints
 
         var fileName = $"{SanitizeFilename(repo.Slug)}-site.zip";
 
-        return Results.Stream(async stream =>
-        {
-            var skipped = new List<object>();
-            var generatedCount = 0;
-            long totalBytes = 0;
-            var overflow = false;
-            var navEntries = new List<(string HtmlPath, string Title)>();
-            var referencedMedia = new HashSet<string>(StringComparer.Ordinal);
+        var skipped = new List<object>();
+        var generatedCount = 0;
+        long totalBytes = 0;
+        var overflow = false;
+        var navEntries = new List<(string HtmlPath, string Title)>();
+        var referencedMedia = new HashSet<string>(StringComparer.Ordinal);
+        var mediaCount = 0;
+        long mediaBytes = 0;
+        var skippedMedia = new List<object>();
 
-            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        // ZipArchive writes its central directory synchronously during Dispose().
+        // Build into a temp file first so the HTTP response stays fully async.
+        var tempStream = DeleteOnDisposeFileStream.CreateTemporary();
+
+        try
+        {
+            using (var zip = new ZipArchive(tempStream, ZipArchiveMode.Create, leaveOpen: true))
             {
                 // 1. Static stylesheet first — cheap, fixed size, referenced by every page.
                 totalBytes += await WriteEntryAsync(zip, "assets/style.css", StyleSheet, ct);
@@ -193,9 +200,6 @@ public static class SiteEndpoints
                 // upload cap (10 MB) so worst-case cost is `assets * 10 MB`.
                 // The MaxSiteBytes check still applies and short-circuits the
                 // loop with a skipped-manifest entry on overflow.
-                var mediaCount = 0;
-                long mediaBytes = 0;
-                var skippedMedia = new List<object>();
                 foreach (var name in referencedMedia)
                 {
                     if (ct.IsCancellationRequested) break;
@@ -255,19 +259,28 @@ public static class SiteEndpoints
                 }, ct);
             }
 
-            // Audit after the zip has been fully composed so totals are real.
-            await audit.LogAsync(
-                AuditEventTypes.SiteGenerated, userId, userContext.GetUsername(),
-                "Repository", repo.Id,
-                new
-                {
-                    owner,
-                    slug = repo.Slug,
-                    documentCount = generatedCount,
-                    sizeBytes = totalBytes,
-                    sizeCapReached = overflow,
-                }, ct);
-        }, "application/zip", fileName);
+            tempStream.Position = 0;
+        }
+        catch
+        {
+            await tempStream.DisposeAsync();
+            throw;
+        }
+
+        // Audit after the zip has been fully composed so totals are real.
+        await audit.LogAsync(
+            AuditEventTypes.SiteGenerated, userId, userContext.GetUsername(),
+            "Repository", repo.Id,
+            new
+            {
+                owner,
+                slug = repo.Slug,
+                documentCount = generatedCount,
+                sizeBytes = totalBytes,
+                sizeCapReached = overflow,
+            }, ct);
+
+        return Results.Stream(tempStream, "application/zip", fileName);
     }
 
     // Reads the Prism bundle + theme produced by Client/scripts/build-prism-bundle.mjs
