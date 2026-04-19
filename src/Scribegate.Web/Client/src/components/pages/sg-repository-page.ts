@@ -335,6 +335,7 @@ export class SgRepositoryPage extends LitElement {
                 .content=${this._readme.content ?? ''}
                 owner=${this._owner}
                 slug=${this._slug}
+                documentPath=${this._readme.path}
               ></sg-markdown-view>
             </section>`
         : ''}

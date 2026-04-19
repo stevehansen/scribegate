@@ -166,6 +166,9 @@ export class SgMarkdownView extends LitElement {
   // are resolved against the repository's media-by-name endpoint.
   @property() owner = '';
   @property() slug = '';
+  // When set alongside owner/slug, relative <a href> values are rewritten as
+  // if the markdown were opened at its canonical document route.
+  @property() documentPath = '';
 
   render() {
     const rendered = renderMarkdown(this.content);
@@ -173,14 +176,31 @@ export class SgMarkdownView extends LitElement {
   }
 
   async updated() {
-    // 1) Rewrite relative <img> src values to the media endpoint so
+    // 1) Rewrite relative <a href> values against the document's canonical
+    //    repo path so inline README renders behave like full document views.
+    // 2) Rewrite relative <img> src values to the media endpoint so
     //    `![diagram](foo.png)` resolves against the repo's MediaAssets.
-    // 2) Render Mermaid diagrams (replaces <pre> blocks).
-    // 3) Highlight remaining fenced code blocks via Prism.
-    // All three passes are safe no-ops when there's nothing to do.
+    // 3) Render Mermaid diagrams (replaces <pre> blocks).
+    // 4) Highlight remaining fenced code blocks via Prism.
+    // All four passes are safe no-ops when there's nothing to do.
+    this._resolveDocumentReferences();
     this._resolveMediaReferences();
     await renderMermaidBlocks(this.renderRoot);
     highlightAllUnder(this.renderRoot);
+  }
+
+  private _resolveDocumentReferences() {
+    if (!this.owner || !this.slug || !this.documentPath) return;
+    const links = this.renderRoot.querySelectorAll<HTMLAnchorElement>('a[href]');
+    for (const link of Array.from(links)) {
+      const href = link.getAttribute('href') ?? '';
+      const resolved = resolveRelativeDocumentHref(href, this.owner, this.slug, this.documentPath);
+      if (resolved && resolved !== href) {
+        link.setAttribute('href', resolved);
+        link.removeAttribute('target');
+        link.removeAttribute('rel');
+      }
+    }
   }
 
   private _resolveMediaReferences() {
@@ -191,6 +211,31 @@ export class SgMarkdownView extends LitElement {
       const resolved = resolveRelativeMediaSrc(src, this.owner, this.slug);
       if (resolved && resolved !== src) img.setAttribute('src', resolved);
     }
+  }
+}
+
+// Returns a rewritten absolute repo route when `href` is a relative link that
+// should behave as if the markdown were opened at `documentPath`. Returns null
+// for hash-only, absolute-path, or scheme-qualified links that must pass
+// through unchanged.
+export function resolveRelativeDocumentHref(
+  href: string,
+  owner: string,
+  slug: string,
+  documentPath: string,
+): string | null {
+  if (!href || !owner || !slug || !documentPath) return null;
+  if (href.startsWith('#') || href.startsWith('?')) return null;
+  if (href.startsWith('//') || href.startsWith('/')) return null;
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href)) return null;
+
+  try {
+    const basePath = documentPath.startsWith('/') ? documentPath.slice(1) : documentPath;
+    const baseUrl = new URL(basePath, 'https://scribegate.invalid/');
+    const resolved = new URL(href, baseUrl);
+    return `/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return null;
   }
 }
 

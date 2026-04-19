@@ -6,23 +6,23 @@ import DOMPurify from 'dompurify';
 type MermaidModule = typeof import('mermaid');
 let loader: Promise<MermaidModule['default']> | null = null;
 
+export function buildMermaidConfig(theme: 'default' | 'dark' = detectTheme()) {
+  return {
+    startOnLoad: false,
+    theme,
+    securityLevel: 'strict' as const,
+    fontFamily: 'inherit',
+    // Mermaid v11 emits many diagram labels as HTML inside <foreignObject>
+    // nodes by default. Our SVG sanitization intentionally strips those, so
+    // force native SVG <text> labels across diagram types.
+    htmlLabels: false,
+    flowchart: { htmlLabels: false },
+  };
+}
+
 async function load(): Promise<MermaidModule['default']> {
   if (!loader) {
-    loader = import('mermaid').then((mod) => {
-      mod.default.initialize({
-        startOnLoad: false,
-        theme: detectTheme(),
-        securityLevel: 'strict',
-        fontFamily: 'inherit',
-        // Flowchart labels default to HTML inside <foreignObject>, which
-        // DOMPurify's SVG profile strips as belt-and-braces XSS protection,
-        // leaving the nodes without any visible text. Force native <text>
-        // labels — sequence, git, and journey diagrams already render text
-        // natively, which is why they survived the same pipeline.
-        flowchart: { htmlLabels: false },
-      });
-      return mod.default;
-    });
+    loader = import('mermaid').then((mod) => mod.default);
   }
   return loader;
 }
@@ -41,6 +41,7 @@ export async function renderMermaidBlocks(root: ParentNode): Promise<void> {
   if (blocks.length === 0) return;
 
   const mermaid = await load();
+  mermaid.initialize(buildMermaidConfig());
 
   let counter = 0;
   for (const code of blocks) {

@@ -105,6 +105,7 @@ export class SgDocumentPage extends LitElement {
           content=${this._doc.content ?? ''}
           owner=${this._owner}
           slug=${this._slug}
+          documentPath=${this._doc.path}
         ></sg-markdown-view>
       </div>
 

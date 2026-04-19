@@ -7,7 +7,31 @@
 // the exported helper that carries the security-relevant logic.
 
 import { describe, it, expect } from 'vitest';
-import { resolveRelativeMediaSrc } from './sg-markdown-view.js';
+import { resolveRelativeDocumentHref, resolveRelativeMediaSrc } from './sg-markdown-view.js';
+
+describe('resolveRelativeDocumentHref', () => {
+  it('rewrites top-level README links against the repository root', () => {
+    const out = resolveRelativeDocumentHref('diagrams.md', 'alice', 'handbook', 'README.md');
+    expect(out).toBe('/alice/handbook/diagrams.md');
+  });
+
+  it('rewrites nested sibling links against the document directory', () => {
+    const out = resolveRelativeDocumentHref('./install.md', 'alice', 'handbook', 'guides/setup.md');
+    expect(out).toBe('/alice/handbook/guides/install.md');
+  });
+
+  it('normalizes parent-directory traversal and preserves search/hash', () => {
+    const out = resolveRelativeDocumentHref('../README.md?view=full#top', 'alice', 'handbook', 'guides/setup/intro.md');
+    expect(out).toBe('/alice/handbook/guides/README.md?view=full#top');
+  });
+
+  it('leaves anchors, absolute paths, and scheme-qualified links alone', () => {
+    expect(resolveRelativeDocumentHref('#section', 'a', 'b', 'README.md')).toBeNull();
+    expect(resolveRelativeDocumentHref('/docs/intro.md', 'a', 'b', 'README.md')).toBeNull();
+    expect(resolveRelativeDocumentHref('https://example.com/docs', 'a', 'b', 'README.md')).toBeNull();
+    expect(resolveRelativeDocumentHref('mailto:test@example.com', 'a', 'b', 'README.md')).toBeNull();
+  });
+});
 
 describe('resolveRelativeMediaSrc', () => {
   it('rewrites a bare filename to the media-by-name endpoint', () => {
