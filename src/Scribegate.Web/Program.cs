@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -24,6 +25,7 @@ builder.Services.AddSingleton<JwtService>();
 builder.Services.AddSingleton<SignatureService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<AuthorizationHelper>();
+builder.Services.AddScoped<AccountAgeGateService>();
 builder.Services.AddScoped<TierService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<NotificationService>();
@@ -203,36 +205,59 @@ builder.Services.AddRateLimiter(options =>
         }, ct);
     };
 
-    // Strict limit for auth endpoints (registration, login)
-    options.AddFixedWindowLimiter("auth", limiter =>
+    // Strict limit for auth endpoints (registration, login), partitioned per IP
+    options.AddPolicy("auth", context =>
     {
-        limiter.PermitLimit = 10;
-        limiter.Window = TimeSpan.FromMinutes(15);
-        limiter.QueueLimit = 0;
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0,
+        });
     });
 
-    // Moderate limit for content creation (repos, docs, proposals)
-    options.AddFixedWindowLimiter("content-create", limiter =>
+    // Moderate limit for content creation, partitioned per authenticated user.
+    // We fall back to IP only as a defence-in-depth fallback for malformed tests.
+    options.AddPolicy("content-create", context =>
     {
-        limiter.PermitLimit = 30;
-        limiter.Window = TimeSpan.FromMinutes(15);
-        limiter.QueueLimit = 0;
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub")
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromMinutes(15),
+            QueueLimit = 0,
+        });
     });
 
-    // Generous limit for reads
-    options.AddFixedWindowLimiter("read", limiter =>
+    // Generous limit for reads, partitioned per IP.
+    options.AddPolicy("read", context =>
     {
-        limiter.PermitLimit = 200;
-        limiter.Window = TimeSpan.FromMinutes(1);
-        limiter.QueueLimit = 0;
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 200,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
     });
 
-    // Limit for report submission (prevent report spam)
-    options.AddFixedWindowLimiter("report", limiter =>
+    // Limit for report submission (prevent report spam), partitioned per user.
+    options.AddPolicy("report", context =>
     {
-        limiter.PermitLimit = 5;
-        limiter.Window = TimeSpan.FromHours(1);
-        limiter.QueueLimit = 0;
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User.FindFirstValue("sub")
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromHours(1),
+            QueueLimit = 0,
+        });
     });
 
     // Limit for anonymous share-link resolution (per-IP, prevents single-IP abuse

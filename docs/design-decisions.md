@@ -224,12 +224,12 @@ curl -H "Authorization: Bearer $TOKEN" \
   https://scribegate.dev/api/v1/repositories/acme-corp/handbook/documents/onboarding.md?include=metadata
 ```
 
-**API tokens** are long-lived, scoped credentials for programmatic access:
+**API tokens** are long-lived, revocable credentials for programmatic access:
 - Created from the user's settings page
-- Scoped to specific repositories or all repositories
 - Have the same permissions as the user's role
 - Can be revoked at any time
 - Include an optional description ("CI pipeline", "My AI assistant")
+- The `scopes` field is reserved for future enforcement and is currently rejected when non-empty
 
 ---
 
@@ -372,7 +372,7 @@ Scribegate uses dual-scheme authentication: JWT tokens for interactive users and
 | Use case | Mechanism | Why |
 |---|---|---|
 | Browser/SPA user | JWT | Short-lived (24h default), standard, no server-side session storage |
-| CI/CD pipeline | API token (`sg_`) | Long-lived, scoped, revocable without affecting the user's other sessions |
+| CI/CD pipeline | API token (`sg_`) | Long-lived, revocable without affecting the user's other sessions |
 | AI agent | API token (`sg_`) | Same as CI/CD — create a dedicated token per agent |
 | CLI tool (`sg`) | Either | `sg auth login` gets a JWT via browser, `sg auth token` stores an API token |
 
@@ -413,7 +413,7 @@ Authentication flow:
 1. **No session state.** JWTs are stateless, API tokens are looked up per-request. No server-side session store needed.
 2. **API tokens are hashed, not encrypted.** If the database leaks, attackers can't reverse the hashes to get usable tokens.
 3. **First user is admin.** The first account registered on a new instance automatically gets `IsAdmin = true`. This bootstraps the admin role without a seed password.
-4. **Registration is controllable.** Admins can disable registration, require email verification, require Terms of Service acceptance, and set an account age gate (new accounts must wait N hours before creating content).
+4. **Registration is controllable.** Admins can disable registration, require Terms of Service acceptance, set legal-document URLs for the public registration form, and set an account age gate (new accounts must wait N hours before posting proposals/comments or creating public repositories). The password-account email-verification setting is reserved until a verification flow exists.
 
 ### Token Management
 
@@ -436,7 +436,7 @@ DELETE /api/v1/auth/tokens/{id}
 
 ### Decision
 
-Every revision is signed with ECDSA P-256 at creation time. The signature covers the revision content, message, author, and timestamp.
+Every revision is signed with ECDSA P-256 at creation time. The signature currently covers the SHA-256 hash of the revision content.
 
 ### Why?
 
@@ -447,8 +447,8 @@ Every revision is signed with ECDSA P-256 at creation time. The signature covers
 ### Implementation
 
 - The signing key is generated per instance (ECDSA P-256 key pair, stored in the data directory)
-- On revision creation: `sign(content + message + createdBy + createdAt)` → stored as `RevisionSignature`
-- Verification is available via the API for compliance checks
+- On revision creation: `sign(sha256(content))` → stored as `RevisionSignature`
+- Verification is currently internal-only; there is no public verification API yet
 - If you restore a database backup to a different instance (different signing key), existing signatures won't verify — this is expected and the audit trail remains intact
 
 ---

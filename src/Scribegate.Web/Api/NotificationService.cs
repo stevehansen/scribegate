@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using Scribegate.Core.Entities;
 using Scribegate.Data;
 
@@ -77,11 +78,17 @@ public class NotificationService(ScribegateDbContext db, EmailService emailServi
             var user = await db.Users.FindAsync([notification.UserId], ct);
             if (user is null || string.IsNullOrEmpty(user.Email)) return;
 
+            var encodedTitle = WebUtility.HtmlEncode(notification.Title);
+            var encodedBody = WebUtility.HtmlEncode(notification.Body)
+                .Replace("\r\n", "<br />", StringComparison.Ordinal)
+                .Replace("\n", "<br />", StringComparison.Ordinal);
+            var encodedLink = notification.Link is null ? null : WebUtility.HtmlEncode(notification.Link);
+
             var htmlBody = $"""
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #1a1a1a;">{notification.Title}</h2>
-                    <p style="color: #4a4a4a; line-height: 1.6;">{notification.Body}</p>
-                    {(notification.Link is not null ? $"""<p><a href="{notification.Link}" style="color: #2563eb; text-decoration: none;">View in Scribegate</a></p>""" : "")}
+                    <h2 style="color: #1a1a1a;">{encodedTitle}</h2>
+                    <p style="color: #4a4a4a; line-height: 1.6;">{encodedBody}</p>
+                    {(encodedLink is not null ? $"""<p><a href="{encodedLink}" style="color: #2563eb; text-decoration: none;">View in Scribegate</a></p>""" : "")}
                     <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
                     <p style="color: #9a9a9a; font-size: 12px;">You received this because of your notification preferences in Scribegate.</p>
                 </div>

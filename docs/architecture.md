@@ -333,7 +333,7 @@ public class SystemSetting
 }
 ```
 
-Settings like `RegistrationEnabled`, `EmailValidationRequired`, `RequireTos`, and `AccountAgeGateHours` are managed here. Admins change them via `PUT /api/v1/admin/settings/{key}`.
+Settings like `RegistrationEnabled`, `RequireTos`, `TosUrl`, `PrivacyUrl`, and `AccountAgeGateHours` are managed here. `EmailValidationRequired` remains defined but is reserved until a password-account verification flow exists. Admins change settings via `PUT /api/v1/admin/settings/{key}`.
 
 ---
 

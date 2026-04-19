@@ -189,13 +189,20 @@ export interface CommentListResponse {
 export interface MemberResponse {
   userId: string;
   username: string;
-  email: string;
+  email?: string;
   role: string;
 }
 
 export interface MemberListResponse {
   items: MemberResponse[];
   total: number;
+}
+
+export interface RegistrationStatusResponse {
+  registrationEnabled: boolean;
+  requireTos: boolean;
+  tosUrl?: string;
+  privacyUrl?: string;
 }
 
 export interface SettingResponse {

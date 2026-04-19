@@ -64,6 +64,12 @@ public class SearchEndToEndTests : IClassFixture<ScribegateWebAppFactory>
         body.Should().NotBeNull();
         body!.Items.Should().NotBeNull();
         body.Items!.Should().ContainSingle(i => i.Path == "readme.md" && i.RepositorySlug == repo.Slug);
+
+        var scopedSearch = await client.GetAsync($"/api/v1/search?q=echolocation&repo={repo.Owner}/{repo.Slug}");
+        scopedSearch.StatusCode.Should().Be(HttpStatusCode.OK);
+        var scopedBody = await scopedSearch.Content.ReadFromJsonAsync<SearchResponse>();
+        scopedBody.Should().NotBeNull();
+        scopedBody!.Items.Should().ContainSingle(i => i.Path == "readme.md" && i.RepositorySlug == repo.Slug);
     }
 
     private sealed class RegisterResponse

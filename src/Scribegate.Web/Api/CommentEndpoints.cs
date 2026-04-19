@@ -68,12 +68,19 @@ public static class CommentEndpoints
         IProposalStore proposalStore,
         ICommentStore commentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
+        AccountAgeGateService accountAgeGate,
         NotificationService notifications,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)
@@ -86,6 +93,13 @@ public static class CommentEndpoints
             return ApiResults.ValidationError("body", ApiErrorCodes.TooLong, "Comment must be 4000 characters or less.");
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var ageDenied = await accountAgeGate.RequireMinimumAgeAsync(
+            userId,
+            "post comments",
+            "posting comments",
+            null,
+            ct);
+        if (ageDenied is not null) return ageDenied;
 
         var comment = new Comment
         {
@@ -140,10 +154,20 @@ public static class CommentEndpoints
         IProposalStore proposalStore,
         ICommentStore commentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
+        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+        if (denied is not null) return denied;
+
+        var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
+        if (proposal is null || proposal.RepositoryId != repo.Id)
+            return ApiResults.NotFound("Proposal", proposalId.ToString());
 
         var comment = await commentStore.GetByIdAsync(id, ct);
         if (comment is null || comment.ProposalId != proposalId)
@@ -177,13 +201,23 @@ public static class CommentEndpoints
         Guid proposalId,
         Guid id,
         IRepositoryStore repoStore,
+        IProposalStore proposalStore,
         ICommentStore commentStore,
         UserContext userContext,
+        AuthorizationHelper authz,
         ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+        if (denied is not null) return denied;
+
+        var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
+        if (proposal is null || proposal.RepositoryId != repo.Id)
+            return ApiResults.NotFound("Proposal", proposalId.ToString());
 
         var comment = await commentStore.GetByIdAsync(id, ct);
         if (comment is null || comment.ProposalId != proposalId)

@@ -38,7 +38,7 @@ public static class SettingDefinitions
         new(SystemSettingKeys.RegistrationEnabled, GroupRegistration, "Registration enabled", "bool",
             "Allow new users to sign up.", "true"),
         new(SystemSettingKeys.EmailValidationRequired, GroupRegistration, "Require email validation", "bool",
-            "Users must verify their email before they can sign in.", "false"),
+            "Reserved for a future password-account email verification flow. Must remain false for now.", "false"),
         new(SystemSettingKeys.RequireTos, GroupRegistration, "Require Terms acceptance", "bool",
             "Users must accept the ToS during registration.", "true"),
         new(SystemSettingKeys.TosUrl, GroupRegistration, "Terms of Service URL", "string",
@@ -48,7 +48,7 @@ public static class SettingDefinitions
 
         // Accounts
         new(SystemSettingKeys.AccountAgeGateHours, GroupAccount, "Account age gate (hours)", "number",
-            "Hours a new account must exist before posting proposals/comments. 0 disables.", "24"),
+            "Hours a new account must exist before posting proposals/comments and creating public repositories. 0 disables.", "24"),
 
         // OIDC
         new(SystemSettingKeys.OidcEnabled, GroupOidc, "OIDC enabled", "bool",

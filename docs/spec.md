@@ -391,7 +391,7 @@ The differentiating feature: editorial workflow.
 - [x] Webhooks (HMAC-SHA256 signed, SSRF-guarded, auto-disable after 10 failures, on proposal/document/review/comment events)
 - [x] Export repository as a zip of markdown files (streaming, 1 GiB cap, manifest with skipped list)
 - [x] Share links for individual documents (time-limited, revocable, read-only URLs)
-- [x] API for external integrations (REST API + OpenAPI-generated client libraries for TypeScript/JS, C#, Python; long-lived scoped API tokens; CLI tool `sg`)
+- [x] API for external integrations (REST API + OpenAPI-generated client libraries for TypeScript/JS, C#, Python; long-lived API tokens; CLI tool `sg`)
 - [x] Git-compatible read-only access (clone the repo)
 - [x] Static site generation from repository content
 - [x] Markdown templates per repository
@@ -420,13 +420,13 @@ Richer rendering so Scribegate handles real technical writing, not just prose.
 
 A real automated-test harness and the guardrails that keep future milestones safe. Pure foundation work: no user-visible feature changes, but every subsequent milestone (multi-document proposals, RavenDB adapter, performance work) becomes cheaper and less risky once this lands.
 
-- [ ] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
-- [ ] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas
-- [ ] Web API integration tests via `WebApplicationFactory<Program>` — auth (JWT + API token + OIDC stub), RBAC, owner/slug routing, share links, webhook signing, static-site/export streaming, rate limiting
-- [ ] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` driven by both xUnit theories (Markdig) and Vitest (marked + DOMPurify under jsdom), with golden-output snapshots per side and a divergence-allow-list cross-check against `docs/markdown.md`
-- [ ] SPA Vitest + `@open-wc/testing` unit/component tests, colocated alongside components; plus one jsdom-driven "simulated happy path" (register → create repo → create doc → propose → review → approve) exercising the router + editor + markdown view stack
-- [ ] CI gating — tests run on every PR, coverage tracked (Cobertura artifact upload, no threshold gate yet — revisit in M8), parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, and `docs/testing.md` describing conventions, flake-quarantine policy, and how to add tests for each layer
-- [ ] Playwright E2E deferred to M8 — M7 ships a Vitest/jsdom simulated happy-path instead (see `docs/testing.md`)
+- [x] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
+- [x] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup)
+- [x] Web API integration tests via `WebApplicationFactory<Program>` — auth, owner/slug routing, search, and security regressions
+- [x] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` with golden-output snapshots on both the Markdig and `marked` paths
+- [x] SPA Vitest + `@open-wc/testing` unit/component tests, colocated alongside components
+- [x] CI gating — tests run on every PR via parallel `test-dotnet` and `test-frontend` jobs, with `docs/testing.md` describing conventions and test layering
+- [ ] Playwright E2E deferred to M8 — M7 ships unit/component/parity coverage instead (see `docs/testing.md`)
 
 ---
 

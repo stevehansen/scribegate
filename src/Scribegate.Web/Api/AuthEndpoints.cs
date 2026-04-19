@@ -148,10 +148,6 @@ public static class AuthEndpoints
         // First user becomes admin
         var isFirstUser = !await db.Users.AnyAsync(ct);
 
-        // Email verification: auto-verify first user (admin), others start unverified
-        var emailValidation = await settings.GetAsync(SystemSettingKeys.EmailValidationRequired, ct);
-        var autoVerify = isFirstUser || emailValidation != "true";
-
         var defaultTier = await tierService.GetDefaultTierAsync(ct);
 
         var user = new User
@@ -162,7 +158,9 @@ public static class AuthEndpoints
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             IsAdmin = isFirstUser,
             Tier = defaultTier,
-            EmailVerified = autoVerify,
+            // Password-account email verification is not implemented yet.
+            // Keep accounts usable instead of minting permanently unverified users.
+            EmailVerified = true,
             TosAcceptedAt = request.AcceptTos ? DateTime.UtcNow : null,
         };
 
@@ -341,6 +339,11 @@ public static class AuthEndpoints
             return ApiResults.ValidationError("name", ApiErrorCodes.TooLong,
                 "Token name must be 200 characters or less.");
 
+        if (!string.IsNullOrWhiteSpace(request.Scopes))
+            return ApiResults.ValidationError("scopes", ApiErrorCodes.InvalidFormat,
+                "API token scopes are not supported yet.",
+                "Leave scopes empty for now. Scoped API tokens will be rejected until enforcement exists.");
+
         // Quota check: max API tokens
         var user = await db.Users.FindAsync([userId.Value], ct);
         if (user is not null)
@@ -390,7 +393,7 @@ public static class AuthEndpoints
             Id = apiToken.Id,
             Name = apiToken.Name,
             Token = rawToken,
-            Scopes = apiToken.Scopes,
+            Scopes = null,
             CreatedAt = apiToken.CreatedAt,
             ExpiresAt = apiToken.ExpiresAt,
         });
@@ -412,7 +415,7 @@ public static class AuthEndpoints
             {
                 Id = t.Id,
                 Name = t.Name,
-                Scopes = t.Scopes,
+                Scopes = null,
                 CreatedAt = t.CreatedAt,
                 ExpiresAt = t.ExpiresAt,
                 LastUsedAt = t.LastUsedAt,

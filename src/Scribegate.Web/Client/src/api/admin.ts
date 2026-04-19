@@ -1,8 +1,8 @@
 import { apiFetch } from './client.js';
-import type { SettingResponse, AuditEventListResponse } from './types.js';
+import type { SettingResponse, AuditEventListResponse, RegistrationStatusResponse } from './types.js';
 
 export function getRegistrationStatus() {
-  return apiFetch<{ registrationEnabled: boolean }>('/api/v1/admin/settings/registration');
+  return apiFetch<RegistrationStatusResponse>('/api/v1/admin/settings/registration');
 }
 
 export function listSettings() {

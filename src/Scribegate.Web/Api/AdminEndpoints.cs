@@ -86,7 +86,17 @@ public static class AdminEndpoints
         CancellationToken ct)
     {
         var enabled = await settings.GetAsync(SystemSettingKeys.RegistrationEnabled, ct);
-        return Results.Ok(new { registrationEnabled = enabled != "false" });
+        var requireTos = await settings.GetAsync(SystemSettingKeys.RequireTos, ct);
+        var tosUrl = await settings.GetAsync(SystemSettingKeys.TosUrl, ct);
+        var privacyUrl = await settings.GetAsync(SystemSettingKeys.PrivacyUrl, ct);
+
+        return Results.Ok(new
+        {
+            registrationEnabled = enabled != "false",
+            requireTos = requireTos != "false",
+            tosUrl = string.IsNullOrWhiteSpace(tosUrl) ? null : tosUrl.Trim(),
+            privacyUrl = string.IsNullOrWhiteSpace(privacyUrl) ? null : privacyUrl.Trim(),
+        });
     }
 
     private static async Task<IResult> ListSettings(
@@ -152,6 +162,11 @@ public static class AdminEndpoints
             return ApiResults.ValidationError("value", ApiErrorCodes.Required, "Value is required (use an empty string to clear).");
 
         var newValue = request.Value.Trim();
+        if (key == SystemSettingKeys.EmailValidationRequired && string.Equals(newValue, "true", StringComparison.OrdinalIgnoreCase))
+            return ApiResults.ValidationError("value", ApiErrorCodes.InvalidFormat,
+                "Password-account email verification is not implemented yet.",
+                "Leave this setting disabled until a verification flow exists.");
+
         var oldValue = await settings.GetAsync(key, ct);
         await settings.SetAsync(key, newValue, ct);
 

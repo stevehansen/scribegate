@@ -83,10 +83,10 @@ does not need `WebApplicationFactory`.
 
 Three parallel jobs (see `.github/workflows/ci.yml`):
 
-- **`test-dotnet`** — matrix `ubuntu-latest` + `windows-latest`. Runs
-  `dotnet test Scribegate.slnx --collect:"XPlat Code Coverage"` and
-  uploads the Cobertura report as an artifact. No coverage threshold
-  gating yet.
+- **`test-dotnet`** — matrix `ubuntu-latest` + `windows-latest`. Restores,
+  builds, then runs the three xUnit v3 executable test projects via
+  `dotnet run --no-build -c Release --project ...`. Coverage collection is
+  deferred until the Microsoft.Testing.Platform coverage extension is wired in.
 - **`test-frontend`** — ubuntu only. `npm ci`, `tsc --noEmit`, then
   `npm run test:run` followed by `npm run test:parity`.
 - **`publish-check`** — unchanged end-to-end build / publish sanity.

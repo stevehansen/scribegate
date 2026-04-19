@@ -120,7 +120,7 @@ All endpoints require authentication unless marked otherwise. Use either:
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/search?q={query}&repo={owner}/{slug}` | No | Full-text search across documents |
+| `GET` | `/api/v1/search?q={query}&repo={owner}/{slug}` | No | Full-text search across documents. `owner` + `repo` as separate query params are also accepted |
 
 ### Notifications
 
@@ -186,7 +186,8 @@ Validation errors return all field errors at once:
 
 | Scope | Limit | Applies to |
 |-------|-------|------------|
-| Authentication | 10 req / 15 min per IP | `/api/v1/auth/*` |
-| Content creation | 30 req / 15 min per user | Creating proposals, comments, documents |
-| Reads | 200 req / 1 min per IP | All GET endpoints |
-| Reports | 5 req / 1 hour per user | Content reporting |
+| Authentication | 10 req / 15 min per IP | `POST /api/v1/auth/register`, `POST /api/v1/auth/login` |
+| Content creation | 30 req / 15 min per user | Selected write-heavy endpoints: repositories, documents, proposals, templates, media, share links, and webhooks |
+| Search reads | 200 req / 1 min per IP | `GET /api/v1/search` |
+| Reports | 5 req / 1 hour per user | `POST /api/v1/reports` |
+| Share resolution | 100 req / 1 min per IP | `GET /api/v1/shares/{token}` |

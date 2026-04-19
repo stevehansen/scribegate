@@ -73,5 +73,5 @@ Both surfaces treat document content as untrusted and apply defence in depth:
 
 1. **`UseMediaLinks` on server, plain `<img>` on client** — a video reference like `![demo](demo.mp4)` shows a broken image on the SPA. Either add a client post-process that upgrades `<img src="*.mp4">` to `<video>`, or drop `UseMediaLinks` on the server. Tracked as a follow-up.
 2. **Share-link pages** (`/s/{token}`) do not resolve relative media references because the public share payload omits `repositoryOwner`. Fix requires either exposing the owner on the share payload or adding a share-scoped media endpoint.
-3. **No automated regression tests** — this document catalogues the intended behaviour but there is no test project yet. A small xUnit project with golden-HTML fixtures per Core feature would be the natural next step.
+3. **Cross-pipeline parity is still incomplete** — regression tests now exist on both sides (`tests/Scribegate.Web.Tests/Markdown/*` and the SPA Vitest parity suite), but the direct Markdig-vs-marked golden comparison is still tracked as a TODO.
 4. **KaTeX is eagerly bundled** — importing `katex` into the main SPA chunk added ~270 KB (gzip). Fine for a docs-heavy app, but a candidate for dynamic-import gating ("only load when the document contains `$…$`") if startup weight becomes a concern.

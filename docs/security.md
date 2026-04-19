@@ -40,7 +40,7 @@ Confusing security UX leads to workarounds that are worse than no security at al
 - **Adding collaborators is easy.** Invite by email, assign a role, done. No complex permission trees.
 - **Roles are intuitive.** Reader, Contributor, Reviewer, Admin. You know what each means immediately.
 - **Error messages help, not hinder.** "You don't have permission to approve proposals in this repository. You have the Contributor role; approval requires Reviewer or Admin." Not just "403 Forbidden."
-- **Rate limiting is surgical.** Only applied to endpoints where abuse is a real risk (login, account creation). Never on normal document editing or reviewing. A rate limit that blocks a legitimate user during a busy review session is a bug, not a feature.
+- **Rate limiting is surgical.** It is applied only where abuse is a real risk: auth, selected write-heavy endpoints, search/share resolution, reports, and git clone surfaces. Normal review discussion endpoints are intentionally left out so a busy review session is not throttled.
 
 ## Authentication
 
@@ -163,11 +163,11 @@ Validation errors explain exactly what's wrong and how to fix it:
 
 ### Markdown Rendering
 
-User-supplied markdown is rendered server-side with Markdig. The rendering pipeline:
+User-supplied markdown has two hardened rendering pipelines:
 
-1. Parses markdown to an AST (no raw HTML passthrough by default)
-2. Sanitizes any HTML that Markdig extensions might produce
-3. Outputs safe HTML with no script execution vectors
+1. **SPA / document view / share view:** `marked` renders client-side and DOMPurify sanitizes the HTML before it is injected.
+2. **Static-site export:** Markdig renders server-side with `DisableHtml()` and a deliberately curated extension set.
+3. Both paths block script execution vectors; see [markdown.md](markdown.md) for the exact feature split.
 
 ### XSS Prevention
 
@@ -183,13 +183,16 @@ Rate limiting is applied surgically, only where abuse poses a real risk:
 | Scope | Limit | Key | Rationale |
 |---|---|---|---|
 | Authentication | 10 requests / 15 min | Per IP | Prevents brute-force password guessing and mass account creation |
-| Content creation | 30 requests / 15 min | Per user | Prevents spam (proposals, comments, documents) |
-| Reads | 200 requests / 1 min | Per IP | Prevents scraping |
+| Content creation | 30 requests / 15 min | Per user | Covers selected write-heavy endpoints (repositories, documents, proposals, templates, media, share links, webhooks) |
+| Search reads | 200 requests / 1 min | Per IP | Prevents search scraping without throttling normal browsing |
+| Share resolution | 100 requests / 1 min | Per IP | Frustrates share-token enumeration |
 | Content reports | 5 reports / 1 hr | Per user | Prevents report flooding |
+| Git refs / HEAD | 60 requests / 1 min | Per IP | Caps clone/session fan-out on the expensive discovery step |
+| Git objects | 2000 requests / 1 min | Per IP | Allows normal clone throughput while bounding abuse |
 
 **Design philosophy:** A rate limit that interferes with a legitimate user's workflow is a bug. The limits above are intentionally generous for normal use. If you're hitting a rate limit during normal work, that's our problem to fix, not yours.
 
-For example, the content creation limit of 30/15min means you can save a document every 30 seconds for 15 minutes straight without hitting the limit. The read limit of 200/min covers normal browsing, including aggressive page navigation.
+For example, the content-creation limit of 30/15min still allows a single user to create a proposal every 30 seconds for 15 minutes straight without hitting the limiter. The dedicated git-object bucket is much higher because a legitimate clone issues hundreds of object requests.
 
 ## Security Headers
 

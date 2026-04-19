@@ -249,7 +249,7 @@ curl http://localhost:8080/api/v1/repositories \
 
 ### API Tokens (for services and AI agents)
 
-Long-lived, scoped credentials for programmatic access. Created from the API (or the web UI's settings page). API tokens use the `sg_` prefix.
+Long-lived, revocable credentials for programmatic access. Created from the API (or the web UI's settings page). API tokens use the `sg_` prefix. The `scopes` field is reserved for future enforcement and must be left empty for now.
 
 ```bash
 # Create an API token
@@ -460,7 +460,7 @@ The zip contains:
 
 Unzip it and upload the folder anywhere that serves static files — GitHub Pages, Netlify, nginx, S3, a USB stick. No server-side runtime needed.
 
-Markdown is rendered server-side through a hardened Markdig pipeline. Raw HTML is disabled (`DisableHtml()`), generic attribute syntax is **not** enabled, and link URLs are scrubbed — any `javascript:`, `vbscript:`, or `data:` URL is rewritten to `#`. Same 1 GiB streaming cap and `sizeCapReached` manifest flag as repository export.
+For the exported site, markdown is rendered server-side through a hardened Markdig pipeline. Raw HTML is disabled (`DisableHtml()`), generic attribute syntax is **not** enabled, and link URLs are scrubbed — any `javascript:`, `vbscript:`, or `data:` URL is rewritten to `#`. Same 1 GiB streaming cap and `sizeCapReached` manifest flag as repository export. The interactive SPA uses its own hardened `marked` + DOMPurify pipeline; see [docs/markdown.md](docs/markdown.md).
 
 Members of a repo (any role) can generate; public repos are also generatable by any authenticated user.
 
@@ -660,10 +660,10 @@ Instance admins can manage settings and review audit logs from the web UI or the
 | Setting | Default | Description |
 |---|---|---|
 | `RegistrationEnabled` | `true` | Whether new users can register |
-| `EmailValidationRequired` | `false` | Require email verification before access |
+| `EmailValidationRequired` | `false` | Reserved for a future password-account email verification flow. Must remain `false` for now |
 | `InstanceName` | `Scribegate` | Display name for the instance |
 | `RequireTos` | `true` | Require Terms of Service acceptance on registration |
-| `AccountAgeGateHours` | `24` | Hours a new account must wait before creating content |
+| `AccountAgeGateHours` | `24` | Hours a new account must wait before posting proposals/comments or creating public repositories |
 
 ```bash
 # View all settings (admin only)
@@ -815,10 +815,11 @@ Rate limits protect against abuse without interfering with normal use:
 
 | Scope | Limit | Applies to |
 |---|---|---|
-| Authentication | 10 requests / 15 min per IP | `/api/v1/auth/*` |
-| Content creation | 30 requests / 15 min per user | Creating proposals, comments, documents |
-| Reads | 200 requests / 1 min per IP | All GET endpoints |
-| Reports | 5 reports / 1 hour per user | Content reporting |
+| Authentication | 10 requests / 15 min per IP | `POST /api/v1/auth/register`, `POST /api/v1/auth/login` |
+| Content creation | 30 requests / 15 min per user | Selected write-heavy endpoints: repositories, documents, proposals, templates, media, share links, and webhooks |
+| Search reads | 200 requests / 1 min per IP | `GET /api/v1/search` |
+| Reports | 5 reports / 1 hour per user | `POST /api/v1/reports` |
+| Share resolution | 100 requests / 1 min per IP | `GET /api/v1/shares/{token}` |
 
 ## Deployment Options
 

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
@@ -140,6 +141,7 @@ public static class ProposalEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
+        AccountAgeGateService accountAgeGate,
         ScribegateDbContext db,
         AuditService audit,
         NotificationService notifications,
@@ -161,6 +163,13 @@ public static class ProposalEndpoints
         if (errors.Count > 0) return ApiResults.ValidationError(errors);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var ageDenied = await accountAgeGate.RequireMinimumAgeAsync(
+            userId,
+            "create proposals",
+            "posting proposals",
+            null,
+            ct);
+        if (ageDenied is not null) return ageDenied;
 
         Guid? documentId = request.DocumentId;
         Guid? baseRevisionId = null;
@@ -169,7 +178,8 @@ public static class ProposalEndpoints
         if (request.DocumentId.HasValue)
         {
             var doc = await documentStore.GetByIdAsync(request.DocumentId.Value, ct);
-            if (doc is null) return ApiResults.NotFound("Document", request.DocumentId.Value.ToString());
+            if (doc is null || doc.RepositoryId != repo.Id)
+                return ApiResults.NotFound("Document", request.DocumentId.Value.ToString());
             baseRevisionId = doc.CurrentRevisionId;
         }
         else if (!string.IsNullOrWhiteSpace(request.DocumentPath))
@@ -433,8 +443,17 @@ public static class ProposalEndpoints
 
         // Count distinct approvals (one per reviewer)
         var allReviews = await reviewStore.ListByProposalAsync(id, ct);
+        var eligibleReviewerIds = (await membershipStore.ListByRepositoryAsync(repo.Id, ct))
+            .Where(m => AuthorizationHelper.CanReview(m.Role))
+            .Select(m => m.UserId)
+            .ToHashSet();
+        foreach (var adminId in await db.Users.Where(u => u.IsAdmin).Select(u => u.Id).ToListAsync(ct))
+            eligibleReviewerIds.Add(adminId);
+
         var approvalCount = allReviews
             .Where(r => r.Verdict == ReviewVerdict.Approved)
+            .Where(r => r.CreatedById != proposal.CreatedById)
+            .Where(r => eligibleReviewerIds.Contains(r.CreatedById))
             .Select(r => r.CreatedById)
             .Distinct()
             .Count();
@@ -457,7 +476,8 @@ public static class ProposalEndpoints
         if (proposal.DocumentId.HasValue)
         {
             doc = await documentStore.GetByIdAsync(proposal.DocumentId.Value, ct);
-            if (doc is null) return ApiResults.NotFound("Document", proposal.DocumentId.Value.ToString());
+            if (doc is null || doc.RepositoryId != repo.Id)
+                return ApiResults.NotFound("Document", proposal.DocumentId.Value.ToString());
         }
         else if (proposal.ProposedPath is not null)
         {

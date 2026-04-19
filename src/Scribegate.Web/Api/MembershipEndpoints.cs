@@ -27,6 +27,7 @@ public static class MembershipEndpoints
         IMembershipStore membershipStore,
         AuthorizationHelper authz,
         UserContext userContext,
+        ScribegateDbContext db,
         HttpContext http,
         CancellationToken ct)
     {
@@ -36,6 +37,15 @@ public static class MembershipEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
+        var currentUserId = userContext.TryGetCurrentUserId();
+        var currentUser = currentUserId is null
+            ? null
+            : await db.Users.FindAsync([currentUserId.Value], ct);
+        var currentRole = currentUserId is null
+            ? null
+            : await membershipStore.GetAsync(currentUserId.Value, repo.Id, ct);
+        var includeAllEmails = currentUser?.IsAdmin == true || AuthorizationHelper.IsAdmin(currentRole?.Role);
+
         var members = await membershipStore.ListByRepositoryAsync(repo.Id, ct);
 
         return Results.Ok(new MemberListResponse
@@ -44,7 +54,7 @@ public static class MembershipEndpoints
             {
                 UserId = m.UserId,
                 Username = m.User.Username,
-                Email = m.User.Email,
+                Email = includeAllEmails || currentUserId == m.UserId ? m.User.Email : null,
                 Role = m.Role.ToString(),
             }).ToList(),
             Total = members.Count,

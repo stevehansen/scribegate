@@ -1,6 +1,7 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
+using Scribegate.Data;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
 
@@ -63,13 +64,19 @@ public static class ReviewEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         IReviewStore reviewStore,
+        AuthorizationHelper authz,
         UserContext userContext,
+        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+
+        var denied = await authz.RequireRepositoryRoleAsync(
+            repo, AuthorizationHelper.CanReview, userContext, db, ct);
+        if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
         if (proposal is null || proposal.RepositoryId != repo.Id)
@@ -84,6 +91,15 @@ public static class ReviewEndpoints
                 "Allowed values: Approved, ChangesRequested, Comment.");
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
+        if (proposal.CreatedById == userId && verdict != ReviewVerdict.Comment)
+            return Results.Json(new
+            {
+                error = new ApiError
+                {
+                    Code = "SELF_REVIEW_NOT_ALLOWED",
+                    Message = "You cannot approve or request changes on your own proposal.",
+                }
+            }, statusCode: 422);
 
         var review = new Review
         {

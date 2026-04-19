@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Scribegate.Data;
 using Scribegate.Web.Services;
 using Xunit;
@@ -49,10 +50,16 @@ public sealed class ScribegateWebAppFactory : WebApplicationFactory<Program>, IA
                 ["Scribegate:Git:MirrorRoot"] = Path.Combine(DataPath, "git-mirrors"),
                 // Deterministic JWT key so token-based tests don't flake
                 // against the random default path.
-                ["Scribegate:Jwt:Key"] = "test-key-at-least-32-bytes-long-xxxxxxxxxxxxxx",
+                ["Scribegate:Jwt:Secret"] = "test-key-at-least-32-bytes-long-xxxxxxxxxxxxxx",
                 ["Scribegate:Jwt:Issuer"] = "scribegate-tests",
                 ["Scribegate:Jwt:Audience"] = "scribegate-tests",
             });
+        });
+
+        builder.ConfigureLogging(logging =>
+        {
+            // Avoid Windows Event Log access issues during in-memory host startup.
+            logging.ClearProviders();
         });
 
         builder.ConfigureTestServices(services =>

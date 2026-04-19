@@ -1,6 +1,7 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { authState } from '../../state/auth-state.js';
+import * as adminApi from '../../api/admin.js';
 import { ApiException } from '../../api/client.js';
 import { boxReset } from '../../styles/shared.js';
 
@@ -79,6 +80,27 @@ export class SgRegisterPage extends LitElement {
 
   @state() private _error = '';
   @state() private _loading = false;
+  @state() private _configLoaded = false;
+  @state() private _registrationEnabled = true;
+  @state() private _requireTos = true;
+  @state() private _tosUrl: string | null = null;
+  @state() private _privacyUrl: string | null = null;
+
+  async connectedCallback() {
+    super.connectedCallback();
+    try {
+      const config = await adminApi.getRegistrationStatus();
+      this._registrationEnabled = config.registrationEnabled;
+      this._requireTos = config.requireTos;
+      this._tosUrl = config.tosUrl ?? null;
+      this._privacyUrl = config.privacyUrl ?? null;
+    } catch {
+      // Fall back to the server-side validation path if the anonymous config
+      // endpoint is unavailable.
+    } finally {
+      this._configLoaded = true;
+    }
+  }
 
   private async _onSubmit(e: Event) {
     e.preventDefault();
@@ -93,7 +115,7 @@ export class SgRegisterPage extends LitElement {
         data.get('username') as string,
         data.get('email') as string,
         data.get('password') as string,
-        !!data.get('acceptTos'),
+        this._requireTos ? !!data.get('acceptTos') : false,
       );
       window.location.href = '/';
     } catch (err) {
@@ -111,6 +133,18 @@ export class SgRegisterPage extends LitElement {
   }
 
   render() {
+    if (!this._configLoaded) {
+      return html`<p>Loading...</p>`;
+    }
+
+    if (!this._registrationEnabled) {
+      return html`
+        <h1>Create account</h1>
+        <div class="error">Registration is currently disabled.</div>
+        <p class="link"><a href="/login">Return to sign in</a></p>
+      `;
+    }
+
     return html`
       <h1>Create account</h1>
       ${this._error ? html`<div class="error">${this._error}</div>` : ''}
@@ -122,15 +156,21 @@ export class SgRegisterPage extends LitElement {
           <input type="password" name="password" required minlength="10" autocomplete="new-password" />
           <span class="hint">At least 10 characters. No complexity rules.</span>
         </label>
-        <label class="tos-label">
-          <input type="checkbox" name="acceptTos" value="true" required />
-          <span>
-            I accept the
-            <a href="https://docs.scribegate.dev/legal/terms/" target="_blank" rel="noopener">Terms of Service</a>
-            and
-            <a href="https://docs.scribegate.dev/legal/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
-          </span>
-        </label>
+        ${this._requireTos ? html`
+          <label class="tos-label">
+            <input type="checkbox" name="acceptTos" value="true" required />
+            <span>
+              I accept the
+              ${this._tosUrl
+                ? html`<a href=${this._tosUrl} target="_blank" rel="noopener">Terms of Service</a>`
+                : html`Terms of Service`}
+              and
+              ${this._privacyUrl
+                ? html`<a href=${this._privacyUrl} target="_blank" rel="noopener">Privacy Policy</a>`
+                : html`Privacy Policy`}.
+            </span>
+          </label>
+        ` : ''}
         <button type="submit" ?disabled=${this._loading}>
           ${this._loading ? 'Creating account...' : 'Create account'}
         </button>

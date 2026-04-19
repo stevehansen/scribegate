@@ -129,12 +129,12 @@ export class SgMembersPage extends LitElement {
         : html`
           <div class="members">
             ${this._members.map(m => html`
-              <div class="member">
-                <div>
-                  <div class="member-name">${m.username}</div>
-                  <div class="member-email">${m.email}</div>
-                </div>
-                <div class="right">
+                <div class="member">
+                  <div>
+                    <div class="member-name">${m.username}</div>
+                    ${m.email ? html`<div class="member-email">${m.email}</div>` : ''}
+                  </div>
+                  <div class="right">
                   <span class="role-badge">${m.role}</span>
                   ${authState.isAuthenticated ? html`
                     <button class="btn btn-sm btn-danger" @click=${() => this._removeMember(m.userId)}>Remove</button>

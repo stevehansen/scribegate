@@ -42,6 +42,20 @@ public static class SearchEndpoints
         // Sanitize query for FTS5: escape special characters and convert to prefix match
         var sanitized = SanitizeFtsQuery(q.Trim());
 
+        // Support both `?owner=jane&repo=handbook` and the documented
+        // convenience form `?repo=jane/handbook`.
+        if (!string.IsNullOrWhiteSpace(repo)
+            && string.IsNullOrWhiteSpace(owner)
+            && repo.Contains('/', StringComparison.Ordinal))
+        {
+            var parts = repo.Split('/', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                owner = parts[0];
+                repo = parts[1];
+            }
+        }
+
         Guid? repoId = null;
         if (!string.IsNullOrEmpty(repo))
         {
@@ -124,7 +138,7 @@ public static class SearchEndpoints
                     """;
                 var repoParam = cmd.CreateParameter();
                 repoParam.ParameterName = "@repoId";
-                repoParam.Value = repoId.Value.ToString();
+                repoParam.Value = repoId.Value;
                 cmd.Parameters.Add(repoParam);
             }
             else
