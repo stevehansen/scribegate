@@ -75,6 +75,7 @@ nav:
   - Technical:
       - Architecture: architecture.md
       - Security: security.md
+      - Testing: testing.md
       - Contributing: contributing.md
   - Legal:
       - Imprint: legal/imprint.md

@@ -39,6 +39,9 @@ jobs:
           cp SECURITY.md docs/security.md
           cp CONTRIBUTING.md docs/contributing.md
           cp LICENSE.md docs/license.md
+          # Root docs use GitHub-style `docs/<name>.md` links; rewrite to
+          # relative paths once copied into docs/ so mkdocs --strict passes.
+          sed -i -E 's#\]\(docs/([^)]+)\)#](\1)#g' docs/security.md docs/contributing.md docs/license.md
 
       - name: Build site
         run: mkdocs build --strict
