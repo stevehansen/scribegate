@@ -274,6 +274,13 @@ public static class ProposalEndpoints
         if (proposal.Status != ProposalStatus.Draft && proposal.Status != ProposalStatus.Open)
             return Error("PROPOSAL_NOT_EDITABLE", "This proposal can no longer be edited.", 422);
 
+        if (proposal.Status == ProposalStatus.Open && request.Content is not null)
+            return ApiResults.Conflict(
+                "PROPOSAL_REVIEW_LOCKED",
+                "Open proposals cannot change content once they are up for review.",
+                "Withdraw this proposal and create a new one if the patch itself needs to change.",
+                "content");
+
         if (request.Title is not null) proposal.Title = request.Title.Trim();
         if (request.Description is not null) proposal.Description = request.Description.Trim();
         if (request.Content is not null) proposal.ProposedContent = request.Content;
@@ -426,6 +433,33 @@ public static class ProposalEndpoints
         if (proposal.CreatedById == userId)
             return Error("SELF_REVIEW_NOT_ALLOWED", "You cannot approve your own proposal.", 422);
 
+        Document? doc = null;
+        if (proposal.DocumentId.HasValue)
+        {
+            doc = await documentStore.GetByIdAsync(proposal.DocumentId.Value, ct);
+            if (doc is null || doc.RepositoryId != repo.Id || doc.IsArchived)
+                return ApiResults.Conflict(
+                    "PROPOSAL_STALE",
+                    "This proposal no longer points at a live document in this repository.",
+                    "Refresh the proposal against the current document state before requesting approval again.");
+
+            if (doc.CurrentRevisionId != proposal.BaseRevisionId)
+                return ApiResults.Conflict(
+                    "PROPOSAL_STALE",
+                    "This proposal is based on an out-of-date revision.",
+                    "Refresh the proposal against the document's latest revision and ask reviewers to review the updated version.");
+        }
+        else if (!string.IsNullOrWhiteSpace(proposal.ProposedPath))
+        {
+            doc = await documentStore.GetByPathAsync(repo.Id, proposal.ProposedPath, ct: ct);
+            if (doc is not null)
+                return ApiResults.Conflict(
+                    "PROPOSAL_STALE",
+                    $"A document at path '{proposal.ProposedPath}' now exists.",
+                    "Recreate the proposal against the existing document, or choose a different target path.",
+                    "path");
+        }
+
         // Record the approval review
         var review = new Review
         {
@@ -472,11 +506,9 @@ public static class ProposalEndpoints
         }
 
         // Threshold met — merge the proposal
-        Document? doc;
         if (proposal.DocumentId.HasValue)
         {
-            doc = await documentStore.GetByIdAsync(proposal.DocumentId.Value, ct);
-            if (doc is null || doc.RepositoryId != repo.Id)
+            if (doc is null)
                 return ApiResults.NotFound("Document", proposal.DocumentId.Value.ToString());
         }
         else if (proposal.ProposedPath is not null)

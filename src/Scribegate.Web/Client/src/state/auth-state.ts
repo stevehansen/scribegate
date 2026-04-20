@@ -4,6 +4,35 @@ import { themeManager } from './theme.js';
 
 type AuthListener = () => void;
 
+export interface OidcCallbackPayload {
+  token: string | null;
+  authError: string | null;
+  scrubbedUrl: string;
+}
+
+export function extractOidcCallbackPayload(locationLike: Pick<Location, 'pathname' | 'search' | 'hash'>): OidcCallbackPayload | null {
+  const query = new URLSearchParams(locationLike.search.startsWith('?') ? locationLike.search.slice(1) : locationLike.search);
+  const hash = new URLSearchParams(locationLike.hash.startsWith('#') ? locationLike.hash.slice(1) : locationLike.hash);
+
+  const token = hash.get('token') ?? query.get('token');
+  const authError = hash.get('auth_error') ?? query.get('auth_error');
+  if (!token && !authError) return null;
+
+  query.delete('token');
+  query.delete('auth_error');
+  hash.delete('token');
+  hash.delete('auth_error');
+
+  const scrubbedSearch = query.toString();
+  const scrubbedHash = hash.toString();
+
+  return {
+    token,
+    authError,
+    scrubbedUrl: `${locationLike.pathname}${scrubbedSearch ? `?${scrubbedSearch}` : ''}${scrubbedHash ? `#${scrubbedHash}` : ''}`,
+  };
+}
+
 class AuthState {
   private _user: UserInfo | null = null;
   private _listeners: Set<AuthListener> = new Set();
@@ -50,6 +79,18 @@ class AuthState {
     this._user = null;
     this.notify();
     window.location.href = '/';
+  }
+
+  consumeOidcCallback() {
+    const payload = extractOidcCallbackPayload(window.location);
+    if (!payload) return null;
+
+    if (payload.token) {
+      localStorage.setItem('sg_token', payload.token);
+    }
+
+    window.history.replaceState(null, '', payload.scrubbedUrl);
+    return payload;
   }
 
   async loadUser() {

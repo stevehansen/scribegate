@@ -72,6 +72,7 @@ public static class RevisionEndpoints
         Guid documentId,
         Guid revisionId,
         IRepositoryStore repoStore,
+        IDocumentStore documentStore,
         IRevisionStore revisionStore,
         AuthorizationHelper authz,
         UserContext userContext,
@@ -85,8 +86,12 @@ public static class RevisionEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
+        var document = await documentStore.GetByIdAsync(documentId, ct);
+        if (document is null || document.RepositoryId != repo.Id || document.IsArchived)
+            return ApiResults.NotFound("Revision", revisionId.ToString());
+
         var revision = await revisionStore.GetByIdAsync(revisionId, ct);
-        if (revision is null || revision.DocumentId != documentId)
+        if (revision is null || revision.DocumentId != document.Id)
             return ApiResults.NotFound("Revision", revisionId.ToString());
 
         return Results.Ok(new RevisionResponse

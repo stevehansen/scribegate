@@ -5,7 +5,7 @@
 // state module loads cleanly under jsdom.
 
 import { describe, it, expect } from 'vitest';
-import { authState } from '../state/auth-state.js';
+import { authState, extractOidcCallbackPayload } from '../state/auth-state.js';
 
 describe('happy path — auth state module', () => {
   // setup.ts installs an in-memory localStorage shim and clears it between
@@ -30,5 +30,33 @@ describe('happy path — auth state module', () => {
     // state mutation here; just prove the wiring.
     off();
     expect(calls).toBe(0);
+  });
+
+  it('extracts an OIDC callback token from the hash and returns a scrubbed URL', () => {
+    const payload = extractOidcCallbackPayload({
+      pathname: '/',
+      search: '?view=docs',
+      hash: '#token=abc.def.ghi',
+    });
+
+    expect(payload).toEqual({
+      token: 'abc.def.ghi',
+      authError: null,
+      scrubbedUrl: '/?view=docs',
+    });
+  });
+
+  it('accepts the legacy query token format and scrubs it back out', () => {
+    const payload = extractOidcCallbackPayload({
+      pathname: '/',
+      search: '?token=legacy.jwt&tab=recent',
+      hash: '',
+    });
+
+    expect(payload).toEqual({
+      token: 'legacy.jwt',
+      authError: null,
+      scrubbedUrl: '/?tab=recent',
+    });
   });
 });

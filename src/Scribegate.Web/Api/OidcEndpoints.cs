@@ -98,11 +98,14 @@ public static class OidcEndpoints
         var provider = "oidc";
         var externalId = externalPrincipal.FindFirstValue(ClaimTypes.NameIdentifier)
                          ?? externalPrincipal.FindFirstValue("sub");
-        var email = externalPrincipal.FindFirstValue(ClaimTypes.Email)
-                    ?? externalPrincipal.FindFirstValue("email");
+        var email = (externalPrincipal.FindFirstValue(ClaimTypes.Email)
+                    ?? externalPrincipal.FindFirstValue("email"))
+                    ?.Trim()
+                    .ToLowerInvariant();
         var name = externalPrincipal.FindFirstValue(ClaimTypes.Name)
                    ?? externalPrincipal.FindFirstValue("name")
                    ?? externalPrincipal.FindFirstValue("preferred_username");
+        var verifiedEmail = HasVerifiedEmailClaim(externalPrincipal);
 
         if (string.IsNullOrEmpty(externalId))
             return Results.Redirect("/?auth_error=no_subject");
@@ -114,16 +117,23 @@ public static class OidcEndpoints
         if (user is null && !string.IsNullOrEmpty(email))
         {
             // Try to link by email
-            user = await db.Users.FirstOrDefaultAsync(
-                u => u.Email == email.ToLowerInvariant(), ct);
+            var matchedUser = await db.Users.FirstOrDefaultAsync(
+                u => u.Email == email, ct);
 
-            if (user is not null)
+            if (matchedUser is not null)
             {
+                if (!verifiedEmail)
+                    return Results.Redirect("/?auth_error=email_not_verified");
+
+                if (!string.IsNullOrEmpty(matchedUser.ExternalProvider) || !string.IsNullOrEmpty(matchedUser.ExternalId))
+                    return Results.Redirect("/?auth_error=account_already_linked");
+
                 // Link existing account to OIDC
-                user.ExternalProvider = provider;
-                user.ExternalId = externalId;
-                user.EmailVerified = true;
+                matchedUser.ExternalProvider = provider;
+                matchedUser.ExternalId = externalId;
+                matchedUser.EmailVerified = true;
                 await db.SaveChangesAsync(ct);
+                user = matchedUser;
             }
         }
 
@@ -152,12 +162,12 @@ public static class OidcEndpoints
             {
                 Id = Guid.CreateVersion7(),
                 Username = username,
-                Email = email?.ToLowerInvariant() ?? $"{externalId}@oidc",
+                Email = email ?? $"{externalId}@oidc",
                 ExternalProvider = provider,
                 ExternalId = externalId,
                 IsAdmin = isFirstUser,
                 Tier = defaultTier,
-                EmailVerified = !string.IsNullOrEmpty(email),
+                EmailVerified = verifiedEmail,
             };
 
             db.Users.Add(user);
@@ -180,9 +190,26 @@ public static class OidcEndpoints
         // Sign out of the external cookie (cleanup)
         await httpContext.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme);
 
-        // Redirect to frontend with token
-        return Results.Redirect($"/?token={Uri.EscapeDataString(token)}");
+        // Redirect to the SPA with the token in the fragment so it never
+        // appears in server-side logs, Referer headers, or browser requests.
+        return Results.Redirect(BuildSuccessRedirect(token));
     }
+
+    internal static bool HasVerifiedEmailClaim(ClaimsPrincipal principal)
+    {
+        static bool ParseBooleanClaim(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            if (bool.TryParse(value, out var parsed)) return parsed;
+            return value == "1";
+        }
+
+        return ParseBooleanClaim(principal.FindFirstValue("email_verified"))
+            || ParseBooleanClaim(principal.FindFirstValue("verified_email"));
+    }
+
+    internal static string BuildSuccessRedirect(string token) =>
+        $"/#token={Uri.EscapeDataString(token)}";
 
     private static string GenerateUsername(string? name, string? email)
     {

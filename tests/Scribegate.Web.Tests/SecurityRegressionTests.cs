@@ -130,6 +130,80 @@ public class SecurityRegressionTests
     }
 
     [Fact]
+    public async Task RevisionEndpoint_CannotReadRevisionFromAnotherRepository()
+    {
+        await using var factory = new ScribegateWebAppFactory();
+        var adminClient = factory.CreateClient();
+        var (_, adminToken) = await RegisterAsync(adminClient, "admin");
+        Authenticate(adminClient, adminToken);
+
+        var publicRepo = await CreateRepoAsync(adminClient, "Public Repo", "public-revisions", visibility: "Public");
+        var privateRepo = await CreateRepoAsync(adminClient, "Private Repo", "private-revisions");
+        var privateDoc = await CreateDocumentAsync(adminClient, privateRepo.Owner, privateRepo.Slug, "secret.md");
+        privateDoc.CurrentRevisionId.Should().NotBeNull();
+
+        var anonymousClient = factory.CreateClient();
+        var response = await anonymousClient.GetAsync(
+            $"/api/v1/repositories/{publicRepo.Owner}/{publicRepo.Slug}/revisions/{privateDoc.Id}/{privateDoc.CurrentRevisionId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task OpenProposal_CannotChangeContent()
+    {
+        await using var factory = new ScribegateWebAppFactory();
+        var client = factory.CreateClient();
+        var (_, token) = await RegisterAsync(client, "author");
+        Authenticate(client, token);
+
+        var repo = await CreateRepoAsync(client, "Proposal Repo", "proposal-edit-lock");
+        var document = await CreateDocumentAsync(client, repo.Owner, repo.Slug, "guide.md");
+        var proposal = await CreateProposalAsync(client, repo.Owner, repo.Slug, document.Id);
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/repositories/{repo.Owner}/{repo.Slug}/proposals/{proposal.Id}",
+            new { content = "# Updated after opening for review" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task StaleProposal_CannotBeApprovedAfterBaseDocumentChanges()
+    {
+        await using var factory = new ScribegateWebAppFactory();
+        var adminClient = factory.CreateClient();
+        var (_, adminToken) = await RegisterAsync(adminClient, "admin");
+        Authenticate(adminClient, adminToken);
+        await UpdateSettingAsync(adminClient, "account.age_gate_hours", "0");
+
+        var repo = await CreateRepoAsync(adminClient, "Stale Repo", "stale-proposals");
+        var document = await CreateDocumentAsync(adminClient, repo.Owner, repo.Slug, "handbook.md");
+
+        var authorClient = factory.CreateClient();
+        var (authorUsername, authorToken) = await RegisterAsync(authorClient, "author");
+        await AddMemberAsync(adminClient, repo.Owner, repo.Slug, authorUsername, "Contributor");
+        Authenticate(authorClient, authorToken);
+
+        var proposal = await CreateProposalAsync(authorClient, repo.Owner, repo.Slug, document.Id);
+
+        var docUpdate = await adminClient.PutAsJsonAsync(
+            $"/api/v1/repositories/{repo.Owner}/{repo.Slug}/documents/handbook.md",
+            new
+            {
+                content = "# Updated base",
+                message = "move base forward",
+            });
+        docUpdate.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var approve = await adminClient.PostAsync(
+            $"/api/v1/repositories/{repo.Owner}/{repo.Slug}/proposals/{proposal.Id}/approve",
+            content: null);
+
+        approve.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
     public async Task CreateApiToken_RejectsUnsupportedScopes()
     {
         await using var factory = new ScribegateWebAppFactory();
@@ -272,6 +346,7 @@ public class SecurityRegressionTests
     private sealed class DocumentResponse
     {
         public Guid Id { get; set; }
+        public Guid? CurrentRevisionId { get; set; }
     }
 
     private sealed class ProposalResponse
