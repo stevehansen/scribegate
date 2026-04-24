@@ -1,6 +1,5 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
 
@@ -69,7 +68,6 @@ public static class CommentEndpoints
         ICommentStore commentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AccountAgeGateService accountAgeGate,
         NotificationService notifications,
         IWebhookDispatcher webhooks,
@@ -79,7 +77,7 @@ public static class CommentEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+            repo, AuthorizationHelper.CanRead, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -155,14 +153,13 @@ public static class CommentEndpoints
         ICommentStore commentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+            repo, AuthorizationHelper.CanRead, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -205,14 +202,13 @@ public static class CommentEndpoints
         ICommentStore commentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanRead, userContext, db, ct);
+            repo, AuthorizationHelper.CanRead, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);
@@ -223,9 +219,8 @@ public static class CommentEndpoints
         if (comment is null || comment.ProposalId != proposalId)
             return ApiResults.NotFound("Comment", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var user = await db.Users.FindAsync([userId], ct);
-        if (comment.CreatedById != userId && user?.IsAdmin != true)
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        if (comment.CreatedById != user.Id && !user.IsAdmin)
             return Results.Json(new { error = new ApiError { Code = "FORBIDDEN", Message = "You can only delete your own comments." } }, statusCode: 403);
 
         await commentStore.DeleteAsync(id, ct);

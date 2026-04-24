@@ -152,7 +152,7 @@ public static class ProposalEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var errors = new List<ApiFieldError>();
@@ -260,7 +260,7 @@ public static class ProposalEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -314,7 +314,7 @@ public static class ProposalEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -361,7 +361,7 @@ public static class ProposalEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(id, ct);
@@ -403,6 +403,7 @@ public static class ProposalEndpoints
         IRevisionStore revisionStore,
         IReviewStore reviewStore,
         IMembershipStore membershipStore,
+        IUserStore users,
         ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
@@ -421,12 +422,12 @@ public static class ProposalEndpoints
         if (proposal.Status != ProposalStatus.Open)
             return Error("PROPOSAL_NOT_OPEN", "Only open proposals can be approved.", 422);
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var user = await db.Users.FindAsync([userId], ct);
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
 
         // Check if user has reviewer/admin role (or is global admin)
         var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
-        if (!AuthorizationHelper.CanReview(membership?.Role) && user?.IsAdmin != true)
+        if (!AuthorizationHelper.CanReview(membership?.Role) && !user.IsAdmin)
             return Forbidden("You need Reviewer or Admin role to approve proposals.");
 
         // Self-review check
@@ -481,7 +482,7 @@ public static class ProposalEndpoints
             .Where(m => AuthorizationHelper.CanReview(m.Role))
             .Select(m => m.UserId)
             .ToHashSet();
-        foreach (var adminId in await db.Users.Where(u => u.IsAdmin).Select(u => u.Id).ToListAsync(ct))
+        foreach (var adminId in await users.ListAdminIdsAsync(ct))
             eligibleReviewerIds.Add(adminId);
 
         var approvalCount = allReviews
@@ -583,7 +584,6 @@ public static class ProposalEndpoints
         IRepositoryStore repoStore,
         IProposalStore proposalStore,
         IMembershipStore membershipStore,
-        ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
         NotificationService notifications,
@@ -600,11 +600,11 @@ public static class ProposalEndpoints
         if (proposal.Status != ProposalStatus.Open)
             return Error("PROPOSAL_NOT_OPEN", "Only open proposals can be rejected.", 422);
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var user = await db.Users.FindAsync([userId], ct);
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
 
         var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
-        if (!AuthorizationHelper.CanReview(membership?.Role) && user?.IsAdmin != true)
+        if (!AuthorizationHelper.CanReview(membership?.Role) && !user.IsAdmin)
             return Forbidden("You need Reviewer or Admin role to reject proposals.");
 
         proposal.Status = ProposalStatus.Rejected;

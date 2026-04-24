@@ -75,7 +75,7 @@ public static class ReviewEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanReview, userContext, db, ct);
+            repo, AuthorizationHelper.CanReview, userContext, ct);
         if (denied is not null) return denied;
 
         var proposal = await proposalStore.GetByIdAsync(proposalId, ct);

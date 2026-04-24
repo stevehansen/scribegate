@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
@@ -28,7 +27,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Register(
         RegisterRequest request,
-        ScribegateDbContext db,
+        IUserStore users,
         JwtService jwt,
         ISystemSettingStore settings,
         AuditService audit,
@@ -131,14 +130,14 @@ public static class AuthEndpoints
         var username = request.Username!.Trim().ToLowerInvariant();
         var email = request.Email!.Trim().ToLowerInvariant();
 
-        if (await db.Users.AnyAsync(u => u.Username == username, ct))
+        if (await users.UsernameExistsAsync(username, ct))
             return ApiResults.Conflict(
                 "USERNAME_TAKEN",
                 $"The username '{username}' is already taken.",
                 "Try a different username, or login if this is your account.",
                 "username");
 
-        if (await db.Users.AnyAsync(u => u.Email == email, ct))
+        if (await users.EmailExistsAsync(email, ct))
             return ApiResults.Conflict(
                 "EMAIL_TAKEN",
                 "An account with this email already exists.",
@@ -146,7 +145,7 @@ public static class AuthEndpoints
                 "email");
 
         // First user becomes admin
-        var isFirstUser = !await db.Users.AnyAsync(ct);
+        var isFirstUser = !await users.AnyExistAsync(ct);
 
         var defaultTier = await tierService.GetDefaultTierAsync(ct);
 
@@ -164,8 +163,7 @@ public static class AuthEndpoints
             TosAcceptedAt = request.AcceptTos ? DateTime.UtcNow : null,
         };
 
-        db.Users.Add(user);
-        await db.SaveChangesAsync(ct);
+        await users.CreateAsync(user, ct);
 
         await audit.LogAsync(
             AuditEventTypes.UserRegistered, user.Id, user.Username,
@@ -184,7 +182,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> Login(
         LoginRequest request,
-        ScribegateDbContext db,
+        IUserStore users,
         JwtService jwt,
         AuditService audit,
         CancellationToken ct)
@@ -202,7 +200,7 @@ public static class AuthEndpoints
 
         var email = request.Email!.Trim().ToLowerInvariant();
 
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+        var user = await users.FindByEmailAsync(email, ct);
         if (user is null || user.PasswordHash is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
             await audit.LogAsync(
@@ -236,15 +234,10 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> GetMe(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
-        if (userId is null)
-            return Unauthorized();
-
-        var user = await db.Users.FindAsync([userId.Value], ct);
+        var user = await userContext.GetCurrentUserAsync(ct);
         if (user is null)
             return Unauthorized();
 
@@ -252,23 +245,20 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> GetMyQuota(
-        ClaimsPrincipal principal,
+        UserContext userContext,
         ScribegateDbContext db,
         TierService tierService,
         IMembershipStore membershipStore,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
-        if (userId is null) return Unauthorized();
-
-        var user = await db.Users.FindAsync([userId.Value], ct);
+        var user = await userContext.GetCurrentUserAsync(ct);
         if (user is null) return Unauthorized();
 
         var enforced = await tierService.IsEnforcedAsync(ct);
         var limits = await tierService.GetLimitsForUserAsync(user, ct);
 
-        var repoCount = await membershipStore.CountRepositoriesOwnedByUserAsync(userId.Value, ct);
-        var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId.Value, ct);
+        var repoCount = await membershipStore.CountRepositoriesOwnedByUserAsync(user.Id, ct);
+        var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == user.Id, ct);
 
         return Results.Ok(new
         {
@@ -294,15 +284,11 @@ public static class AuthEndpoints
 
     private static async Task<IResult> UpdatePreferences(
         UpdatePreferencesRequest request,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        IUserStore users,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
-        if (userId is null)
-            return Unauthorized();
-
-        var user = await db.Users.FindAsync([userId.Value], ct);
+        var user = await userContext.GetCurrentUserAsync(ct);
         if (user is null)
             return Unauthorized();
 
@@ -314,21 +300,23 @@ public static class AuthEndpoints
             user.ThemePreference = request.ThemePreference;
         }
 
-        await db.SaveChangesAsync(ct);
+        await users.UpdateAsync(user, ct);
+        userContext.InvalidateCurrentUser();
         return Results.Ok(MapToUserInfo(user));
     }
 
     private static async Task<IResult> CreateApiToken(
         CreateApiTokenRequest request,
-        ClaimsPrincipal principal,
+        UserContext userContext,
         ScribegateDbContext db,
         AuditService audit,
         TierService tierService,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
-        if (userId is null)
+        var user = await userContext.GetCurrentUserAsync(ct);
+        if (user is null)
             return Unauthorized();
+        var userId = user.Id;
 
         if (string.IsNullOrWhiteSpace(request.Name))
             return ApiResults.ValidationError("name", ApiErrorCodes.Required,
@@ -345,13 +333,11 @@ public static class AuthEndpoints
                 "Leave scopes empty for now. Scoped API tokens will be rejected until enforcement exists.");
 
         // Quota check: max API tokens
-        var user = await db.Users.FindAsync([userId.Value], ct);
-        if (user is not null)
         {
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxApiTokens))
             {
-                var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId.Value, ct);
+                var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId, ct);
                 if (tokenCount >= limits.MaxApiTokens)
                     return Results.Json(new
                     {
@@ -371,7 +357,7 @@ public static class AuthEndpoints
         var apiToken = new ApiToken
         {
             Id = Guid.CreateVersion7(),
-            UserId = userId.Value,
+            UserId = userId,
             Name = request.Name.Trim(),
             TokenHash = tokenHash,
             Scopes = request.Scopes?.Trim(),
@@ -384,7 +370,7 @@ public static class AuthEndpoints
         await db.SaveChangesAsync(ct);
 
         await audit.LogAsync(
-            AuditEventTypes.ApiTokenCreated, userId, principal.FindFirstValue("username"),
+            AuditEventTypes.ApiTokenCreated, userId, user.Username,
             "ApiToken", apiToken.Id,
             new { name = apiToken.Name }, ct);
 
@@ -400,11 +386,11 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> ListApiTokens(
-        ClaimsPrincipal principal,
+        UserContext userContext,
         ScribegateDbContext db,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null)
             return Unauthorized();
 
@@ -427,12 +413,12 @@ public static class AuthEndpoints
 
     private static async Task<IResult> DeleteApiToken(
         Guid id,
-        ClaimsPrincipal principal,
+        UserContext userContext,
         ScribegateDbContext db,
         AuditService audit,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null)
             return Unauthorized();
 
@@ -446,18 +432,11 @@ public static class AuthEndpoints
         await db.SaveChangesAsync(ct);
 
         await audit.LogAsync(
-            AuditEventTypes.ApiTokenRevoked, userId, principal.FindFirstValue("username"),
+            AuditEventTypes.ApiTokenRevoked, userId, userContext.GetUsername(),
             "ApiToken", id,
             new { name = token.Name }, ct);
 
         return Results.NoContent();
-    }
-
-    private static Guid? GetUserId(ClaimsPrincipal principal)
-    {
-        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? principal.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
     }
 
     private static IResult Unauthorized() =>

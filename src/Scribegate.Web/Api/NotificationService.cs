@@ -1,11 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using System.Net;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Stores;
 using Scribegate.Data;
 
 namespace Scribegate.Web.Api;
 
-public class NotificationService(ScribegateDbContext db, EmailService emailService, ILogger<NotificationService> logger)
+public class NotificationService(
+    ScribegateDbContext db,
+    IUserStore users,
+    EmailService emailService,
+    ILogger<NotificationService> logger)
 {
     public async Task NotifyAsync(
         Guid userId,
@@ -75,7 +80,7 @@ public class NotificationService(ScribegateDbContext db, EmailService emailServi
 
             if (!shouldSend) return;
 
-            var user = await db.Users.FindAsync([notification.UserId], ct);
+            var user = await users.FindByIdAsync(notification.UserId, ct);
             if (user is null || string.IsNullOrEmpty(user.Email)) return;
 
             var encodedTitle = WebUtility.HtmlEncode(notification.Title);

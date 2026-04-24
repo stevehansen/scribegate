@@ -27,13 +27,14 @@ public static class AdminEndpoints
     private static async Task<IResult> SendTestEmail(
         SendTestEmailRequest? request,
         ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         EmailService email,
         ISystemSettingStore settings,
         AuditService audit,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        var user = await userContext.GetCurrentUserAsync(ct);
+        if (user?.IsAdmin != true)
             return Forbidden();
 
         if (!await email.IsEnabledAsync(ct))
@@ -41,8 +42,7 @@ public static class AdminEndpoints
                 "SMTP is disabled.",
                 "Enable smtp.enabled and configure smtp.host / smtp.from_address before sending a test.");
 
-        var userId = GetUserId(principal);
-        var user = userId is null ? null : await db.Users.FindAsync([userId.Value], ct);
+        var userId = user.Id;
         var toEmail = request?.ToEmail?.Trim();
         if (string.IsNullOrWhiteSpace(toEmail)) toEmail = user?.Email;
         if (string.IsNullOrWhiteSpace(toEmail))
@@ -100,12 +100,11 @@ public static class AdminEndpoints
     }
 
     private static async Task<IResult> ListSettings(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         ISystemSettingStore settings,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
         var stored = (await settings.ListAsync(ct)).ToDictionary(s => s.Key);
@@ -150,12 +149,12 @@ public static class AdminEndpoints
         string key,
         UpdateSettingRequest request,
         ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         ISystemSettingStore settings,
         AuditService audit,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
         if (request.Value is null)
@@ -170,7 +169,7 @@ public static class AdminEndpoints
         var oldValue = await settings.GetAsync(key, ct);
         await settings.SetAsync(key, newValue, ct);
 
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         var isSecret = SettingDefinitions.ByKey.TryGetValue(key, out var def) && def.Type == "secret";
         await audit.LogAsync(
             AuditEventTypes.SettingChanged, userId, principal.FindFirstValue("username"),
@@ -197,11 +196,13 @@ public static class AdminEndpoints
         Guid userId,
         SetUserTierRequest request,
         ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        IUserStore users,
         AuditService audit,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        var admin = await userContext.GetCurrentUserAsync(ct);
+        if (admin?.IsAdmin != true)
             return Forbidden();
 
         if (string.IsNullOrWhiteSpace(request.Tier) || !ValidTiers.Contains(request.Tier))
@@ -209,36 +210,21 @@ public static class AdminEndpoints
                 $"Invalid tier '{request.Tier}'.",
                 "Allowed values: free, paid.");
 
-        var user = await db.Users.FindAsync([userId], ct);
+        var user = await users.FindByIdAsync(userId, ct);
         if (user is null)
             return ApiResults.NotFound("User", userId.ToString());
 
         var oldTier = user.Tier;
         user.Tier = request.Tier;
-        await db.SaveChangesAsync(ct);
+        await users.UpdateAsync(user, ct);
+        if (user.Id == admin.Id) userContext.InvalidateCurrentUser();
 
-        var adminId = GetUserId(principal);
         await audit.LogAsync(
-            AuditEventTypes.SettingChanged, adminId, principal.FindFirstValue("username"),
+            AuditEventTypes.SettingChanged, admin.Id, principal.FindFirstValue("username"),
             "User", userId,
             new { field = "tier", oldValue = oldTier, newValue = request.Tier }, ct);
 
         return Results.Ok(new { userId, tier = user.Tier });
-    }
-
-    private static async Task<bool> IsAdmin(ClaimsPrincipal principal, ScribegateDbContext db, CancellationToken ct)
-    {
-        var userId = GetUserId(principal);
-        if (userId is null) return false;
-        var user = await db.Users.FindAsync([userId.Value], ct);
-        return user?.IsAdmin == true;
-    }
-
-    private static Guid? GetUserId(ClaimsPrincipal principal)
-    {
-        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? principal.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
     }
 
     private static IResult Forbidden() =>

@@ -122,7 +122,7 @@ public static class DocumentEndpoints
             return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var errors = ValidateCreateRequest(request);
@@ -144,12 +144,11 @@ public static class DocumentEndpoints
                 $"Use PUT /api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath} to update it, or choose a different path.",
                 "path");
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var username = userContext.GetUsername();
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
+        var username = user.Username;
 
         // Quota check: max documents per repo
-        var user = await db.Users.FindAsync([userId], ct);
-        if (user is not null)
         {
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxDocumentsPerRepo))
@@ -256,7 +255,7 @@ public static class DocumentEndpoints
             return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
@@ -382,7 +381,7 @@ public static class DocumentEndpoints
             return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
@@ -434,7 +433,7 @@ public static class DocumentEndpoints
             return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
@@ -503,7 +502,7 @@ public static class DocumentEndpoints
             return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);

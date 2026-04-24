@@ -1,7 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -83,7 +82,6 @@ public static class RepositoryEndpoints
         IRepositoryStore store,
         IMembershipStore membershipStore,
         UserContext userContext,
-        ScribegateDbContext db,
         ISystemSettingStore settings,
         AuditService audit,
         TierService tierService,
@@ -110,8 +108,8 @@ public static class RepositoryEndpoints
                 $"Invalid visibility value '{request.Visibility}'.",
                 "Allowed values: Public, Private.");
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var user = await db.Users.FindAsync([userId], ct);
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
 
         var existing = await store.GetByOwnerAndSlugAsync(userId, slug, ct);
         if (existing is not null)
@@ -122,35 +120,31 @@ public static class RepositoryEndpoints
                 "slug");
 
         // Account age gate: new accounts cannot create public repositories
-        if (visibility == Visibility.Public)
+        if (visibility == Visibility.Public && !user.IsAdmin)
         {
-            if (user is not null && !user.IsAdmin)
+            var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
+            var ageGateHours = int.TryParse(ageGateSetting, out var h) ? h : 24;
+            if (ageGateHours > 0)
             {
-                var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
-                var ageGateHours = int.TryParse(ageGateSetting, out var h) ? h : 24;
-                if (ageGateHours > 0)
+                var accountAge = DateTime.UtcNow - user.CreatedAt;
+                if (accountAge.TotalHours < ageGateHours)
                 {
-                    var accountAge = DateTime.UtcNow - user.CreatedAt;
-                    if (accountAge.TotalHours < ageGateHours)
+                    var remaining = TimeSpan.FromHours(ageGateHours) - accountAge;
+                    return Results.Json(new
                     {
-                        var remaining = TimeSpan.FromHours(ageGateHours) - accountAge;
-                        return Results.Json(new
+                        error = new ApiError
                         {
-                            error = new ApiError
-                            {
-                                Code = "ACCOUNT_TOO_NEW",
-                                Message = "Your account is too new to create public repositories.",
-                                Details = $"New accounts must wait {ageGateHours} hours before creating public repositories. You can create it as private now, or try again in {remaining.Hours}h {remaining.Minutes}m.",
-                                Field = "visibility",
-                            }
-                        }, statusCode: 403);
-                    }
+                            Code = "ACCOUNT_TOO_NEW",
+                            Message = "Your account is too new to create public repositories.",
+                            Details = $"New accounts must wait {ageGateHours} hours before creating public repositories. You can create it as private now, or try again in {remaining.Hours}h {remaining.Minutes}m.",
+                            Field = "visibility",
+                        }
+                    }, statusCode: 403);
                 }
             }
         }
 
         // Quota check: max repositories
-        if (user is not null)
         {
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxRepositories))
@@ -190,7 +184,7 @@ public static class RepositoryEndpoints
         };
         await membershipStore.CreateAsync(membership, ct);
 
-        var ownerUsername = user?.Username ?? userContext.GetUsername() ?? string.Empty;
+        var ownerUsername = user.Username;
 
         await audit.LogAsync(
             AuditEventTypes.RepositoryCreated, userId, userContext.GetUsername(),
@@ -206,7 +200,6 @@ public static class RepositoryEndpoints
         UpdateRepositoryRequest request,
         IRepositoryStore store,
         UserContext userContext,
-        ScribegateDbContext db,
         ISystemSettingStore settings,
         AuthorizationHelper authz,
         AuditService audit,
@@ -217,7 +210,7 @@ public static class RepositoryEndpoints
             return ApiResults.NotFound("Repository", slug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.IsAdmin, userContext, db, ct);
+            repo, AuthorizationHelper.IsAdmin, userContext, ct);
         if (denied is not null) return denied;
 
         var errors = new List<ApiFieldError>();
@@ -251,9 +244,8 @@ public static class RepositoryEndpoints
                 // Account age gate when switching to Public
                 if (visibility == Visibility.Public && repo.Visibility != Visibility.Public)
                 {
-                    var gateUserId = await userContext.GetCurrentUserIdAsync(ct);
-                    var gateUser = await db.Users.FindAsync([gateUserId], ct);
-                    if (gateUser is not null && !gateUser.IsAdmin)
+                    var gateUser = await userContext.RequireCurrentUserAsync(ct);
+                    if (!gateUser.IsAdmin)
                     {
                         var ageGateSetting = await settings.GetAsync(SystemSettingKeys.AccountAgeGateHours, ct);
                         var ageGateHours = int.TryParse(ageGateSetting, out var h) ? h : 24;
@@ -308,7 +300,6 @@ public static class RepositoryEndpoints
         string slug,
         IRepositoryStore store,
         UserContext userContext,
-        ScribegateDbContext db,
         AuthorizationHelper authz,
         AuditService audit,
         CancellationToken ct)
@@ -318,7 +309,7 @@ public static class RepositoryEndpoints
             return ApiResults.NotFound("Repository", slug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.IsAdmin, userContext, db, ct);
+            repo, AuthorizationHelper.IsAdmin, userContext, ct);
         if (denied is not null) return denied;
 
         var deleteUserId = await userContext.GetCurrentUserIdAsync(ct);

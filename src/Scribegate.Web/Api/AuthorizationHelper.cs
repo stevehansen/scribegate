@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Http;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -40,14 +39,12 @@ public class AuthorizationHelper(IMembershipStore membershipStore)
         Repository repo,
         Func<RepositoryRole?, bool> predicate,
         UserContext userContext,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var user = await db.Users.FindAsync([userId], ct);
-        if (user?.IsAdmin == true) return null;
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        if (user.IsAdmin) return null;
 
-        var role = await GetUserRoleAsync(userId, repo.Id, ct);
+        var role = await GetUserRoleAsync(user.Id, repo.Id, ct);
         if (predicate(role)) return null;
 
         if (role is null && repo.Visibility == Visibility.Private)

@@ -1,13 +1,11 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
 
 public sealed class AccountAgeGateService(
-    ScribegateDbContext db,
+    IUserStore users,
     ISystemSettingStore settings)
 {
     public async Task<IResult?> RequireMinimumAgeAsync(
@@ -17,7 +15,7 @@ public sealed class AccountAgeGateService(
         string? field,
         CancellationToken ct)
     {
-        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var user = await users.FindByIdAsync(userId, ct);
         if (user is null || user.IsAdmin)
             return null;
 

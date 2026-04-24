@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -27,7 +25,6 @@ public static class MembershipEndpoints
         IMembershipStore membershipStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        ScribegateDbContext db,
         HttpContext http,
         CancellationToken ct)
     {
@@ -37,13 +34,10 @@ public static class MembershipEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var currentUserId = userContext.TryGetCurrentUserId();
-        var currentUser = currentUserId is null
+        var currentUser = await userContext.GetCurrentUserAsync(ct);
+        var currentRole = currentUser is null
             ? null
-            : await db.Users.FindAsync([currentUserId.Value], ct);
-        var currentRole = currentUserId is null
-            ? null
-            : await membershipStore.GetAsync(currentUserId.Value, repo.Id, ct);
+            : await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
         var includeAllEmails = currentUser?.IsAdmin == true || AuthorizationHelper.IsAdmin(currentRole?.Role);
 
         var members = await membershipStore.ListByRepositoryAsync(repo.Id, ct);
@@ -54,7 +48,7 @@ public static class MembershipEndpoints
             {
                 UserId = m.UserId,
                 Username = m.User.Username,
-                Email = includeAllEmails || currentUserId == m.UserId ? m.User.Email : null,
+                Email = includeAllEmails || currentUser?.Id == m.UserId ? m.User.Email : null,
                 Role = m.Role.ToString(),
             }).ToList(),
             Total = members.Count,
@@ -67,7 +61,7 @@ public static class MembershipEndpoints
         AddMemberRequest request,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
-        ScribegateDbContext db,
+        IUserStore users,
         UserContext userContext,
         AuditService audit,
         TierService tierService,
@@ -76,12 +70,11 @@ public static class MembershipEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
-        var currentUser = await db.Users.FindAsync([currentUserId], ct);
+        var currentUser = await userContext.RequireCurrentUserAsync(ct);
 
         // Must be repo admin or global admin
-        var currentMembership = await membershipStore.GetAsync(currentUserId, repo.Id, ct);
-        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && currentUser?.IsAdmin != true)
+        var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
+        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
             return Forbidden("You need Admin role to manage members.");
 
         if (string.IsNullOrWhiteSpace(request.Username))
@@ -92,7 +85,7 @@ public static class MembershipEndpoints
                 $"Invalid role '{request.Role}'.",
                 "Allowed values: Reader, Contributor, Reviewer, Admin.");
 
-        var targetUser = await db.Users.FirstOrDefaultAsync(u => u.Username == request.Username.Trim().ToLowerInvariant(), ct);
+        var targetUser = await users.FindByUsernameAsync(request.Username, ct);
         if (targetUser is null)
             return ApiResults.NotFound("User", request.Username);
 
@@ -102,7 +95,6 @@ public static class MembershipEndpoints
                 "Use PUT to update their role.", "username");
 
         // Quota check: max members per repo
-        if (currentUser is not null)
         {
             var limits = await tierService.GetLimitsForUserAsync(currentUser, ct);
             if (!limits.IsUnlimited(limits.MaxMembersPerRepo))
@@ -130,7 +122,7 @@ public static class MembershipEndpoints
 
         await membershipStore.CreateAsync(membership, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberAdded, currentUserId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.MemberAdded, currentUser.Id, currentUser.Username,
             "RepositoryMembership", repo.Id,
             new { owner, slug = repo.Slug, targetUser = targetUser.Username, role = role.ToString() }, ct);
 
@@ -150,7 +142,6 @@ public static class MembershipEndpoints
         UpdateMemberRequest request,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
-        ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
         CancellationToken ct)
@@ -158,10 +149,9 @@ public static class MembershipEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
-        var currentUser = await db.Users.FindAsync([currentUserId], ct);
-        var currentMembership = await membershipStore.GetAsync(currentUserId, repo.Id, ct);
-        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && currentUser?.IsAdmin != true)
+        var currentUser = await userContext.RequireCurrentUserAsync(ct);
+        var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
+        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
             return Forbidden("You need Admin role to manage members.");
 
         if (!Enum.TryParse<RepositoryRole>(request.Role, ignoreCase: true, out var role))
@@ -177,7 +167,7 @@ public static class MembershipEndpoints
         membership.Role = role;
         await membershipStore.UpdateAsync(membership, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberUpdated, currentUserId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.MemberUpdated, currentUser.Id, currentUser.Username,
             "RepositoryMembership", repo.Id,
             new { owner, slug = repo.Slug, targetUser = membership.User.Username, oldRole = oldRole.ToString(), newRole = role.ToString() }, ct);
 
@@ -196,7 +186,6 @@ public static class MembershipEndpoints
         Guid userId,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
-        ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
         CancellationToken ct)
@@ -204,10 +193,9 @@ public static class MembershipEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var currentUserId = await userContext.GetCurrentUserIdAsync(ct);
-        var currentUser = await db.Users.FindAsync([currentUserId], ct);
-        var currentMembership = await membershipStore.GetAsync(currentUserId, repo.Id, ct);
-        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && currentUser?.IsAdmin != true)
+        var currentUser = await userContext.RequireCurrentUserAsync(ct);
+        var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
+        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
             return Forbidden("You need Admin role to manage members.");
 
         var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
@@ -216,7 +204,7 @@ public static class MembershipEndpoints
 
         await membershipStore.DeleteAsync(userId, repo.Id, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberRemoved, currentUserId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.MemberRemoved, currentUser.Id, currentUser.Username,
             "RepositoryMembership", repo.Id,
             new { owner, slug = repo.Slug, targetUser = membership.User.Username }, ct);
 

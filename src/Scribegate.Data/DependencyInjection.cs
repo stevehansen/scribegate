@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddDbContext<ScribegateDbContext>(options =>
             options.UseSqlite(connectionString));
 
+        services.AddScoped<IUserStore, SqliteUserStore>();
         services.AddScoped<IRepositoryStore, SqliteRepositoryStore>();
         services.AddScoped<IDocumentStore, SqliteDocumentStore>();
         services.AddScoped<IRevisionStore, SqliteRevisionStore>();

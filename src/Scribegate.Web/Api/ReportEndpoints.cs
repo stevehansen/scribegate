@@ -1,9 +1,6 @@
-using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -114,15 +111,14 @@ public static class ReportEndpoints
     }
 
     private static async Task<IResult> ListReports(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         IContentReportStore reportStore,
         string? status,
         int skip = 0,
         int take = 50,
         CancellationToken ct = default)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
         ReportStatus? statusFilter = null;
@@ -141,12 +137,11 @@ public static class ReportEndpoints
 
     private static async Task<IResult> GetReport(
         Guid id,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         IContentReportStore reportStore,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
         var report = await reportStore.GetByIdAsync(id, ct);
@@ -159,13 +154,13 @@ public static class ReportEndpoints
     private static async Task<IResult> ResolveReport(
         Guid id,
         ResolveReportRequest request,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         IContentReportStore reportStore,
         AuditService audit,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        var admin = await userContext.GetCurrentUserAsync(ct);
+        if (admin?.IsAdmin != true)
             return Forbidden();
 
         var report = await reportStore.GetByIdAsync(id, ct);
@@ -191,16 +186,15 @@ public static class ReportEndpoints
             return ApiResults.ValidationError("status", ApiErrorCodes.InvalidFormat,
                 "Cannot set status back to Pending. Use: Reviewed, Dismissed, or ActionTaken.");
 
-        var adminUserId = GetUserId(principal);
         report.Status = newStatus;
-        report.ReviewedBy = adminUserId;
+        report.ReviewedBy = admin.Id;
         report.ReviewedAt = DateTime.UtcNow;
         report.ReviewNotes = request.ReviewNotes?.Trim();
 
         await reportStore.UpdateAsync(report, ct);
 
         await audit.LogAsync(
-            AuditEventTypes.ReportReviewed, adminUserId, principal.FindFirstValue("username"),
+            AuditEventTypes.ReportReviewed, admin.Id, admin.Username,
             "ContentReport", report.Id,
             new { newStatus = newStatus.ToString(), targetType = report.TargetType, targetId = report.TargetId }, ct);
 
@@ -221,21 +215,6 @@ public static class ReportEndpoints
         ReviewedAt = report.ReviewedAt,
         ReviewNotes = report.ReviewNotes,
     };
-
-    private static async Task<bool> IsAdmin(ClaimsPrincipal principal, ScribegateDbContext db, CancellationToken ct)
-    {
-        var userId = GetUserId(principal);
-        if (userId is null) return false;
-        var user = await db.Users.FindAsync([userId.Value], ct);
-        return user?.IsAdmin == true;
-    }
-
-    private static Guid? GetUserId(ClaimsPrincipal principal)
-    {
-        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? principal.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
-    }
 
     private static IResult Forbidden() =>
         Results.Json(new

@@ -1,7 +1,4 @@
-using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -21,8 +18,7 @@ public static class AuditEndpoints
     }
 
     private static async Task<IResult> ListAuditEvents(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         IAuditEventStore auditStore,
         string? eventType,
         string? targetType,
@@ -31,7 +27,7 @@ public static class AuditEndpoints
         int take = 50,
         CancellationToken ct = default)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
         var filter = new AuditEventFilter
@@ -66,17 +62,13 @@ public static class AuditEndpoints
 
     private static async Task<IResult> GetAuditEvent(
         Guid id,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
         IAuditEventStore auditStore,
         CancellationToken ct)
     {
-        if (!await IsAdmin(principal, db, ct))
+        if (!await userContext.IsCurrentUserAdminAsync(ct))
             return Forbidden();
 
-        var events = await auditStore.ListAsync(new AuditEventFilter { Take = 1 }, ct);
-        // Simple lookup — audit store doesn't have GetById, so we filter
-        var filter = new AuditEventFilter { Take = 1 };
         var all = await auditStore.ListAsync(new AuditEventFilter { Take = 10000 }, ct);
         var evt = all.FirstOrDefault(e => e.Id == id);
 
@@ -95,15 +87,6 @@ public static class AuditEndpoints
             IpAddress = evt.IpAddress,
             CreatedAt = evt.CreatedAt,
         });
-    }
-
-    private static async Task<bool> IsAdmin(ClaimsPrincipal principal, ScribegateDbContext db, CancellationToken ct)
-    {
-        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? principal.FindFirstValue("sub");
-        if (!Guid.TryParse(sub, out var userId)) return false;
-        var user = await db.Users.FindAsync([userId], ct);
-        return user?.IsAdmin == true;
     }
 
     private static IResult Forbidden() =>

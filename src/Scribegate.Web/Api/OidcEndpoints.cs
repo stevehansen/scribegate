@@ -1,10 +1,8 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -79,7 +77,7 @@ public static class OidcEndpoints
 
     private static async Task<IResult> Callback(
         HttpContext httpContext,
-        ScribegateDbContext db,
+        IUserStore users,
         JwtService jwt,
         ISystemSettingStore settings,
         AuditService audit,
@@ -111,14 +109,12 @@ public static class OidcEndpoints
             return Results.Redirect("/?auth_error=no_subject");
 
         // Find existing user by external ID
-        var user = await db.Users.FirstOrDefaultAsync(
-            u => u.ExternalProvider == provider && u.ExternalId == externalId, ct);
+        var user = await users.FindByOidcSubjectAsync(provider, externalId, ct);
 
         if (user is null && !string.IsNullOrEmpty(email))
         {
             // Try to link by email
-            var matchedUser = await db.Users.FirstOrDefaultAsync(
-                u => u.Email == email, ct);
+            var matchedUser = await users.FindByEmailAsync(email, ct);
 
             if (matchedUser is not null)
             {
@@ -132,7 +128,7 @@ public static class OidcEndpoints
                 matchedUser.ExternalProvider = provider;
                 matchedUser.ExternalId = externalId;
                 matchedUser.EmailVerified = true;
-                await db.SaveChangesAsync(ct);
+                await users.UpdateAsync(matchedUser, ct);
                 user = matchedUser;
             }
         }
@@ -150,12 +146,12 @@ public static class OidcEndpoints
             // Ensure unique
             var baseUsername = username;
             var counter = 1;
-            while (await db.Users.AnyAsync(u => u.Username == username, ct))
+            while (await users.UsernameExistsAsync(username, ct))
             {
                 username = $"{baseUsername}{counter++}";
             }
 
-            var isFirstUser = !await db.Users.AnyAsync(ct);
+            var isFirstUser = !await users.AnyExistAsync(ct);
             var defaultTier = await tierService.GetDefaultTierAsync(ct);
 
             user = new User
@@ -170,8 +166,7 @@ public static class OidcEndpoints
                 EmailVerified = verifiedEmail,
             };
 
-            db.Users.Add(user);
-            await db.SaveChangesAsync(ct);
+            await users.CreateAsync(user, ct);
 
             await audit.LogAsync(
                 AuditEventTypes.UserRegistered, user.Id, user.Username,

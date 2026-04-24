@@ -48,7 +48,7 @@ public static class MediaEndpoints
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         var denied = await authz.RequireRepositoryRoleAsync(
-            repo, AuthorizationHelper.CanContribute, userContext, db, ct);
+            repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
         // Validate file
@@ -65,11 +65,10 @@ public static class MediaEndpoints
                 $"File type '{contentType}' is not allowed.",
                 $"Allowed types: {string.Join(", ", AllowedContentTypes)}.");
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
 
         // Quota check: storage
-        var user = await db.Users.FindAsync([userId], ct);
-        if (user is not null)
         {
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxStorageMb))
@@ -309,11 +308,11 @@ public static class MediaEndpoints
 
         if (asset is null) return ApiResults.NotFound("Media", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
+        var user = await userContext.RequireCurrentUserAsync(ct);
+        var userId = user.Id;
 
         // Only uploader or admin can delete
-        var user = await db.Users.FindAsync([userId], ct);
-        if (asset.UploadedById != userId && user?.IsAdmin != true)
+        if (asset.UploadedById != userId && !user.IsAdmin)
             return Results.Json(new
             {
                 error = new ApiError { Code = "FORBIDDEN", Message = "You can only delete your own uploads." }
