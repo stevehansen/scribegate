@@ -4,6 +4,7 @@ import * as authApi from '../../api/auth.js';
 import { ApiException } from '../../api/client.js';
 import { authState } from '../../state/auth-state.js';
 import type { ApiTokenResponse, ApiTokenCreatedResponse } from '../../api/types.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-settings-page')
@@ -50,8 +51,6 @@ export class SgSettingsPage extends LitElement {
     .empty { color: var(--sg-text-secondary, #888); font-style: italic; padding: 1rem 0; }
   `];
 
-  @state() private _tokens: ApiTokenResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _submitting = false;
   @state() private _name = '';
@@ -59,24 +58,21 @@ export class SgSettingsPage extends LitElement {
   @state() private _created: ApiTokenCreatedResponse | null = null;
   @state() private _copyFeedback = '';
 
+  // autoload: false — connectedCallback redirects unauthenticated users
+  // to /login, so we only kick off the fetch after that gate passes.
+  private _tokensCtl = new LoadController<ApiTokenResponse[]>(
+    this,
+    () => authApi.listApiTokens(),
+    { autoload: false },
+  );
+
   async connectedCallback() {
     super.connectedCallback();
     if (!authState.isAuthenticated) {
       window.location.href = '/login';
       return;
     }
-    await this._load();
-  }
-
-  private async _load() {
-    this._loading = true;
-    try {
-      this._tokens = await authApi.listApiTokens();
-    } catch (err) {
-      this._error = err instanceof ApiException ? err.error.message : 'Failed to load tokens.';
-    } finally {
-      this._loading = false;
-    }
+    await this._tokensCtl.reload();
   }
 
   private async _onCreate(e: Event) {
@@ -94,7 +90,7 @@ export class SgSettingsPage extends LitElement {
       this._created = await authApi.createApiToken(this._name.trim(), expires);
       this._name = '';
       this._expiresInDays = '';
-      await this._load();
+      await this._tokensCtl.reload();
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Failed to create token.';
     } finally {
@@ -106,7 +102,7 @@ export class SgSettingsPage extends LitElement {
     if (!confirm(`Revoke API token "${name}"? Anything using it will stop working immediately.`)) return;
     try {
       await authApi.deleteApiToken(id);
-      await this._load();
+      await this._tokensCtl.reload();
     } catch (err) {
       this._error = err instanceof ApiException ? err.error.message : 'Failed to revoke.';
     }
@@ -182,11 +178,13 @@ export class SgSettingsPage extends LitElement {
         </button>
       </form>
 
-      ${this._loading
+      ${this._tokensCtl.status === 'loading' && !this._tokensCtl.data
         ? html`<p>Loading…</p>`
-        : this._tokens.length === 0
-          ? html`<p class="empty">No API tokens yet.</p>`
-          : html`
+        : this._tokensCtl.status === 'error'
+          ? html`<div class="error">${this._tokensCtl.error}</div>`
+          : (this._tokensCtl.data ?? []).length === 0
+            ? html`<p class="empty">No API tokens yet.</p>`
+            : html`
             <table>
               <thead>
                 <tr>
@@ -198,7 +196,7 @@ export class SgSettingsPage extends LitElement {
                 </tr>
               </thead>
               <tbody>
-                ${this._tokens.map(t => html`
+                ${(this._tokensCtl.data ?? []).map(t => html`
                   <tr>
                     <td>${t.name}</td>
                     <td class="muted">${new Date(t.createdAt).toLocaleDateString()}</td>

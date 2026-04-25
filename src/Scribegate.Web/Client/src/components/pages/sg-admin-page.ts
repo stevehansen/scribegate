@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import type { SettingResponse, AuditEventResponse } from '../../api/types.js';
 import * as adminApi from '../../api/admin.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-time-ago.js';
 
@@ -80,9 +81,6 @@ export class SgAdminPage extends LitElement {
     .tab.active { color: var(--sg-primary); border-bottom-color: var(--sg-primary); font-weight: 500; }
   `];
 
-  @state() private _settings: SettingResponse[] = [];
-  @state() private _auditEvents: AuditEventResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _tab = 'settings';
   @state() private _drafts: Record<string, string> = {};
@@ -102,23 +100,10 @@ export class SgAdminPage extends LitElement {
     'Other',
   ];
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    try {
-      const [settings, audit] = await Promise.all([
-        adminApi.listSettings(),
-        adminApi.listAuditEvents({ take: 50 }),
-      ]);
-      this._settings = settings;
-      this._auditEvents = audit.items;
-    } catch (e) {
-      this._error = e instanceof ApiException ? e.error.message : 'Failed to load admin data.';
-    } finally { this._loading = false; }
-  }
+  private _settingsCtl = new LoadController<SettingResponse[]>(this, () =>
+    adminApi.listSettings());
+  private _auditCtl = new LoadController<AuditEventResponse[]>(this, () =>
+    adminApi.listAuditEvents({ take: 50 }).then(r => r.items));
 
   private async _toggleSetting(key: string, current: string) {
     const newValue = current === 'true' ? 'false' : 'true';
@@ -129,8 +114,7 @@ export class SgAdminPage extends LitElement {
     try {
       this._error = '';
       await adminApi.updateSetting(key, newValue);
-      const settings = await adminApi.listSettings();
-      this._settings = settings;
+      await this._settingsCtl.reload();
       const { [key]: _, ...rest } = this._drafts;
       this._drafts = rest;
       this._savedKey = key;
@@ -162,8 +146,12 @@ export class SgAdminPage extends LitElement {
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error && !this._settings.length) return html`<p class="error">${this._error}</p>`;
+    const settings = this._settingsCtl.data;
+    const stillLoading = this._settingsCtl.status === 'loading' && !settings;
+    if (stillLoading) return html`<p>Loading...</p>`;
+    if (this._settingsCtl.status === 'error' && !settings)
+      return html`<p class="error">${this._settingsCtl.error}</p>`;
+    if (this._error && !settings?.length) return html`<p class="error">${this._error}</p>`;
 
     return html`
       <h1>Administration</h1>
@@ -179,7 +167,7 @@ export class SgAdminPage extends LitElement {
   }
 
   private _renderSmtpTest() {
-    const enabled = this._settings.find(s => s.key === 'smtp.enabled')?.value === 'true';
+    const enabled = (this._settingsCtl.data ?? []).find(s => s.key === 'smtp.enabled')?.value === 'true';
     if (!enabled) return '';
     return html`
       <div class="setting">
@@ -205,7 +193,7 @@ export class SgAdminPage extends LitElement {
 
   private _renderSettings() {
     const groups = new Map<string, SettingResponse[]>();
-    for (const s of this._settings) {
+    for (const s of this._settingsCtl.data ?? []) {
       const g = s.group ?? 'Other';
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g)!.push(s);
@@ -290,7 +278,7 @@ export class SgAdminPage extends LitElement {
           <tr><th>Event</th><th>Actor</th><th>Target</th><th>Time</th></tr>
         </thead>
         <tbody>
-          ${this._auditEvents.map(e => html`
+          ${(this._auditCtl.data ?? []).map(e => html`
             <tr>
               <td><span class="badge">${e.eventType}</span></td>
               <td>${e.actorUsername ?? '-'}</td>
