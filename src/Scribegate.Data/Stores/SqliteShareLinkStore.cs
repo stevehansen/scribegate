@@ -46,4 +46,14 @@ public class SqliteShareLinkStore(ScribegateDbContext db) : IShareLinkStore
         db.ShareLinks.Update(link);
         await db.SaveChangesAsync(ct);
     }
+
+    public async Task MarkAccessedAsync(Guid id, DateTime when, CancellationToken ct = default)
+    {
+        await db.ShareLinks
+            .Where(s => s.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(l => l.LastAccessedAt, when)
+                .SetProperty(l => l.AccessCount, l => l.AccessCount + 1),
+                ct);
+    }
 }

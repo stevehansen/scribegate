@@ -306,7 +306,9 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// Auto-migrate on startup
+// Auto-migrate on startup. The host bootstrap legitimately needs the DbContext —
+// see SECURITY.md and CLAUDE.md for the M7 storage-abstraction rule.
+#pragma warning disable SCB0001
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ScribegateDbContext>();
@@ -341,6 +343,7 @@ using (var scope = app.Services.CreateScope())
     if (await settings.GetAsync(SystemSettingKeys.OidcAutoProvision) is null)
         await settings.SetAsync(SystemSettingKeys.OidcAutoProvision, "true");
 }
+#pragma warning restore SCB0001
 
 // Security headers
 app.Use(async (context, next) =>

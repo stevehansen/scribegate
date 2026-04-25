@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -235,7 +233,6 @@ public static class ShareLinkEndpoints
         string token,
         IShareLinkStore shareLinkStore,
         IRevisionStore revisionStore,
-        ScribegateDbContext db,
         AuditService audit,
         CancellationToken ct)
     {
@@ -293,18 +290,16 @@ public static class ShareLinkEndpoints
             ExpiresAt = link.ExpiresAt,
         };
 
-        // Best-effort access tracking + audit. On failure, detach the entity so
-        // the shared DbContext isn't left with a pending Modified entry that
-        // would re-throw on the next SaveChanges.
-        link.LastAccessedAt = DateTime.UtcNow;
-        link.AccessCount += 1;
+        // Best-effort access tracking. ExecuteUpdate keeps the change off the
+        // tracker so a failure here can't leak Modified state into a later
+        // SaveChanges on this request's DbContext.
         try
         {
-            await shareLinkStore.UpdateAsync(link, ct);
+            await shareLinkStore.MarkAccessedAsync(link.Id, DateTime.UtcNow, ct);
         }
         catch
         {
-            db.Entry(link).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+            // Swallow — the public-facing response was captured before this call.
         }
 
         try

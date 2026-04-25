@@ -1,7 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
 
@@ -66,7 +65,6 @@ public static class ReviewEndpoints
         IReviewStore reviewStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
