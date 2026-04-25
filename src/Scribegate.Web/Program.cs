@@ -30,6 +30,10 @@ builder.Services.AddScoped<TierService>();
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<NotificationService>();
 
+// Domain command services — ports in Scribegate.Core, adapters in Scribegate.Web.
+builder.Services.AddScoped<Scribegate.Core.Services.IProposalApprovalContext, Scribegate.Web.Services.EfProposalApprovalContext>();
+builder.Services.AddScoped<Scribegate.Core.Services.ProposalApprovalService>();
+
 // Webhook dispatch: singleton queue + hosted worker; HttpClient factory for deliveries
 builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();
 builder.Services.AddSingleton<Scribegate.Web.Services.IWebhookDispatcher>(sp => sp.GetRequiredService<Scribegate.Web.Services.WebhookDispatcher>());

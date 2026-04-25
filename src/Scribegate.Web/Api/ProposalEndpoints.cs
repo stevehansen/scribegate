@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
@@ -392,183 +393,48 @@ public static class ProposalEndpoints
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
-        IDocumentStore documentStore,
-        IRevisionStore revisionStore,
-        IRevisionSignatureStore signatureStore,
-        IReviewStore reviewStore,
         IMembershipStore membershipStore,
-        IUserStore users,
         UserContext userContext,
-        AuditService audit,
-        SignatureService signatureService,
-        NotificationService notifications,
-        IWebhookDispatcher webhooks,
+        ProposalApprovalService approvals,
         CancellationToken ct)
     {
+        // Authorization stays at the endpoint (RFC #7 territory). The repository
+        // load here is the cheap lookup needed to authorize against the repo's
+        // membership; the service does its own LoadAsync for the merge work.
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var proposal = await proposalStore.GetByIdAsync(id, ct);
-        if (proposal is null || proposal.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Proposal", id.ToString());
-
-        if (proposal.Status != ProposalStatus.Open)
-            return Error("PROPOSAL_NOT_OPEN", "Only open proposals can be approved.", 422);
-
         var user = await userContext.RequireCurrentUserAsync(ct);
-        var userId = user.Id;
-
-        // Check if user has reviewer/admin role (or is global admin)
-        var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
+        var membership = await membershipStore.GetAsync(user.Id, repo.Id, ct);
         if (!AuthorizationHelper.CanReview(membership?.Role) && !user.IsAdmin)
             return Forbidden("You need Reviewer or Admin role to approve proposals.");
 
-        // Self-review check
-        if (proposal.CreatedById == userId)
-            return Error("SELF_REVIEW_NOT_ALLOWED", "You cannot approve your own proposal.", 422);
+        var result = await approvals.ApproveAsync(
+            new ApprovalRequest(owner, repoSlug, id, user.Id, userContext.GetUsername()), ct);
 
-        Document? doc = null;
-        if (proposal.DocumentId.HasValue)
+        return result switch
         {
-            doc = await documentStore.GetByIdAsync(proposal.DocumentId.Value, ct);
-            if (doc is null || doc.RepositoryId != repo.Id || doc.IsArchived)
-                return ApiResults.Conflict(
-                    "PROPOSAL_STALE",
-                    "This proposal no longer points at a live document in this repository.",
-                    "Refresh the proposal against the current document state before requesting approval again.");
-
-            if (doc.CurrentRevisionId != proposal.BaseRevisionId)
-                return ApiResults.Conflict(
-                    "PROPOSAL_STALE",
-                    "This proposal is based on an out-of-date revision.",
-                    "Refresh the proposal against the document's latest revision and ask reviewers to review the updated version.");
-        }
-        else if (!string.IsNullOrWhiteSpace(proposal.ProposedPath))
-        {
-            doc = await documentStore.GetByPathAsync(repo.Id, proposal.ProposedPath, ct: ct);
-            if (doc is not null)
-                return ApiResults.Conflict(
-                    "PROPOSAL_STALE",
-                    $"A document at path '{proposal.ProposedPath}' now exists.",
-                    "Recreate the proposal against the existing document, or choose a different target path.",
-                    "path");
-        }
-
-        // Record the approval review
-        var review = new Review
-        {
-            Id = Guid.CreateVersion7(),
-            ProposalId = id,
-            Verdict = ReviewVerdict.Approved,
-            Body = null,
-            CreatedById = userId,
-        };
-        await reviewStore.CreateAsync(review, ct);
-
-        await audit.LogAsync(AuditEventTypes.ReviewSubmitted, userId, userContext.GetUsername(),
-            "Review", review.Id,
-            new { proposalId = id, verdict = "Approved" }, ct);
-
-        // Count distinct approvals (one per reviewer)
-        var allReviews = await reviewStore.ListByProposalAsync(id, ct);
-        var eligibleReviewerIds = (await membershipStore.ListByRepositoryAsync(repo.Id, ct))
-            .Where(m => AuthorizationHelper.CanReview(m.Role))
-            .Select(m => m.UserId)
-            .ToHashSet();
-        foreach (var adminId in await users.ListAdminIdsAsync(ct))
-            eligibleReviewerIds.Add(adminId);
-
-        var approvalCount = allReviews
-            .Where(r => r.Verdict == ReviewVerdict.Approved)
-            .Where(r => r.CreatedById != proposal.CreatedById)
-            .Where(r => eligibleReviewerIds.Contains(r.CreatedById))
-            .Select(r => r.CreatedById)
-            .Distinct()
-            .Count();
-
-        var requiredApprovals = Math.Max(1, repo.RequiredApprovals);
-
-        if (approvalCount < requiredApprovals)
-        {
-            return Results.Ok(new
+            ApprovalResult.NotFoundCase => ApiResults.NotFound("Proposal", id.ToString()),
+            ApprovalResult.NotOpenCase => Error("PROPOSAL_NOT_OPEN", "Only open proposals can be approved.", 422),
+            ApprovalResult.SelfReviewCase => Error("SELF_REVIEW_NOT_ALLOWED", "You cannot approve your own proposal.", 422),
+            ApprovalResult.StaleCase s => ApiResults.Conflict("PROPOSAL_STALE", s.Message, s.Hint, s.Field),
+            ApprovalResult.InvalidCase => Error("INVALID_PROPOSAL", "Proposal has no target document or path.", 422),
+            ApprovalResult.PendingCase p => Results.Ok(new
             {
                 status = "Open",
-                approvals = approvalCount,
-                requiredApprovals,
-                message = $"Approved ({approvalCount}/{requiredApprovals}). Waiting for more approvals.",
-            });
-        }
-
-        // Threshold met — merge the proposal
-        if (proposal.DocumentId.HasValue)
-        {
-            if (doc is null)
-                return ApiResults.NotFound("Document", proposal.DocumentId.Value.ToString());
-        }
-        else if (proposal.ProposedPath is not null)
-        {
-            doc = new Document
+                approvals = p.Count,
+                requiredApprovals = p.Required,
+                message = $"Approved ({p.Count}/{p.Required}). Waiting for more approvals.",
+            }),
+            ApprovalResult.MergedCase m => Results.Ok(new
             {
-                Id = Guid.CreateVersion7(),
-                RepositoryId = repo.Id,
-                Path = proposal.ProposedPath,
-                CreatedById = proposal.CreatedById,
-            };
-            await documentStore.CreateAsync(doc, ct);
-            proposal.DocumentId = doc.Id;
-        }
-        else
-        {
-            return Error("INVALID_PROPOSAL", "Proposal has no target document or path.", 422);
-        }
-
-        var revision = new Revision
-        {
-            Id = Guid.CreateVersion7(),
-            DocumentId = doc.Id,
-            Content = proposal.ProposedContent,
-            Message = $"Approved: {proposal.Title}",
-            CreatedById = proposal.CreatedById,
-            ParentRevisionId = doc.CurrentRevisionId,
+                status = "Approved",
+                revisionId = m.RevisionId,
+                approvals = m.Count,
+                requiredApprovals = m.Required,
+            }),
+            _ => throw new InvalidOperationException($"Unhandled approval result: {result.GetType().Name}"),
         };
-
-        await revisionStore.CreateAsync(revision, ct);
-
-        var signature = signatureService.SignRevision(revision);
-        await signatureStore.AttachAsync(signature, ct);
-
-        doc.CurrentRevisionId = revision.Id;
-        doc.FrontmatterJson = FrontmatterService.ToJson(proposal.ProposedContent);
-        await documentStore.UpdateAsync(doc, ct);
-
-        proposal.Status = ProposalStatus.Approved;
-        proposal.ResolvedAt = DateTime.UtcNow;
-        proposal.ResolvedById = userId;
-        await proposalStore.UpdateAsync(proposal, ct);
-
-        await audit.LogAsync(AuditEventTypes.ProposalApproved, userId, userContext.GetUsername(),
-            "Proposal", proposal.Id,
-            new { revisionId = revision.Id, documentPath = doc.Path, approvalCount }, ct);
-
-        // Notify the proposal author
-        await notifications.NotifyAsync(
-            proposal.CreatedById, NotificationTypes.ProposalApproved,
-            $"Proposal approved: {proposal.Title}",
-            $"Your proposal has been approved and merged by {userContext.GetUsername()}.",
-            $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", ct);
-
-        webhooks.Dispatch(WebhookEventTypes.ProposalApproved, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
-            document = new { id = doc.Id, path = doc.Path },
-            revision = new { id = revision.Id, message = revision.Message },
-            actor = new { id = userId, username = userContext.GetUsername() },
-            timestamp = DateTime.UtcNow,
-        });
-
-        return Results.Ok(new { status = "Approved", revisionId = revision.Id, approvals = approvalCount, requiredApprovals });
     }
 
     private static async Task<IResult> RejectProposal(
