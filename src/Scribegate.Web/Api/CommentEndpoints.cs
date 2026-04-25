@@ -1,3 +1,4 @@
+using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
@@ -170,9 +171,9 @@ public static class CommentEndpoints
         if (comment is null || comment.ProposalId != proposalId)
             return ApiResults.NotFound("Comment", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        if (comment.CreatedById != userId)
-            return Results.Json(new { error = new ApiError { Code = "FORBIDDEN", Message = "You can only edit your own comments." } }, statusCode: 403);
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = CommentPolicy.CanEdit(comment, actor);
+        if (!gate.Allowed) return gate.ToHttp();
 
         if (string.IsNullOrWhiteSpace(request.Body))
             return ApiResults.ValidationError("body", ApiErrorCodes.Required, "Comment body is required.");
@@ -186,8 +187,8 @@ public static class CommentEndpoints
             Body = comment.Body,
             ParentCommentId = comment.ParentCommentId,
             LineReference = comment.LineReference,
-            CreatedBy = comment.CreatedBy?.Username ?? userId.ToString(),
-            CreatedById = userId,
+            CreatedBy = comment.CreatedBy?.Username ?? actor.Id.ToString(),
+            CreatedById = actor.Id,
             CreatedAt = comment.CreatedAt,
         });
     }
@@ -219,9 +220,9 @@ public static class CommentEndpoints
         if (comment is null || comment.ProposalId != proposalId)
             return ApiResults.NotFound("Comment", id.ToString());
 
-        var user = await userContext.RequireCurrentUserAsync(ct);
-        if (comment.CreatedById != user.Id && !user.IsAdmin)
-            return Results.Json(new { error = new ApiError { Code = "FORBIDDEN", Message = "You can only delete your own comments." } }, statusCode: 403);
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = CommentPolicy.CanDelete(comment, actor);
+        if (!gate.Allowed) return gate.ToHttp();
 
         await commentStore.DeleteAsync(id, ct);
 

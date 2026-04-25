@@ -1,3 +1,4 @@
+using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
@@ -198,30 +199,24 @@ public static class ShareLinkEndpoints
         if (link is null || link.RepositoryId != repo.Id)
             return ApiResults.NotFound("ShareLink", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var role = await authz.GetUserRoleAsync(userId, repo.Id, ct);
+        // Authorization is checked before any short-circuit on RevokedAt so callers
+        // can't distinguish "already revoked" vs "doesn't exist".
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var role = await authz.GetUserRoleAsync(actor.Id, repo.Id, ct);
+        var actorIsRepoAdmin = AuthorizationHelper.IsAdmin(role) || actor.IsAdmin;
 
-        // Only creator or repo admin can revoke — checked before any short-circuit
-        // so callers can't distinguish "already revoked" vs "doesn't exist".
-        if (link.CreatedById != userId && !AuthorizationHelper.IsAdmin(role))
-            return Results.Json(new
-            {
-                error = new ApiError
-                {
-                    Code = ApiErrorCodes.Forbidden,
-                    Message = "You can only revoke share links you created, unless you are a repository admin.",
-                }
-            }, statusCode: 403);
+        var gate = ShareLinkPolicy.CanRevoke(link, actor, actorIsRepoAdmin);
+        if (!gate.Allowed) return gate.ToHttp();
 
         if (link.RevokedAt.HasValue)
             return Results.NoContent();
 
         link.RevokedAt = DateTime.UtcNow;
-        link.RevokedById = userId;
+        link.RevokedById = actor.Id;
         await shareLinkStore.UpdateAsync(link, ct);
 
         await audit.LogAsync(
-            AuditEventTypes.ShareLinkRevoked, userId, userContext.GetUsername(),
+            AuditEventTypes.ShareLinkRevoked, actor.Id, userContext.GetUsername(),
             "ShareLink", link.Id,
             new { owner, slug = repo.Slug, documentId = link.DocumentId },
             ct);
