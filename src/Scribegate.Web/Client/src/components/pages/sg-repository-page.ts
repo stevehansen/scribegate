@@ -1,11 +1,12 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, DocumentSummary, DocumentResponse } from '../../api/types.js';
+import type { DocumentSummary, DocumentResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import * as exportsApi from '../../api/exports.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-file-tree.js';
 import '../shared/sg-breadcrumb.js';
@@ -135,11 +136,7 @@ export class SgRepositoryPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
-  @state() private _docs: DocumentSummary[] = [];
-  @state() private _readme: DocumentResponse | null = null;
-  @state() private _loading = true;
-  @state() private _error = '';
+  @state() private _actionError = '';
   @state() private _dialogError = '';
   @state() private _exporting = false;
   @state() private _generatingSite = false;
@@ -153,48 +150,30 @@ export class SgRepositoryPage extends LitElement {
     return this.location?.params?.slug ?? '';
   }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [repo, docs] = await Promise.all([
-        repoApi.get(this._owner, this._slug),
-        docApi.list(this._owner, this._slug),
-      ]);
-      this._repo = repo;
-      this._docs = docs.items;
-
-      const readme = findReadme(this._docs);
-      if (readme) {
-        try {
-          this._readme = await docApi.get(this._owner, this._slug, readme.path);
-        } catch {
-          // Non-fatal: repo page still renders without the inline README.
-          this._readme = null;
-        }
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+  private _docsCtl = new LoadController(this, async () => {
+    const docs = await docApi.list(this._owner, this._slug);
+    let readme: DocumentResponse | null = null;
+    const r = findReadme(docs.items);
+    if (r) {
+      try {
+        readme = await docApi.get(this._owner, this._slug, r.path);
+      } catch {
+        // Non-fatal: repo page still renders without the inline README.
       }
-    } catch {
-      this._error = 'Repository not found.';
-    } finally {
-      this._loading = false;
     }
-  }
+    return { items: docs.items as DocumentSummary[], readme };
+  });
 
   private async _onExport() {
     if (this._exporting) return;
     this._exporting = true;
+    this._actionError = '';
     try {
       await exportsApi.downloadRepoZip(this._owner, this._slug);
     } catch (err) {
-      this._error = err instanceof ApiException ? err.error.message : 'Export failed.';
+      this._actionError = err instanceof ApiException ? err.error.message : 'Export failed.';
     } finally {
       this._exporting = false;
     }
@@ -203,10 +182,11 @@ export class SgRepositoryPage extends LitElement {
   private async _onGenerateSite() {
     if (this._generatingSite) return;
     this._generatingSite = true;
+    this._actionError = '';
     try {
       await exportsApi.buildSite(this._owner, this._slug);
     } catch (err) {
-      this._error = err instanceof ApiException ? err.error.message : 'Site generation failed.';
+      this._actionError = err instanceof ApiException ? err.error.message : 'Site generation failed.';
     } finally {
       this._generatingSite = false;
     }
@@ -233,10 +213,11 @@ export class SgRepositoryPage extends LitElement {
     this._dialogError = '';
     const dialog = this.renderRoot.querySelector('dialog') as HTMLDialogElement;
     const form = dialog?.querySelector('form') as HTMLFormElement;
-    if (form && this._repo) {
-      (form.querySelector('[name="name"]') as HTMLInputElement).value = this._repo.name;
-      (form.querySelector('[name="description"]') as HTMLTextAreaElement).value = this._repo.description ?? '';
-      (form.querySelector('[name="visibility"]') as HTMLSelectElement).value = this._repo.visibility;
+    const repo = this._repoCtl.data;
+    if (form && repo) {
+      (form.querySelector('[name="name"]') as HTMLInputElement).value = repo.name;
+      (form.querySelector('[name="description"]') as HTMLTextAreaElement).value = repo.description ?? '';
+      (form.querySelector('[name="visibility"]') as HTMLSelectElement).value = repo.visibility;
     }
     dialog?.showModal();
   }
@@ -253,7 +234,8 @@ export class SgRepositoryPage extends LitElement {
         description: data.get('description') as string || undefined,
         visibility: data.get('visibility') as string,
       });
-      this._repo = updated;
+      this._repoCtl.data = updated;
+      this.requestUpdate();
       const dialog = this.renderRoot.querySelector('dialog') as HTMLDialogElement;
       dialog?.close();
       // If slug changed, navigate to new URL
@@ -266,23 +248,27 @@ export class SgRepositoryPage extends LitElement {
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error) return html`<p class="error">${this._error}</p>`;
-    if (!this._repo) return html``;
+    const repo = this._repoCtl.data;
+    const docs = this._docsCtl.data?.items ?? [];
+    const readme = this._docsCtl.data?.readme ?? null;
+
+    if (this._repoCtl.status === 'loading' && !repo) return html`<p>Loading...</p>`;
+    if (this._repoCtl.status === 'error') return html`<p class="error">Repository not found.</p>`;
+    if (!repo) return html``;
 
     const repoBase = `/${this._owner}/${this._slug}`;
 
     return html`
       <sg-breadcrumb
-        repoOwner=${this._repo.owner}
-        repoSlug=${this._repo.slug}
-        repoName=${this._repo.name}
+        repoOwner=${repo.owner}
+        repoSlug=${repo.slug}
+        repoName=${repo.name}
       ></sg-breadcrumb>
 
       <div class="header">
         <div class="info">
-          <h1>${this._repo.owner}/${this._repo.name} <span class="badge">${this._repo.visibility}</span></h1>
-          ${this._repo.description ? html`<p>${this._repo.description}</p>` : ''}
+          <h1>${repo.owner}/${repo.name} <span class="badge">${repo.visibility}</span></h1>
+          ${repo.description ? html`<p>${repo.description}</p>` : ''}
         </div>
         <div class="actions">
           <a class="btn btn-secondary" href="${repoBase}/proposals">Proposals</a>
@@ -303,7 +289,9 @@ export class SgRepositoryPage extends LitElement {
         </div>
       </div>
 
-      ${this._repo.visibility === 'Public' || authState.isAuthenticated
+      ${this._actionError ? html`<p class="error">${this._actionError}</p>` : ''}
+
+      ${repo.visibility === 'Public' || authState.isAuthenticated
         ? html`
             <div class="clone-box">
               <label>Git clone</label>
@@ -311,7 +299,7 @@ export class SgRepositoryPage extends LitElement {
               <button class="btn btn-secondary" @click=${this._onCopyCloneUrl}>
                 ${this._cloneCopied ? 'Copied' : 'Copy'}
               </button>
-              ${this._repo.visibility === 'Private'
+              ${repo.visibility === 'Private'
                 ? html`<span class="clone-copied">Private repo — use an API token as the password.</span>`
                 : html`<span class="clone-copied">Public repo — no credentials required.</span>`}
             </div>`
@@ -320,24 +308,24 @@ export class SgRepositoryPage extends LitElement {
       <section>
         <h2>Documents</h2>
         <sg-file-tree
-          .documents=${this._docs}
+          .documents=${docs}
           repoOwner=${this._owner}
           repoSlug=${this._slug}
         ></sg-file-tree>
       </section>
 
-      ${this._readme && this._readme.content !== undefined
+      ${readme && readme.content !== undefined
         ? html`
             <section class="readme">
               <div class="readme-header">
-                <h2>${this._readme.path}</h2>
-                <a href="${repoBase}/${this._readme.path.replace(/\.md$/, '')}">Open →</a>
+                <h2>${readme.path}</h2>
+                <a href="${repoBase}/${readme.path.replace(/\.md$/, '')}">Open →</a>
               </div>
               <sg-markdown-view
-                .content=${this._readme.content ?? ''}
+                .content=${readme.content ?? ''}
                 owner=${this._owner}
                 slug=${this._slug}
-                documentPath=${this._readme.path}
+                documentPath=${readme.path}
               ></sg-markdown-view>
             </section>`
         : ''}

@@ -1,8 +1,8 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, RevisionSummary } from '../../api/types.js';
+import { customElement, property } from 'lit/decorators.js';
 import * as repoApi from '../../api/repositories.js';
 import * as revisionApi from '../../api/revisions.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
@@ -38,10 +38,6 @@ export class SgHistoryPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
-  @state() private _revisions: RevisionSummary[] = [];
-  @state() private _loading = true;
-  @state() private _error = '';
 
   private get _owner(): string {
     return this.location?.params?.owner ?? '';
@@ -56,50 +52,38 @@ export class SgHistoryPage extends LitElement {
     return raw.endsWith('.md') ? raw : raw + '.md';
   }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [repo, revs] = await Promise.all([
-        repoApi.get(this._owner, this._slug),
-        revisionApi.list(this._owner, this._slug, this._path),
-      ]);
-      this._repo = repo;
-      this._revisions = revs.items;
-    } catch {
-      this._error = 'Failed to load history.';
-    } finally {
-      this._loading = false;
-    }
-  }
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+  private _revisionsCtl = new LoadController(this, () =>
+    revisionApi.list(this._owner, this._slug, this._path).then(r => r.items));
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error) return html`<p class="error">${this._error}</p>`;
-    if (!this._repo) return html``;
+    const repo = this._repoCtl.data;
+    const revisions = this._revisionsCtl.data ?? [];
+
+    if (this._repoCtl.status === 'loading' && !repo) return html`<p>Loading...</p>`;
+    if (this._repoCtl.status === 'error' || this._revisionsCtl.status === 'error')
+      return html`<p class="error">Failed to load history.</p>`;
+    if (!repo) return html``;
 
     const repoBase = `/${this._owner}/${this._slug}`;
 
     return html`
       <sg-breadcrumb
-        repoOwner=${this._repo.owner}
-        repoSlug=${this._repo.slug}
-        repoName=${this._repo.name}
+        repoOwner=${repo.owner}
+        repoSlug=${repo.slug}
+        repoName=${repo.name}
         path=${this._path}
       ></sg-breadcrumb>
 
       <a class="back" href="${repoBase}/${this._path.replace(/\.md$/, '')}">Back to document</a>
       <h1>History: ${this._path}</h1>
 
-      ${this._revisions.length === 0
+      ${revisions.length === 0
         ? html`<div class="empty">No revisions yet.</div>`
         : html`
           <div class="revisions">
-            ${this._revisions.map((rev, i) => html`
+            ${revisions.map((rev, i) => html`
               <div class="revision">
                 <div>
                   <div class="revision-msg">
