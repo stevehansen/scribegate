@@ -5,6 +5,7 @@ import * as templateApi from '../../api/templates.js';
 import { ApiException } from '../../api/client.js';
 import { authState } from '../../state/auth-state.js';
 import type { TemplateSummaryResponse, TemplateResponse } from '../../api/types.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-templates-page')
@@ -63,8 +64,6 @@ export class SgTemplatesPage extends LitElement {
 
   @state() private _repoOwner = '';
   @state() private _repoSlug = '';
-  @state() private _templates: TemplateSummaryResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _submitting = false;
 
@@ -80,32 +79,12 @@ export class SgTemplatesPage extends LitElement {
   @state() private _editContent = '';
   @state() private _editError = '';
 
+  private _templatesCtl = new LoadController<TemplateSummaryResponse[]>(this, () =>
+    templateApi.list(this._repoOwner, this._repoSlug).then(r => r.items));
+
   onBeforeEnter(location: RouterLocation) {
     this._repoOwner = (location.params.owner as string) ?? '';
     this._repoSlug = (location.params.slug as string) ?? '';
-  }
-
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    this._loading = true;
-    this._error = '';
-    if (!this._repoOwner || !this._repoSlug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const res = await templateApi.list(this._repoOwner, this._repoSlug);
-      this._templates = res.items;
-    } catch (err) {
-      this._error = this._messageFor(err, 'Failed to load templates.');
-    } finally {
-      this._loading = false;
-    }
   }
 
   private _messageFor(err: unknown, fallback: string): string {
@@ -131,7 +110,7 @@ export class SgTemplatesPage extends LitElement {
       this._name = '';
       this._description = '';
       this._content = '';
-      await this._load();
+      await this._templatesCtl.reload();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to create template.');
     } finally {
@@ -169,7 +148,7 @@ export class SgTemplatesPage extends LitElement {
       const dialog = this.renderRoot.querySelector('dialog') as HTMLDialogElement | null;
       dialog?.close();
       this._editing = null;
-      await this._load();
+      await this._templatesCtl.reload();
     } catch (err) {
       this._editError = this._messageFor(err, 'Failed to update template.');
     } finally {
@@ -188,7 +167,7 @@ export class SgTemplatesPage extends LitElement {
     if (!confirm(`Delete template "${summary.name}"? This cannot be undone.`)) return;
     try {
       await templateApi.remove(this._repoOwner, this._repoSlug, summary.id);
-      await this._load();
+      await this._templatesCtl.reload();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to delete template.');
     }
@@ -238,11 +217,13 @@ export class SgTemplatesPage extends LitElement {
       ` : html`<p class="help">Log in as a repository admin to add templates.</p>`}
 
       <h2>Existing templates</h2>
-      ${this._loading
+      ${this._templatesCtl.status === 'loading' && !this._templatesCtl.data
         ? html`<p>Loading…</p>`
-        : this._templates.length === 0
-          ? html`<p class="empty">No templates yet.</p>`
-          : html`
+        : this._templatesCtl.status === 'error'
+          ? html`<div class="error">${this._templatesCtl.error}</div>`
+          : (this._templatesCtl.data ?? []).length === 0
+            ? html`<p class="empty">No templates yet.</p>`
+            : html`
             <table>
               <thead>
                 <tr>
@@ -254,7 +235,7 @@ export class SgTemplatesPage extends LitElement {
                 </tr>
               </thead>
               <tbody>
-                ${this._templates.map((t) => html`
+                ${(this._templatesCtl.data ?? []).map((t) => html`
                   <tr>
                     <td class="name">${t.name}</td>
                     <td class="muted">${t.description ?? ''}</td>

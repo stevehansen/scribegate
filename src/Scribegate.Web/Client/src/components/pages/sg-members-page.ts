@@ -1,10 +1,10 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, MemberResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as memberApi from '../../api/members.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 
@@ -51,9 +51,6 @@ export class SgMembersPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
-  @state() private _members: MemberResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _newUsername = '';
   @state() private _newRole = 'Reader';
@@ -61,52 +58,36 @@ export class SgMembersPage extends LitElement {
   private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [repo, members] = await Promise.all([
-        repoApi.get(this._owner, this._slug),
-        memberApi.list(this._owner, this._slug),
-      ]);
-      this._repo = repo;
-      this._members = members.items;
-    } catch { this._error = 'Failed to load members.'; }
-    finally { this._loading = false; }
-  }
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+  private _membersCtl = new LoadController(this, () =>
+    memberApi.list(this._owner, this._slug).then(r => r.items));
 
   private async _addMember() {
     this._error = '';
     try {
       await memberApi.add(this._owner, this._slug, { username: this._newUsername, role: this._newRole });
       this._newUsername = '';
-      const members = await memberApi.list(this._owner, this._slug);
-      this._members = members.items;
+      await this._membersCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed to add member.'; }
   }
 
   private async _removeMember(userId: string) {
     try {
       await memberApi.remove(this._owner, this._slug, userId);
-      const members = await memberApi.list(this._owner, this._slug);
-      this._members = members.items;
+      await this._membersCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (!this._repo) return html``;
+    const repo = this._repoCtl.data;
+    const members = this._membersCtl.data ?? [];
+
+    if (this._repoCtl.status === 'loading' && !repo) return html`<p>Loading...</p>`;
+    if (!repo) return html``;
 
     return html`
-      <sg-breadcrumb repoOwner=${this._repo.owner} repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
+      <sg-breadcrumb repoOwner=${repo.owner} repoSlug=${repo.slug} repoName=${repo.name}></sg-breadcrumb>
       <h1>Members</h1>
 
       ${this._error ? html`<div class="error">${this._error}</div>` : ''}
@@ -124,11 +105,11 @@ export class SgMembersPage extends LitElement {
         </div>
       ` : ''}
 
-      ${this._members.length === 0
+      ${members.length === 0
         ? html`<div class="empty">No members yet.</div>`
         : html`
           <div class="members">
-            ${this._members.map(m => html`
+            ${members.map(m => html`
                 <div class="member">
                   <div>
                     <div class="member-name">${m.username}</div>
