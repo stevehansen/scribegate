@@ -216,6 +216,7 @@ public static class WebhookEndpoints
         int take,
         IRepositoryStore repoStore,
         IWebhookStore webhookStore,
+        IWebhookDeliveryStore deliveryStore,
         AuthorizationHelper authz,
         UserContext userContext,
         CancellationToken ct)
@@ -224,7 +225,7 @@ public static class WebhookEndpoints
         if (scoped.Err is not null) return scoped.Err;
         var hook = scoped.Hook!;
 
-        var deliveries = await webhookStore.ListRecentDeliveriesAsync(hook.Id, take > 0 ? take : 20, ct);
+        var deliveries = await deliveryStore.ListRecentAsync(hook.Id, take > 0 ? take : 20, ct);
         var items = deliveries.Select(d => new WebhookDeliveryResponse
         {
             Id = d.Id,

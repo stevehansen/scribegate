@@ -1,8 +1,6 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
 
@@ -142,7 +140,6 @@ public static class ProposalEndpoints
         UserContext userContext,
         AuthorizationHelper authz,
         AccountAgeGateService accountAgeGate,
-        ScribegateDbContext db,
         AuditService audit,
         NotificationService notifications,
         IWebhookDispatcher webhooks,
@@ -253,7 +250,6 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -305,7 +301,6 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -352,7 +347,6 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -401,10 +395,10 @@ public static class ProposalEndpoints
         IProposalStore proposalStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        IRevisionSignatureStore signatureStore,
         IReviewStore reviewStore,
         IMembershipStore membershipStore,
         IUserStore users,
-        ScribegateDbContext db,
         UserContext userContext,
         AuditService audit,
         SignatureService signatureService,
@@ -542,8 +536,7 @@ public static class ProposalEndpoints
         await revisionStore.CreateAsync(revision, ct);
 
         var signature = signatureService.SignRevision(revision);
-        db.RevisionSignatures.Add(signature);
-        await db.SaveChangesAsync(ct);
+        await signatureStore.AttachAsync(signature, ct);
 
         doc.CurrentRevisionId = revision.Id;
         doc.FrontmatterJson = FrontmatterService.ToJson(proposal.ProposedContent);

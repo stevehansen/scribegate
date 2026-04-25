@@ -1,6 +1,5 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
 
@@ -108,11 +107,11 @@ public static class DocumentEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        IRevisionSignatureStore signatureStore,
         UserContext userContext,
         AuthorizationHelper authz,
         AuditService audit,
         SignatureService signatureService,
-        ScribegateDbContext db,
         TierService tierService,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -197,10 +196,8 @@ public static class DocumentEndpoints
 
             await revisionStore.CreateAsync(revision, ct);
 
-            // Sign the revision
             var signature = signatureService.SignRevision(revision);
-            db.RevisionSignatures.Add(signature);
-            await db.SaveChangesAsync(ct);
+            await signatureStore.AttachAsync(signature, ct);
 
             doc.CurrentRevisionId = revision.Id;
             await documentStore.UpdateAsync(doc, ct);
@@ -242,11 +239,11 @@ public static class DocumentEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
+        IRevisionSignatureStore signatureStore,
         UserContext userContext,
         AuthorizationHelper authz,
         AuditService audit,
         SignatureService signatureService,
-        ScribegateDbContext db,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
     {
@@ -310,10 +307,8 @@ public static class DocumentEndpoints
 
         await revisionStore.CreateAsync(revision, ct);
 
-        // Sign the revision
         var signature = signatureService.SignRevision(revision);
-        db.RevisionSignatures.Add(signature);
-        await db.SaveChangesAsync(ct);
+        await signatureStore.AttachAsync(signature, ct);
 
         doc.CurrentRevisionId = revision.Id;
         doc.FrontmatterJson = FrontmatterService.ToJson(request.Content!);
@@ -357,11 +352,10 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
-        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, db, audit, webhooks, ct);
+        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, audit, webhooks, ct);
 
     private static async Task<IResult> ArchiveDocument(
         string owner,
@@ -371,7 +365,6 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)
@@ -424,7 +417,6 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         CancellationToken ct)
     {
@@ -492,7 +484,6 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        ScribegateDbContext db,
         AuditService audit,
         IWebhookDispatcher webhooks,
         CancellationToken ct)

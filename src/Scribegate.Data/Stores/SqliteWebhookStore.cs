@@ -65,18 +65,39 @@ public class SqliteWebhookStore(ScribegateDbContext db) : IWebhookStore
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task CreateDeliveryAsync(WebhookDelivery delivery, CancellationToken ct = default)
+    public async Task MarkDeliverySuccessAsync(
+        Guid webhookId, int? statusCode, DateTime when, CancellationToken ct = default)
     {
-        db.WebhookDeliveries.Add(delivery);
-        await db.SaveChangesAsync(ct);
+        await db.Webhooks
+            .Where(w => w.Id == webhookId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(w => w.ConsecutiveFailures, 0)
+                .SetProperty(w => w.LastDeliveryAt, when)
+                .SetProperty(w => w.LastDeliveryStatus, statusCode),
+                ct);
     }
 
-    public async Task<IReadOnlyList<WebhookDelivery>> ListRecentDeliveriesAsync(Guid webhookId, int take = 20, CancellationToken ct = default) =>
-        await db.WebhookDeliveries
-            .Where(d => d.WebhookId == webhookId)
-            .OrderByDescending(d => d.CreatedAt)
-            .Take(Math.Clamp(take, 1, 100))
-            .ToListAsync(ct);
+    public async Task<bool> MarkDeliveryFailureAsync(
+        Guid webhookId, int? statusCode, DateTime when, int autoDisableThreshold,
+        CancellationToken ct = default)
+    {
+        await db.Webhooks
+            .Where(w => w.Id == webhookId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(w => w.ConsecutiveFailures, w => w.ConsecutiveFailures + 1)
+                .SetProperty(w => w.LastDeliveryAt, when)
+                .SetProperty(w => w.LastDeliveryStatus, statusCode),
+                ct);
+
+        var disabled = await db.Webhooks
+            .Where(w => w.Id == webhookId && w.Enabled && w.ConsecutiveFailures >= autoDisableThreshold)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(w => w.Enabled, false)
+                .SetProperty(w => w.DisabledAt, when),
+                ct);
+
+        return disabled > 0;
+    }
 
     private static bool SubscribesTo(string events, string eventType)
     {

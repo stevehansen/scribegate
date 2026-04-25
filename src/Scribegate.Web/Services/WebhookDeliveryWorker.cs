@@ -1,10 +1,8 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 
 namespace Scribegate.Web.Services;
 
@@ -41,7 +39,7 @@ public class WebhookDeliveryWorker(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<IWebhookStore>();
-        var db = scope.ServiceProvider.GetRequiredService<ScribegateDbContext>();
+        var deliveries = scope.ServiceProvider.GetRequiredService<IWebhookDeliveryStore>();
 
         IReadOnlyList<Webhook> targets;
         if (envelope.TargetWebhookId.HasValue)
@@ -62,11 +60,11 @@ public class WebhookDeliveryWorker(
         foreach (var webhook in targets)
         {
             if (ct.IsCancellationRequested) break;
-            await DeliverAsync(webhook, envelope, client, store, db, ct);
+            await DeliverAsync(webhook, envelope, client, store, deliveries, ct);
         }
     }
 
-    private async Task DeliverAsync(Webhook webhook, WebhookEnvelope envelope, HttpClient client, IWebhookStore store, ScribegateDbContext db, CancellationToken ct)
+    private async Task DeliverAsync(Webhook webhook, WebhookEnvelope envelope, HttpClient client, IWebhookStore store, IWebhookDeliveryStore deliveries, CancellationToken ct)
     {
         var deliveryId = Guid.CreateVersion7();
         var attempts = 0;
@@ -108,7 +106,7 @@ public class WebhookDeliveryWorker(
         sw.Stop();
         var succeeded = finalStatus is >= 200 and < 300;
 
-        await RecordDeliveryAsync(store, db, webhook, envelope, deliveryId, attempts, finalStatus, finalError, responseSnippet, succeeded, (int)sw.ElapsedMilliseconds, ct);
+        await RecordDeliveryAsync(store, deliveries, webhook, envelope, deliveryId, attempts, finalStatus, finalError, responseSnippet, succeeded, (int)sw.ElapsedMilliseconds, ct);
     }
 
     private HttpRequestMessage BuildRequest(Webhook webhook, WebhookEnvelope envelope, Guid deliveryId)
@@ -127,7 +125,7 @@ public class WebhookDeliveryWorker(
     }
 
     private async Task RecordDeliveryAsync(
-        IWebhookStore store, ScribegateDbContext db, Webhook webhook, WebhookEnvelope envelope,
+        IWebhookStore store, IWebhookDeliveryStore deliveries, Webhook webhook, WebhookEnvelope envelope,
         Guid deliveryId, int attempts, int? statusCode, string? error, string? responseBody,
         bool succeeded, int durationMs, CancellationToken ct)
     {
@@ -147,39 +145,18 @@ public class WebhookDeliveryWorker(
                 DurationMs = durationMs,
                 DeliveredAt = DateTime.UtcNow,
             };
-            await store.CreateDeliveryAsync(delivery, ct);
+            await deliveries.RecordAsync(delivery, ct);
 
-            // Atomic status updates — avoids clobbering concurrent admin PUTs
-            // (which rewrite URL, events, description, etc.).
             var now = DateTime.UtcNow;
             if (succeeded)
             {
-                await db.Webhooks
-                    .Where(w => w.Id == webhook.Id)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(w => w.ConsecutiveFailures, 0)
-                        .SetProperty(w => w.LastDeliveryAt, now)
-                        .SetProperty(w => w.LastDeliveryStatus, statusCode),
-                        ct);
+                await store.MarkDeliverySuccessAsync(webhook.Id, statusCode, now, ct);
             }
             else
             {
-                await db.Webhooks
-                    .Where(w => w.Id == webhook.Id)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(w => w.ConsecutiveFailures, w => w.ConsecutiveFailures + 1)
-                        .SetProperty(w => w.LastDeliveryAt, now)
-                        .SetProperty(w => w.LastDeliveryStatus, statusCode),
-                        ct);
-
-                var disabled = await db.Webhooks
-                    .Where(w => w.Id == webhook.Id && w.Enabled && w.ConsecutiveFailures >= FailureThresholdToDisable)
-                    .ExecuteUpdateAsync(s => s
-                        .SetProperty(w => w.Enabled, false)
-                        .SetProperty(w => w.DisabledAt, now),
-                        ct);
-
-                if (disabled > 0)
+                var autoDisabled = await store.MarkDeliveryFailureAsync(
+                    webhook.Id, statusCode, now, FailureThresholdToDisable, ct);
+                if (autoDisabled)
                 {
                     logger.LogWarning("Auto-disabled webhook {WebhookId} after {Threshold}+ consecutive failures",
                         webhook.Id, FailureThresholdToDisable);

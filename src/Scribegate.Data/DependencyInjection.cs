@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<IWebhookStore, SqliteWebhookStore>();
         services.AddScoped<IDocumentTemplateStore, SqliteDocumentTemplateStore>();
         services.AddScoped<INotificationStore, SqliteNotificationStore>();
+        services.AddScoped<IRevisionSignatureStore, SqliteRevisionSignatureStore>();
+        services.AddScoped<IWebhookDeliveryStore, SqliteWebhookDeliveryStore>();
 
         return services;
     }

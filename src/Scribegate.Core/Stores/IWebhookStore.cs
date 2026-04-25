@@ -12,6 +12,19 @@ public interface IWebhookStore
     Task UpdateAsync(Webhook webhook, CancellationToken ct = default);
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 
-    Task CreateDeliveryAsync(WebhookDelivery delivery, CancellationToken ct = default);
-    Task<IReadOnlyList<WebhookDelivery>> ListRecentDeliveriesAsync(Guid webhookId, int take = 20, CancellationToken ct = default);
+    /// <summary>
+    /// Atomically resets <c>ConsecutiveFailures</c> to zero and stamps last-delivery
+    /// fields. Avoids clobbering concurrent admin edits to URL / events / etc.
+    /// </summary>
+    Task MarkDeliverySuccessAsync(
+        Guid webhookId, int? statusCode, DateTime when, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically increments <c>ConsecutiveFailures</c>, stamps last-delivery fields,
+    /// and auto-disables the hook when it crosses <paramref name="autoDisableThreshold"/>.
+    /// Returns <c>true</c> when this call flipped the hook to disabled.
+    /// </summary>
+    Task<bool> MarkDeliveryFailureAsync(
+        Guid webhookId, int? statusCode, DateTime when, int autoDisableThreshold,
+        CancellationToken ct = default);
 }
