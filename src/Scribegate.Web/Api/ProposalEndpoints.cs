@@ -1,3 +1,4 @@
+using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Services;
@@ -264,19 +265,9 @@ public static class ProposalEndpoints
         if (proposal is null || proposal.RepositoryId != repo.Id)
             return ApiResults.NotFound("Proposal", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        if (proposal.CreatedById != userId)
-            return Forbidden("You can only edit your own proposals.");
-
-        if (proposal.Status != ProposalStatus.Draft && proposal.Status != ProposalStatus.Open)
-            return Error("PROPOSAL_NOT_EDITABLE", "This proposal can no longer be edited.", 422);
-
-        if (proposal.Status == ProposalStatus.Open && request.Content is not null)
-            return ApiResults.Conflict(
-                "PROPOSAL_REVIEW_LOCKED",
-                "Open proposals cannot change content once they are up for review.",
-                "Withdraw this proposal and create a new one if the patch itself needs to change.",
-                "content");
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = ProposalPolicy.CanUpdate(proposal, actor, newContent: request.Content is not null);
+        if (!gate.Allowed) return gate.ToHttp();
 
         if (request.Title is not null) proposal.Title = request.Title.Trim();
         if (request.Description is not null) proposal.Description = request.Description.Trim();
@@ -290,7 +281,7 @@ public static class ProposalEndpoints
             Title = proposal.Title,
             Status = proposal.Status.ToString(),
             DocumentPath = proposal.Document?.Path ?? proposal.ProposedPath,
-            CreatedBy = proposal.CreatedBy?.Username ?? userId.ToString(),
+            CreatedBy = proposal.CreatedBy?.Username ?? actor.Id.ToString(),
             CreatedAt = proposal.CreatedAt,
         });
     }
@@ -317,24 +308,21 @@ public static class ProposalEndpoints
         if (proposal is null || proposal.RepositoryId != repo.Id)
             return ApiResults.NotFound("Proposal", id.ToString());
 
-        if (proposal.Status != ProposalStatus.Draft)
-            return Error("PROPOSAL_NOT_DRAFT", "Only draft proposals can be submitted.", 422);
-
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        if (proposal.CreatedById != userId)
-            return Forbidden("You can only submit your own proposals.");
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = ProposalPolicy.CanSubmit(proposal, actor);
+        if (!gate.Allowed) return gate.ToHttp();
 
         proposal.Status = ProposalStatus.Open;
         await proposalStore.UpdateAsync(proposal, ct);
 
-        await audit.LogAsync(AuditEventTypes.ProposalSubmitted, userId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.ProposalSubmitted, actor.Id, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
 
         webhooks.Dispatch(WebhookEventTypes.ProposalSubmitted, repo.Id, new
         {
             repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
             proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
-            actor = new { id = userId, username = userContext.GetUsername() },
+            actor = new { id = actor.Id, username = userContext.GetUsername() },
             timestamp = DateTime.UtcNow,
         });
 
@@ -363,26 +351,23 @@ public static class ProposalEndpoints
         if (proposal is null || proposal.RepositoryId != repo.Id)
             return ApiResults.NotFound("Proposal", id.ToString());
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        if (proposal.CreatedById != userId)
-            return Forbidden("You can only withdraw your own proposals.");
-
-        if (proposal.Status != ProposalStatus.Open && proposal.Status != ProposalStatus.Draft)
-            return Error("PROPOSAL_NOT_OPEN", "Only open or draft proposals can be withdrawn.", 422);
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = ProposalPolicy.CanWithdraw(proposal, actor);
+        if (!gate.Allowed) return gate.ToHttp();
 
         proposal.Status = ProposalStatus.Withdrawn;
         proposal.ResolvedAt = DateTime.UtcNow;
-        proposal.ResolvedById = userId;
+        proposal.ResolvedById = actor.Id;
         await proposalStore.UpdateAsync(proposal, ct);
 
-        await audit.LogAsync(AuditEventTypes.ProposalWithdrawn, userId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.ProposalWithdrawn, actor.Id, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
 
         webhooks.Dispatch(WebhookEventTypes.ProposalWithdrawn, repo.Id, new
         {
             repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
             proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
-            actor = new { id = userId, username = userContext.GetUsername() },
+            actor = new { id = actor.Id, username = userContext.GetUsername() },
             timestamp = DateTime.UtcNow,
         });
 
@@ -456,22 +441,19 @@ public static class ProposalEndpoints
         if (proposal is null || proposal.RepositoryId != repo.Id)
             return ApiResults.NotFound("Proposal", id.ToString());
 
-        if (proposal.Status != ProposalStatus.Open)
-            return Error("PROPOSAL_NOT_OPEN", "Only open proposals can be rejected.", 422);
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var membership = await membershipStore.GetAsync(actor.Id, repo.Id, ct);
+        var actorCanReview = AuthorizationHelper.CanReview(membership?.Role) || actor.IsAdmin;
 
-        var user = await userContext.RequireCurrentUserAsync(ct);
-        var userId = user.Id;
-
-        var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
-        if (!AuthorizationHelper.CanReview(membership?.Role) && !user.IsAdmin)
-            return Forbidden("You need Reviewer or Admin role to reject proposals.");
+        var gate = ProposalPolicy.CanReject(proposal, actor, actorCanReview);
+        if (!gate.Allowed) return gate.ToHttp();
 
         proposal.Status = ProposalStatus.Rejected;
         proposal.ResolvedAt = DateTime.UtcNow;
-        proposal.ResolvedById = userId;
+        proposal.ResolvedById = actor.Id;
         await proposalStore.UpdateAsync(proposal, ct);
 
-        await audit.LogAsync(AuditEventTypes.ProposalRejected, userId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.ProposalRejected, actor.Id, userContext.GetUsername(),
             "Proposal", proposal.Id, null, ct);
 
         await notifications.NotifyAsync(
@@ -484,7 +466,7 @@ public static class ProposalEndpoints
         {
             repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
             proposal = new { id = proposal.Id, title = proposal.Title, status = proposal.Status.ToString() },
-            actor = new { id = userId, username = userContext.GetUsername() },
+            actor = new { id = actor.Id, username = userContext.GetUsername() },
             timestamp = DateTime.UtcNow,
         });
 

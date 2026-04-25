@@ -1,3 +1,4 @@
+using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
@@ -80,24 +81,14 @@ public static class ReviewEndpoints
         if (proposal is null || proposal.RepositoryId != repo.Id)
             return ApiResults.NotFound("Proposal", proposalId.ToString());
 
-        if (proposal.Status != ProposalStatus.Open)
-            return Results.Json(new { error = new ApiError { Code = "PROPOSAL_NOT_OPEN", Message = "Only open proposals can be reviewed." } }, statusCode: 422);
-
         if (string.IsNullOrWhiteSpace(request.Verdict) || !Enum.TryParse<ReviewVerdict>(request.Verdict, ignoreCase: true, out var verdict))
             return ApiResults.ValidationError("verdict", ApiErrorCodes.InvalidFormat,
                 $"Invalid verdict '{request.Verdict}'.",
                 "Allowed values: Approved, ChangesRequested, Comment.");
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        if (proposal.CreatedById == userId && verdict != ReviewVerdict.Comment)
-            return Results.Json(new
-            {
-                error = new ApiError
-                {
-                    Code = "SELF_REVIEW_NOT_ALLOWED",
-                    Message = "You cannot approve or request changes on your own proposal.",
-                }
-            }, statusCode: 422);
+        var actor = await userContext.RequireCurrentUserAsync(ct);
+        var gate = ProposalPolicy.CanReview(proposal, actor, verdict);
+        if (!gate.Allowed) return gate.ToHttp();
 
         var review = new Review
         {
@@ -105,12 +96,12 @@ public static class ReviewEndpoints
             ProposalId = proposalId,
             Verdict = verdict,
             Body = request.Body?.Trim(),
-            CreatedById = userId,
+            CreatedById = actor.Id,
         };
 
         await reviewStore.CreateAsync(review, ct);
 
-        await audit.LogAsync(AuditEventTypes.ReviewSubmitted, userId, userContext.GetUsername(),
+        await audit.LogAsync(AuditEventTypes.ReviewSubmitted, actor.Id, userContext.GetUsername(),
             "Review", review.Id,
             new { proposalId, verdict = verdict.ToString() }, ct);
 
@@ -119,7 +110,7 @@ public static class ReviewEndpoints
             repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
             proposal = new { id = proposal.Id, title = proposal.Title },
             review = new { id = review.Id, verdict = verdict.ToString() },
-            actor = new { id = userId, username = userContext.GetUsername() },
+            actor = new { id = actor.Id, username = userContext.GetUsername() },
             timestamp = DateTime.UtcNow,
         });
 
@@ -128,7 +119,7 @@ public static class ReviewEndpoints
             Id = review.Id,
             Verdict = review.Verdict.ToString(),
             Body = review.Body,
-            CreatedBy = userContext.GetUsername() ?? userId.ToString(),
+            CreatedBy = userContext.GetUsername() ?? actor.Id.ToString(),
             CreatedAt = review.CreatedAt,
         });
     }
