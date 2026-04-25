@@ -1,14 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using System.Net;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 
 namespace Scribegate.Web.Api;
 
 public class NotificationService(
-    ScribegateDbContext db,
+    INotificationStore notifications,
     IUserStore users,
+    IMembershipStore memberships,
     EmailService emailService,
     ILogger<NotificationService> logger)
 {
@@ -30,10 +29,8 @@ public class NotificationService(
             Link = link,
         };
 
-        db.Notifications.Add(notification);
-        await db.SaveChangesAsync(ct);
+        await notifications.CreateAsync(notification, ct);
 
-        // Check user preferences and send email if appropriate
         await TrySendEmailAsync(notification, type, ct);
     }
 
@@ -46,13 +43,9 @@ public class NotificationService(
         string? link,
         CancellationToken ct = default)
     {
-        var members = await db.RepositoryMemberships
-            .Where(m => m.RepositoryId == repositoryId && m.UserId != excludeUserId)
-            .Where(m => m.Role >= Core.Enums.RepositoryRole.Reviewer)
-            .Select(m => m.UserId)
-            .ToListAsync(ct);
+        var reviewerIds = await memberships.ListReviewerIdsAsync(repositoryId, excludeUserId, ct);
 
-        foreach (var userId in members)
+        foreach (var userId in reviewerIds)
         {
             await NotifyAsync(userId, type, title, body, link, ct);
         }
@@ -65,8 +58,7 @@ public class NotificationService(
             if (!await emailService.IsEnabledAsync(ct))
                 return;
 
-            var prefs = await db.NotificationPreferences
-                .FirstOrDefaultAsync(p => p.UserId == notification.UserId, ct);
+            var prefs = await users.GetNotificationPreferencesAsync(notification.UserId, ct);
 
             // Default: send all types if no preferences set
             var shouldSend = prefs is null || type switch
@@ -100,8 +92,7 @@ public class NotificationService(
                 """;
 
             await emailService.SendAsync(user.Email, user.Username, $"[Scribegate] {notification.Title}", htmlBody, ct);
-            notification.EmailSent = true;
-            await db.SaveChangesAsync(ct);
+            await notifications.MarkEmailSentAsync(notification.Id, ct);
         }
         catch (Exception ex)
         {

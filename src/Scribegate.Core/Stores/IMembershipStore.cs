@@ -13,4 +13,12 @@ public interface IMembershipStore
     Task DeleteAsync(Guid userId, Guid repositoryId, CancellationToken ct = default);
     Task<int> CountRepositoriesOwnedByUserAsync(Guid userId, CancellationToken ct = default);
     Task<int> CountMembersByRepositoryAsync(Guid repositoryId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lists the user IDs of every member of <paramref name="repositoryId"/> with at
+    /// least <see cref="RepositoryRole.Reviewer"/> role, optionally excluding one user
+    /// (typically the actor who triggered the notification).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> ListReviewerIdsAsync(
+        Guid repositoryId, Guid? excludeUserId, CancellationToken ct = default);
 }

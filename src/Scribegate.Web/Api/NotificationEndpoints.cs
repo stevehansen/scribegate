@@ -1,7 +1,5 @@
-using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
-using Scribegate.Data;
+using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -25,29 +23,18 @@ public static class NotificationEndpoints
 
     private static async Task<IResult> ListNotifications(
         bool? unreadOnly,
+        UserContext userContext,
+        INotificationStore notifications,
         int skip = 0,
         int take = 50,
-        ClaimsPrincipal principal = default!,
-        ScribegateDbContext db = default!,
         CancellationToken ct = default)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var query = db.Notifications
-            .Where(n => n.UserId == userId.Value)
-            .OrderByDescending(n => n.CreatedAt);
-
-        if (unreadOnly == true)
-            query = (IOrderedQueryable<Notification>)query.Where(n => !n.IsRead);
-
-        var items = await query
-            .Skip(skip)
-            .Take(Math.Min(take, 200))
-            .ToListAsync(ct);
-
-        var unreadCount = await db.Notifications
-            .CountAsync(n => n.UserId == userId.Value && !n.IsRead, ct);
+        var items = await notifications.ListByUserAsync(
+            userId.Value, skip, Math.Min(take, 200), unreadOnly == true, ct);
+        var unreadCount = await notifications.CountUnreadByUserAsync(userId.Value, ct);
 
         return Results.Ok(new NotificationListResponse
         {
@@ -68,50 +55,40 @@ public static class NotificationEndpoints
 
     private static async Task<IResult> MarkAsRead(
         Guid id,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        INotificationStore notifications,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var notification = await db.Notifications
-            .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId.Value, ct);
-
-        if (notification is null)
-            return ApiResults.NotFound("Notification", id.ToString());
-
-        notification.IsRead = true;
-        await db.SaveChangesAsync(ct);
+        var updated = await notifications.MarkReadAsync(id, userId.Value, ct);
+        if (!updated) return ApiResults.NotFound("Notification", id.ToString());
 
         return Results.Ok(new { id, isRead = true });
     }
 
     private static async Task<IResult> MarkAllAsRead(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        INotificationStore notifications,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        await db.Notifications
-            .Where(n => n.UserId == userId.Value && !n.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true), ct);
-
+        await notifications.MarkAllReadAsync(userId.Value, ct);
         return Results.Ok(new { message = "All notifications marked as read." });
     }
 
     private static async Task<IResult> GetPreferences(
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        IUserStore users,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var prefs = await db.NotificationPreferences
-            .FirstOrDefaultAsync(p => p.UserId == userId.Value, ct);
+        var prefs = await users.GetNotificationPreferencesAsync(userId.Value, ct);
 
         return Results.Ok(new NotificationPreferencesResponse
         {
@@ -124,21 +101,15 @@ public static class NotificationEndpoints
 
     private static async Task<IResult> UpdatePreferences(
         UpdateNotificationPreferencesRequest request,
-        ClaimsPrincipal principal,
-        ScribegateDbContext db,
+        UserContext userContext,
+        IUserStore users,
         CancellationToken ct)
     {
-        var userId = GetUserId(principal);
+        var userId = userContext.TryGetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        var prefs = await db.NotificationPreferences
-            .FirstOrDefaultAsync(p => p.UserId == userId.Value, ct);
-
-        if (prefs is null)
-        {
-            prefs = new NotificationPreference { UserId = userId.Value };
-            db.NotificationPreferences.Add(prefs);
-        }
+        var prefs = await users.GetNotificationPreferencesAsync(userId.Value, ct)
+                    ?? new NotificationPreference { UserId = userId.Value };
 
         if (request.EmailOnProposalActivity.HasValue)
             prefs.EmailOnProposalActivity = request.EmailOnProposalActivity.Value;
@@ -149,7 +120,7 @@ public static class NotificationEndpoints
         if (request.EmailOnMention.HasValue)
             prefs.EmailOnMention = request.EmailOnMention.Value;
 
-        await db.SaveChangesAsync(ct);
+        await users.UpsertNotificationPreferencesAsync(prefs, ct);
 
         return Results.Ok(new NotificationPreferencesResponse
         {
@@ -158,13 +129,6 @@ public static class NotificationEndpoints
             EmailOnComment = prefs.EmailOnComment,
             EmailOnMention = prefs.EmailOnMention,
         });
-    }
-
-    private static Guid? GetUserId(ClaimsPrincipal principal)
-    {
-        var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                  ?? principal.FindFirstValue("sub");
-        return Guid.TryParse(sub, out var id) ? id : null;
     }
 
     private static IResult Unauthorized() =>

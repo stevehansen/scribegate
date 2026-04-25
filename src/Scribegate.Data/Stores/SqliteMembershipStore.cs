@@ -66,4 +66,14 @@ public class SqliteMembershipStore(ScribegateDbContext db) : IMembershipStore
         return await db.RepositoryMemberships
             .CountAsync(m => m.RepositoryId == repositoryId, ct);
     }
+
+    public async Task<IReadOnlyList<Guid>> ListReviewerIdsAsync(
+        Guid repositoryId, Guid? excludeUserId, CancellationToken ct = default)
+    {
+        var query = db.RepositoryMemberships
+            .Where(m => m.RepositoryId == repositoryId && m.Role >= RepositoryRole.Reviewer);
+        if (excludeUserId is { } excluded)
+            query = query.Where(m => m.UserId != excluded);
+        return await query.Select(m => m.UserId).ToListAsync(ct);
+    }
 }
