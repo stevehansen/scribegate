@@ -1,9 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import type { RepositoryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-repository-list')
@@ -93,26 +93,10 @@ export class SgRepositoryList extends LitElement {
     }
   `];
 
-  @state() private _repos: RepositoryResponse[] = [];
-  @state() private _loading = true;
-  @state() private _error = '';
   @state() private _dialogError = '';
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    try {
-      const res = await repoApi.list();
-      this._repos = res.items;
-    } catch {
-      this._error = 'Failed to load repositories.';
-    } finally {
-      this._loading = false;
-    }
-  }
+  private _reposCtl = new LoadController(this, () =>
+    repoApi.list().then(r => r.items));
 
   private _openCreate() {
     this._dialogError = '';
@@ -142,7 +126,9 @@ export class SgRepositoryList extends LitElement {
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
+    if (this._reposCtl.status === 'loading' && !this._reposCtl.data) return html`<p>Loading...</p>`;
+
+    const repos = this._reposCtl.data ?? [];
 
     return html`
       <div class="header">
@@ -152,9 +138,9 @@ export class SgRepositoryList extends LitElement {
           : ''}
       </div>
 
-      ${this._error ? html`<div class="error">${this._error}</div>` : ''}
+      ${this._reposCtl.status === 'error' ? html`<div class="error">${this._reposCtl.error}</div>` : ''}
 
-      ${this._repos.length === 0
+      ${repos.length === 0
         ? html`
           <div class="empty">
             <svg class="empty-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -169,7 +155,7 @@ export class SgRepositoryList extends LitElement {
           </div>`
         : html`
           <div class="repos">
-            ${this._repos.map((r) => html`
+            ${repos.map((r) => html`
               <div class="repo">
                 <a href="/${r.owner}/${r.slug}">
                   <div class="repo-name"><span class="repo-owner">${r.owner}</span><span class="repo-sep">/</span>${r.name}</div>

@@ -1,9 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, ProposalSummary } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as proposalApi from '../../api/proposals.js';
 import { authState } from '../../state/auth-state.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-breadcrumb.js';
 import '../shared/sg-time-ago.js';
@@ -59,41 +59,20 @@ export class SgProposalList extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
-  @state() private _proposals: ProposalSummary[] = [];
-  @state() private _loading = true;
-  @state() private _error = '';
   @state() private _statusFilter = 'Open';
 
   private get _owner(): string { return this.location?.params?.owner ?? ''; }
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    this._loading = true;
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [repo, proposals] = await Promise.all([
-        repoApi.get(this._owner, this._slug),
-        proposalApi.list(this._owner, this._slug, this._statusFilter === 'All' ? undefined : this._statusFilter),
-      ]);
-      this._repo = repo;
-      this._proposals = proposals.items;
-    } catch { this._error = 'Failed to load proposals.'; }
-    finally { this._loading = false; }
-  }
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+  private _proposalsCtl = new LoadController(this, () =>
+    proposalApi.list(this._owner, this._slug, this._statusFilter === 'All' ? undefined : this._statusFilter)
+      .then(r => r.items));
 
   private _setFilter(status: string) {
     this._statusFilter = status;
-    this._load();
+    void this._proposalsCtl.reload();
   }
 
   private _statusClass(status: string): string {
@@ -101,15 +80,19 @@ export class SgProposalList extends LitElement {
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error) return html`<p class="error">${this._error}</p>`;
-    if (!this._repo) return html``;
+    const repo = this._repoCtl.data;
+    const proposals = this._proposalsCtl.data ?? [];
+
+    if (this._repoCtl.status === 'loading' && !repo) return html`<p>Loading...</p>`;
+    if (this._repoCtl.status === 'error' || this._proposalsCtl.status === 'error')
+      return html`<p class="error">Failed to load proposals.</p>`;
+    if (!repo) return html``;
 
     const tabs = ['Open', 'Approved', 'Rejected', 'Withdrawn', 'All'];
     const repoBase = `/${this._owner}/${this._slug}`;
 
     return html`
-      <sg-breadcrumb repoOwner=${this._repo.owner} repoSlug=${this._repo.slug} repoName=${this._repo.name}></sg-breadcrumb>
+      <sg-breadcrumb repoOwner=${repo.owner} repoSlug=${repo.slug} repoName=${repo.name}></sg-breadcrumb>
 
       <div class="header">
         <h1>Proposals</h1>
@@ -124,11 +107,11 @@ export class SgProposalList extends LitElement {
         `)}
       </div>
 
-      ${this._proposals.length === 0
+      ${proposals.length === 0
         ? html`<div class="empty">No ${this._statusFilter.toLowerCase()} proposals.</div>`
         : html`
           <div class="proposals">
-            ${this._proposals.map(p => html`
+            ${proposals.map(p => html`
               <div class="proposal">
                 <div>
                   <a class="proposal-title" href="${repoBase}/proposals/${p.id}">${p.title}</a>
