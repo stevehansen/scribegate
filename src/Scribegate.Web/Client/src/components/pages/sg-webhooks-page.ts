@@ -10,6 +10,7 @@ import type {
   WebhookCreatedResponse,
   WebhookDeliveryResponse,
 } from '../../api/types.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 
 @customElement('sg-webhooks-page')
@@ -68,8 +69,6 @@ export class SgWebhooksPage extends LitElement {
 
   @state() private _repoOwner = '';
   @state() private _repoSlug = '';
-  @state() private _hooks: WebhookResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _submitting = false;
   @state() private _url = '';
@@ -79,6 +78,14 @@ export class SgWebhooksPage extends LitElement {
   @state() private _copyFeedback = '';
   @state() private _deliveriesFor: string | null = null;
   @state() private _deliveries: WebhookDeliveryResponse[] = [];
+
+  // autoload: false — connectedCallback redirects unauthenticated users
+  // to /login, so we only kick off the fetch after that gate passes.
+  private _hooksCtl = new LoadController<WebhookResponse[]>(
+    this,
+    () => webhookApi.list(this._repoOwner, this._repoSlug).then(r => r.items),
+    { autoload: false },
+  );
 
   onBeforeEnter(location: RouterLocation) {
     this._repoOwner = (location.params.owner as string) ?? '';
@@ -91,25 +98,7 @@ export class SgWebhooksPage extends LitElement {
       window.location.href = '/login';
       return;
     }
-    await this._load();
-  }
-
-  private async _load() {
-    this._loading = true;
-    this._error = '';
-    if (!this._repoOwner || !this._repoSlug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const res = await webhookApi.list(this._repoOwner, this._repoSlug);
-      this._hooks = res.items;
-    } catch (err) {
-      this._error = this._messageFor(err, 'Failed to load webhooks.');
-    } finally {
-      this._loading = false;
-    }
+    await this._hooksCtl.reload();
   }
 
   private _messageFor(err: unknown, fallback: string): string {
@@ -141,7 +130,7 @@ export class SgWebhooksPage extends LitElement {
       this._url = '';
       this._description = '';
       this._events = new Set();
-      await this._load();
+      await this._hooksCtl.reload();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to create webhook.');
     } finally {
@@ -152,7 +141,7 @@ export class SgWebhooksPage extends LitElement {
   private async _onToggle(hook: WebhookResponse) {
     try {
       await webhookApi.update(this._repoOwner, this._repoSlug, hook.id, { enabled: !hook.enabled });
-      await this._load();
+      await this._hooksCtl.reload();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to update webhook.');
     }
@@ -162,7 +151,7 @@ export class SgWebhooksPage extends LitElement {
     if (!confirm(`Delete webhook for ${hook.url}? This cannot be undone.`)) return;
     try {
       await webhookApi.remove(this._repoOwner, this._repoSlug, hook.id);
-      await this._load();
+      await this._hooksCtl.reload();
     } catch (err) {
       this._error = this._messageFor(err, 'Failed to delete webhook.');
     }
@@ -269,11 +258,13 @@ export class SgWebhooksPage extends LitElement {
       </form>
 
       <h2>Existing webhooks</h2>
-      ${this._loading
+      ${this._hooksCtl.status === 'loading' && !this._hooksCtl.data
         ? html`<p>Loading…</p>`
-        : this._hooks.length === 0
-          ? html`<p class="empty">No webhooks yet.</p>`
-          : html`
+        : this._hooksCtl.status === 'error'
+          ? html`<div class="error">${this._hooksCtl.error}</div>`
+          : (this._hooksCtl.data ?? []).length === 0
+            ? html`<p class="empty">No webhooks yet.</p>`
+            : html`
             <table>
               <thead>
                 <tr>
@@ -285,7 +276,7 @@ export class SgWebhooksPage extends LitElement {
                 </tr>
               </thead>
               <tbody>
-                ${this._hooks.map(h => html`
+                ${(this._hooksCtl.data ?? []).map(h => html`
                   <tr>
                     <td class="url">
                       ${h.url}
