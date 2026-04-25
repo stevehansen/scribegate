@@ -1,11 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { ProposalResponse, ReviewResponse, CommentResponse } from '../../api/types.js';
 import * as proposalApi from '../../api/proposals.js';
 import * as reviewApi from '../../api/reviews.js';
 import * as commentApi from '../../api/comments.js';
 import { authState } from '../../state/auth-state.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-time-ago.js';
@@ -80,10 +80,6 @@ export class SgProposalPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _proposal: ProposalResponse | null = null;
-  @state() private _reviews: ReviewResponse[] = [];
-  @state() private _comments: CommentResponse[] = [];
-  @state() private _loading = true;
   @state() private _error = '';
   @state() private _tab = 'changes';
   @state() private _reviewVerdict = 'Comment';
@@ -94,48 +90,31 @@ export class SgProposalPage extends LitElement {
   private get _slug(): string { return this.location?.params?.slug ?? ''; }
   private get _id(): string { return this.location?.params?.id ?? ''; }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [proposal, reviews, comments] = await Promise.all([
-        proposalApi.get(this._owner, this._slug, this._id),
-        reviewApi.list(this._owner, this._slug, this._id),
-        commentApi.list(this._owner, this._slug, this._id),
-      ]);
-      this._proposal = proposal;
-      this._reviews = reviews.items;
-      this._comments = comments.items;
-    } catch { this._error = 'Failed to load proposal.'; }
-    finally { this._loading = false; }
-  }
+  private _proposalCtl = new LoadController(this, () =>
+    proposalApi.get(this._owner, this._slug, this._id));
+  private _reviewsCtl = new LoadController(this, () =>
+    reviewApi.list(this._owner, this._slug, this._id).then(r => r.items));
+  private _commentsCtl = new LoadController(this, () =>
+    commentApi.list(this._owner, this._slug, this._id).then(r => r.items));
 
   private async _approve() {
     try {
       await proposalApi.approve(this._owner, this._slug, this._id);
-      await this._load();
+      await Promise.all([this._proposalCtl.reload(), this._reviewsCtl.reload()]);
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   private async _reject() {
     try {
       await proposalApi.reject(this._owner, this._slug, this._id);
-      await this._load();
+      await this._proposalCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   private async _withdraw() {
     try {
       await proposalApi.withdraw(this._owner, this._slug, this._id);
-      await this._load();
+      await this._proposalCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
@@ -143,8 +122,7 @@ export class SgProposalPage extends LitElement {
     try {
       await reviewApi.create(this._owner, this._slug, this._id, { verdict: this._reviewVerdict, body: this._reviewBody || undefined });
       this._reviewBody = '';
-      const reviews = await reviewApi.list(this._owner, this._slug, this._id);
-      this._reviews = reviews.items;
+      await this._reviewsCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
@@ -153,17 +131,18 @@ export class SgProposalPage extends LitElement {
     try {
       await commentApi.create(this._owner, this._slug, this._id, { body: this._commentBody });
       this._commentBody = '';
-      const comments = await commentApi.list(this._owner, this._slug, this._id);
-      this._comments = comments.items;
+      await this._commentsCtl.reload();
     } catch (e) { this._error = e instanceof ApiException ? e.error.message : 'Failed.'; }
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
-    if (this._error && !this._proposal) return html`<p class="error">${this._error}</p>`;
-    if (!this._proposal) return html``;
+    const p = this._proposalCtl.data;
+    if (this._proposalCtl.status === 'loading') return html`<p>Loading...</p>`;
+    if (this._proposalCtl.status === 'error' && !p) return html`<p class="error">${this._proposalCtl.error}</p>`;
+    if (!p) return html``;
 
-    const p = this._proposal;
+    const reviews = this._reviewsCtl.data ?? [];
+    const comments = this._commentsCtl.data ?? [];
     const isOpen = p.status === 'Open';
 
     return html`
@@ -190,8 +169,8 @@ export class SgProposalPage extends LitElement {
 
       <div class="tabs">
         <div class="tab ${this._tab === 'changes' ? 'active' : ''}" @click=${() => this._tab = 'changes'}>Changes</div>
-        <div class="tab ${this._tab === 'reviews' ? 'active' : ''}" @click=${() => this._tab = 'reviews'}>Reviews (${this._reviews.length})</div>
-        <div class="tab ${this._tab === 'comments' ? 'active' : ''}" @click=${() => this._tab = 'comments'}>Discussion (${this._comments.length})</div>
+        <div class="tab ${this._tab === 'reviews' ? 'active' : ''}" @click=${() => this._tab = 'reviews'}>Reviews (${reviews.length})</div>
+        <div class="tab ${this._tab === 'comments' ? 'active' : ''}" @click=${() => this._tab = 'comments'}>Discussion (${comments.length})</div>
         <div class="tab ${this._tab === 'preview' ? 'active' : ''}" @click=${() => this._tab = 'preview'}>Preview</div>
       </div>
 
@@ -210,7 +189,7 @@ export class SgProposalPage extends LitElement {
   }
 
   private _renderDiff() {
-    const diff = this._proposal?.diff;
+    const diff = this._proposalCtl.data?.diff;
     if (!diff || !diff.hasChanges) return html`<p>No changes.</p>`;
     return html`
       <div class="diff">
@@ -222,16 +201,17 @@ export class SgProposalPage extends LitElement {
   }
 
   private _renderReviews() {
+    const reviews = this._reviewsCtl.data ?? [];
     return html`
       <div class="section">
-        ${this._reviews.map(r => html`
+        ${reviews.map(r => html`
           <div class="review">
             <div class="review-verdict">${r.verdict}</div>
             ${r.body ? html`<p>${r.body}</p>` : ''}
             <div class="review-meta">by ${r.createdBy} <sg-time-ago datetime=${r.createdAt}></sg-time-ago></div>
           </div>
         `)}
-        ${this._proposal?.status === 'Open' && authState.isAuthenticated ? html`
+        ${this._proposalCtl.data?.status === 'Open' && authState.isAuthenticated ? html`
           <h2>Submit Review</h2>
           <select .value=${this._reviewVerdict} @change=${(e: Event) => this._reviewVerdict = (e.target as HTMLSelectElement).value}>
             <option value="Approved">Approve</option>
@@ -246,9 +226,10 @@ export class SgProposalPage extends LitElement {
   }
 
   private _renderComments() {
+    const comments = this._commentsCtl.data ?? [];
     return html`
       <div class="section">
-        ${this._comments.map(c => html`
+        ${comments.map(c => html`
           <div class="comment">
             <p>${c.body}</p>
             <div class="comment-meta">by ${c.createdBy} <sg-time-ago datetime=${c.createdAt}></sg-time-ago></div>

@@ -1,9 +1,9 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { DocumentResponse, RepositoryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import { authState } from '../../state/auth-state.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-breadcrumb.js';
@@ -30,10 +30,6 @@ export class SgDocumentPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
-  @state() private _doc: DocumentResponse | null = null;
-  @state() private _loading = true;
-  @state() private _error = '';
   @state() private _shareOpen = false;
 
   private get _owner(): string {
@@ -49,51 +45,38 @@ export class SgDocumentPage extends LitElement {
     return raw.endsWith('.md') ? raw : raw + '.md';
   }
 
-  async connectedCallback() {
-    super.connectedCallback();
-    await this._load();
-  }
-
-  private async _load() {
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-    try {
-      const [repo, doc] = await Promise.all([
-        repoApi.get(this._owner, this._slug),
-        docApi.get(this._owner, this._slug, this._path),
-      ]);
-      this._repo = repo;
-      this._doc = doc;
-    } catch {
-      this._error = 'Document not found.';
-    } finally {
-      this._loading = false;
-    }
-  }
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+  private _docCtl = new LoadController(this, () =>
+    docApi.get(this._owner, this._slug, this._path));
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
     const repoBase = `/${this._owner}/${this._slug}`;
-    if (this._error) return html`<div class="not-found"><p>${this._error}</p><p><a href="${repoBase}">Back to repository</a></p></div>`;
-    if (!this._doc || !this._repo) return html``;
+    const repo = this._repoCtl.data;
+    const doc = this._docCtl.data;
+
+    const isLoading = this._repoCtl.status === 'loading' || this._docCtl.status === 'loading';
+    if (isLoading && (!repo || !doc)) return html`<p>Loading...</p>`;
+
+    if (this._docCtl.status === 'error' || this._repoCtl.status === 'error') {
+      return html`<div class="not-found"><p>Document not found.</p><p><a href="${repoBase}">Back to repository</a></p></div>`;
+    }
+    if (!doc || !repo) return html``;
 
     return html`
       <sg-breadcrumb
-        repoOwner=${this._repo.owner}
-        repoSlug=${this._repo.slug}
-        repoName=${this._repo.name}
-        path=${this._doc.path}
+        repoOwner=${repo.owner}
+        repoSlug=${repo.slug}
+        repoName=${repo.name}
+        path=${doc.path}
       ></sg-breadcrumb>
 
       <div class="meta">
-        ${this._doc.updatedAt ? html`Updated <sg-time-ago datetime=${this._doc.updatedAt}></sg-time-ago>` : ''}
+        ${doc.updatedAt ? html`Updated <sg-time-ago datetime=${doc.updatedAt}></sg-time-ago>` : ''}
         ${authState.isAuthenticated
-          ? html`<a href="${repoBase}/edit/${this._doc.path.replace(/\.md$/, '')}">Edit</a>`
+          ? html`<a href="${repoBase}/edit/${doc.path.replace(/\.md$/, '')}">Edit</a>`
           : ''}
-        <a href="${repoBase}/history/${this._doc.path.replace(/\.md$/, '')}">History</a>
+        <a href="${repoBase}/history/${doc.path.replace(/\.md$/, '')}">History</a>
         <a href="${repoBase}/proposals">Proposals</a>
         ${authState.isAuthenticated
           ? html`<a href="#" @click=${(e: Event) => { e.preventDefault(); this._shareOpen = true; }}>Share</a>`
@@ -102,18 +85,18 @@ export class SgDocumentPage extends LitElement {
 
       <div class="content">
         <sg-markdown-view
-          content=${this._doc.content ?? ''}
+          content=${doc.content ?? ''}
           owner=${this._owner}
           slug=${this._slug}
-          documentPath=${this._doc.path}
+          documentPath=${doc.path}
         ></sg-markdown-view>
       </div>
 
       <sg-share-dialog
         ?open=${this._shareOpen}
-        repoOwner=${this._repo.owner}
-        repoSlug=${this._repo.slug}
-        docPath=${this._doc.path}
+        repoOwner=${repo.owner}
+        repoSlug=${repo.slug}
+        docPath=${doc.path}
         @close=${() => { this._shareOpen = false; }}
       ></sg-share-dialog>
     `;
