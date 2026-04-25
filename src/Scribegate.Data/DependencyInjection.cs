@@ -13,6 +13,8 @@ public static class DependencyInjection
             options.UseSqlite(connectionString));
 
         services.AddScoped<IUserStore, SqliteUserStore>();
+        services.AddScoped<IApiTokenStore, SqliteApiTokenStore>();
+        services.AddScoped<IMediaAssetStore, SqliteMediaAssetStore>();
         services.AddScoped<IRepositoryStore, SqliteRepositoryStore>();
         services.AddScoped<IDocumentStore, SqliteDocumentStore>();
         services.AddScoped<IRevisionStore, SqliteRevisionStore>();

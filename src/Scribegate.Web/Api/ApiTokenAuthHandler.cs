@@ -1,9 +1,8 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Scribegate.Data;
+using Scribegate.Core.Stores;
 
 namespace Scribegate.Web.Api;
 
@@ -20,6 +19,8 @@ public class ApiTokenAuthHandler(
     IServiceScopeFactory scopeFactory)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
+    private static readonly TimeSpan LastUsedFreshness = TimeSpan.FromMinutes(1);
+
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var authHeader = Request.Headers.Authorization.ToString();
@@ -39,12 +40,10 @@ public class ApiTokenAuthHandler(
             return AuthenticateResult.NoResult();
 
         using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ScribegateDbContext>();
+        var apiTokens = scope.ServiceProvider.GetRequiredService<IApiTokenStore>();
 
         var tokenHash = HashToken(token);
-        var apiToken = await db.ApiTokens
-            .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+        var apiToken = await apiTokens.FindByHashAsync(tokenHash);
 
         if (apiToken is null)
             return AuthenticateResult.Fail("Invalid API token.");
@@ -52,9 +51,7 @@ public class ApiTokenAuthHandler(
         if (apiToken.ExpiresAt.HasValue && apiToken.ExpiresAt.Value < DateTime.UtcNow)
             return AuthenticateResult.Fail("API token has expired.");
 
-        // Update last used timestamp
-        apiToken.LastUsedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync();
+        await apiTokens.TouchLastUsedAsync(apiToken.Id, DateTime.UtcNow, LastUsedFreshness);
 
         var claims = new[]
         {

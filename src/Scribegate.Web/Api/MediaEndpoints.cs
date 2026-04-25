@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -36,7 +34,7 @@ public static class MediaEndpoints
         string repoSlug,
         IFormFile file,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssets,
         UserContext userContext,
         AuthorizationHelper authz,
         AuditService audit,
@@ -73,9 +71,7 @@ public static class MediaEndpoints
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxStorageMb))
             {
-                var totalStorageBytes = await db.MediaAssets
-                    .Where(m => m.UploadedById == userId)
-                    .SumAsync(m => m.SizeBytes, ct);
+                var totalStorageBytes = await mediaAssets.GetStorageUsageByUserAsync(userId, ct);
                 var totalStorageMb = totalStorageBytes / (1024.0 * 1024.0);
                 var newTotalMb = totalStorageMb + (file.Length / (1024.0 * 1024.0));
 
@@ -117,11 +113,10 @@ public static class MediaEndpoints
             UploadedById = userId,
         };
 
-        db.MediaAssets.Add(asset);
-        await db.SaveChangesAsync(ct);
+        await mediaAssets.CreateAsync(asset, ct);
 
         await audit.LogAsync(
-            AuditEventTypes.MediaUploaded, userId, userContext.GetUsername(),
+            AuditEventTypes.MediaUploaded, userId, user.Username,
             "MediaAsset", asset.Id,
             new { owner, slug = repo.Slug, fileName = asset.FileName, sizeBytes = asset.SizeBytes, contentType }, ct);
 
@@ -132,7 +127,7 @@ public static class MediaEndpoints
             ContentType = asset.ContentType,
             SizeBytes = asset.SizeBytes,
             Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}/download",
-            UploadedBy = userContext.GetUsername() ?? userId.ToString(),
+            UploadedBy = user.Username,
             CreatedAt = asset.CreatedAt,
         });
     }
@@ -144,7 +139,7 @@ public static class MediaEndpoints
         int skip = 0,
         int take = 50,
         IRepositoryStore repoStore = default!,
-        ScribegateDbContext db = default!,
+        IMediaAssetStore mediaAssets = default!,
         AuthorizationHelper authz = default!,
         UserContext userContext = default!,
         CancellationToken ct = default)
@@ -155,13 +150,7 @@ public static class MediaEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var assets = await db.MediaAssets
-            .Include(m => m.UploadedBy)
-            .Where(m => m.RepositoryId == repo.Id)
-            .OrderByDescending(m => m.CreatedAt)
-            .Skip(skip)
-            .Take(Math.Min(take, 200))
-            .ToListAsync(ct);
+        var assets = await mediaAssets.ListByRepositoryAsync(repo.Id, skip, Math.Min(take, 200), ct);
 
         return Results.Ok(new MediaListResponse
         {
@@ -183,7 +172,7 @@ public static class MediaEndpoints
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssets,
         AuthorizationHelper authz,
         UserContext userContext,
         HttpContext http,
@@ -195,11 +184,9 @@ public static class MediaEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var asset = await db.MediaAssets
-            .Include(m => m.UploadedBy)
-            .FirstOrDefaultAsync(m => m.Id == id && m.RepositoryId == repo.Id, ct);
-
-        if (asset is null) return ApiResults.NotFound("Media", id.ToString());
+        var asset = await mediaAssets.FindByIdAsync(id, ct);
+        if (asset is null || asset.RepositoryId != repo.Id)
+            return ApiResults.NotFound("Media", id.ToString());
 
         return Results.Ok(new MediaAssetResponse
         {
@@ -217,7 +204,7 @@ public static class MediaEndpoints
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssets,
         AuthorizationHelper authz,
         UserContext userContext,
         HttpContext http,
@@ -229,10 +216,9 @@ public static class MediaEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var asset = await db.MediaAssets
-            .FirstOrDefaultAsync(m => m.Id == id && m.RepositoryId == repo.Id, ct);
-
-        if (asset is null) return ApiResults.NotFound("Media", id.ToString());
+        var asset = await mediaAssets.FindByIdAsync(id, ct);
+        if (asset is null || asset.RepositoryId != repo.Id)
+            return ApiResults.NotFound("Media", id.ToString());
 
         if (!File.Exists(asset.StoragePath))
             return Results.Json(new
@@ -259,7 +245,7 @@ public static class MediaEndpoints
         string repoSlug,
         string fileName,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssets,
         AuthorizationHelper authz,
         UserContext userContext,
         HttpContext http,
@@ -278,11 +264,7 @@ public static class MediaEndpoints
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var asset = await db.MediaAssets
-            .Where(m => m.RepositoryId == repo.Id && m.FileName == fileName)
-            .OrderByDescending(m => m.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-
+        var asset = await mediaAssets.FindLatestByFileNameAsync(repo.Id, fileName, ct);
         if (asset is null) return ApiResults.NotFound("Media", fileName);
 
         if (!File.Exists(asset.StoragePath))
@@ -295,7 +277,7 @@ public static class MediaEndpoints
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssets,
         UserContext userContext,
         AuditService audit,
         CancellationToken ct)
@@ -303,10 +285,9 @@ public static class MediaEndpoints
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var asset = await db.MediaAssets
-            .FirstOrDefaultAsync(m => m.Id == id && m.RepositoryId == repo.Id, ct);
-
-        if (asset is null) return ApiResults.NotFound("Media", id.ToString());
+        var asset = await mediaAssets.FindByIdAsync(id, ct);
+        if (asset is null || asset.RepositoryId != repo.Id)
+            return ApiResults.NotFound("Media", id.ToString());
 
         var user = await userContext.RequireCurrentUserAsync(ct);
         var userId = user.Id;
@@ -322,11 +303,10 @@ public static class MediaEndpoints
         if (File.Exists(asset.StoragePath))
             File.Delete(asset.StoragePath);
 
-        db.MediaAssets.Remove(asset);
-        await db.SaveChangesAsync(ct);
+        await mediaAssets.DeleteAsync(asset.Id, ct);
 
         await audit.LogAsync(
-            AuditEventTypes.MediaDeleted, userId, userContext.GetUsername(),
+            AuditEventTypes.MediaDeleted, userId, user.Username,
             "MediaAsset", asset.Id,
             new { owner, slug = repo.Slug, fileName = asset.FileName }, ct);
 

@@ -6,11 +6,9 @@ using Markdig;
 using Markdig.Renderers;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 
 namespace Scribegate.Web.Api;
 
@@ -74,7 +72,7 @@ public static class SiteEndpoints
         IRepositoryStore repoStore,
         IDocumentStore documentStore,
         IRevisionStore revisionStore,
-        ScribegateDbContext db,
+        IMediaAssetStore mediaAssetStore,
         AuthorizationHelper authz,
         UserContext userContext,
         AuditService audit,
@@ -107,10 +105,7 @@ public static class SiteEndpoints
         // Resolve `![alt](foo.png)` in rendered markdown by filename. Most
         // recent upload wins when two assets share a name, matching the
         // by-name endpoint's rule.
-        var mediaAssets = await db.MediaAssets
-            .Where(m => m.RepositoryId == repo.Id)
-            .OrderBy(m => m.CreatedAt)
-            .ToListAsync(ct);
+        var mediaAssets = await mediaAssetStore.ListByRepositoryOldestFirstAsync(repo.Id, ct);
         var mediaByName = new Dictionary<string, MediaAsset>(StringComparer.Ordinal);
         foreach (var asset in mediaAssets)
             mediaByName[asset.FileName] = asset; // later CreatedAt overwrites

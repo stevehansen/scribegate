@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Models;
 
 namespace Scribegate.Web.Api;
@@ -246,7 +244,7 @@ public static class AuthEndpoints
 
     private static async Task<IResult> GetMyQuota(
         UserContext userContext,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
         TierService tierService,
         IMembershipStore membershipStore,
         CancellationToken ct)
@@ -258,7 +256,7 @@ public static class AuthEndpoints
         var limits = await tierService.GetLimitsForUserAsync(user, ct);
 
         var repoCount = await membershipStore.CountRepositoriesOwnedByUserAsync(user.Id, ct);
-        var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == user.Id, ct);
+        var tokenCount = await apiTokens.CountActiveByUserAsync(user.Id, ct);
 
         return Results.Ok(new
         {
@@ -308,7 +306,7 @@ public static class AuthEndpoints
     private static async Task<IResult> CreateApiToken(
         CreateApiTokenRequest request,
         UserContext userContext,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
         AuditService audit,
         TierService tierService,
         CancellationToken ct)
@@ -337,7 +335,7 @@ public static class AuthEndpoints
             var limits = await tierService.GetLimitsForUserAsync(user, ct);
             if (!limits.IsUnlimited(limits.MaxApiTokens))
             {
-                var tokenCount = await db.ApiTokens.CountAsync(t => t.UserId == userId, ct);
+                var tokenCount = await apiTokens.CountActiveByUserAsync(userId, ct);
                 if (tokenCount >= limits.MaxApiTokens)
                     return Results.Json(new
                     {
@@ -366,8 +364,7 @@ public static class AuthEndpoints
                 : null,
         };
 
-        db.ApiTokens.Add(apiToken);
-        await db.SaveChangesAsync(ct);
+        await apiTokens.CreateAsync(apiToken, ct);
 
         await audit.LogAsync(
             AuditEventTypes.ApiTokenCreated, userId, user.Username,
@@ -387,34 +384,29 @@ public static class AuthEndpoints
 
     private static async Task<IResult> ListApiTokens(
         UserContext userContext,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
         CancellationToken ct)
     {
         var userId = userContext.TryGetCurrentUserId();
         if (userId is null)
             return Unauthorized();
 
-        var tokens = await db.ApiTokens
-            .Where(t => t.UserId == userId.Value)
-            .OrderByDescending(t => t.CreatedAt)
-            .Select(t => new ApiTokenResponse
-            {
-                Id = t.Id,
-                Name = t.Name,
-                Scopes = null,
-                CreatedAt = t.CreatedAt,
-                ExpiresAt = t.ExpiresAt,
-                LastUsedAt = t.LastUsedAt,
-            })
-            .ToListAsync(ct);
-
-        return Results.Ok(tokens);
+        var tokens = await apiTokens.ListByUserAsync(userId.Value, ct);
+        return Results.Ok(tokens.Select(t => new ApiTokenResponse
+        {
+            Id = t.Id,
+            Name = t.Name,
+            Scopes = null,
+            CreatedAt = t.CreatedAt,
+            ExpiresAt = t.ExpiresAt,
+            LastUsedAt = t.LastUsedAt,
+        }).ToList());
     }
 
     private static async Task<IResult> DeleteApiToken(
         Guid id,
         UserContext userContext,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
         AuditService audit,
         CancellationToken ct)
     {
@@ -422,14 +414,13 @@ public static class AuthEndpoints
         if (userId is null)
             return Unauthorized();
 
-        var token = await db.ApiTokens.FirstOrDefaultAsync(
-            t => t.Id == id && t.UserId == userId.Value, ct);
+        var tokens = await apiTokens.ListByUserAsync(userId.Value, ct);
+        var token = tokens.FirstOrDefault(t => t.Id == id);
 
         if (token is null)
             return ApiResults.NotFound("API token", id.ToString());
 
-        db.ApiTokens.Remove(token);
-        await db.SaveChangesAsync(ct);
+        await apiTokens.RevokeAsync(id, ct);
 
         await audit.LogAsync(
             AuditEventTypes.ApiTokenRevoked, userId, userContext.GetUsername(),

@@ -1,12 +1,10 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Stores;
-using Scribegate.Data;
 using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
@@ -81,13 +79,14 @@ public static class GitEndpoints
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         AuditService audit,
         IMemoryCache cache,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -110,11 +109,12 @@ public static class GitEndpoints
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -131,11 +131,12 @@ public static class GitEndpoints
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -159,11 +160,12 @@ public static class GitEndpoints
         string hash,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -181,11 +183,12 @@ public static class GitEndpoints
         string hash,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -203,11 +206,12 @@ public static class GitEndpoints
         string hash,
         HttpContext http,
         IRepositoryStore repoStore,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         GitMirrorService mirrorService,
-        ScribegateDbContext db,
         CancellationToken ct)
     {
-        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, db, ct);
+        var auth = await AuthorizeAsync(owner, repoSlug, http, repoStore, apiTokens, memberships, ct);
         if (auth.Error is not null) return auth.Error;
 
         var mirrorPath = await mirrorService.EnsureMirrorAsync(auth.Repo!, ct);
@@ -229,7 +233,8 @@ public static class GitEndpoints
         string repoSlug,
         HttpContext http,
         IRepositoryStore repoStore,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
+        IMembershipStore memberships,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -242,17 +247,16 @@ public static class GitEndpoints
             // Basic credential so the cloned author sees their username in
             // audit events. Authentication errors on public repos are not
             // fatal — fall through to anonymous on bad creds.
-            var optional = await TryBasicAuthenticateAsync(http, db, ct);
+            var optional = await TryBasicAuthenticateAsync(http, apiTokens, ct);
             return new(repo, optional, null);
         }
 
         // Private: require a valid API-token Basic credential with read access.
-        var user = await TryBasicAuthenticateAsync(http, db, ct);
+        var user = await TryBasicAuthenticateAsync(http, apiTokens, ct);
         if (user is null)
             return new(repo, null, BasicAuthChallenge());
 
-        var membership = await db.RepositoryMemberships
-            .FirstOrDefaultAsync(m => m.UserId == user.Id && m.RepositoryId == repo.Id, ct);
+        var membership = await memberships.GetAsync(user.Id, repo.Id, ct);
         if (membership is null && !user.IsAdmin)
             return new(repo, user, BasicAuthChallenge());
 
@@ -274,7 +278,7 @@ public static class GitEndpoints
     /// </summary>
     private static async Task<User?> TryBasicAuthenticateAsync(
         HttpContext http,
-        ScribegateDbContext db,
+        IApiTokenStore apiTokens,
         CancellationToken ct)
     {
         var header = http.Request.Headers.Authorization.ToString();
@@ -302,34 +306,17 @@ public static class GitEndpoints
         if (!password.StartsWith(ApiTokenDefaults.TokenPrefix, StringComparison.Ordinal)) return null;
 
         var hash = ApiTokenAuthHandler.HashToken(password);
-        var apiToken = await db.ApiTokens
-            .Include(t => t.User)
-            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        var apiToken = await apiTokens.FindByHashAsync(hash, ct);
 
         if (apiToken is null) return null;
         if (apiToken.ExpiresAt.HasValue && apiToken.ExpiresAt.Value < DateTime.UtcNow) return null;
 
         // Throttle the LastUsedAt write: a clone of a medium repo triggers this
         // path once per object fetch, which can easily be hundreds of writes for
-        // a single session. The coarse one-per-minute check is atomically
-        // folded into an ExecuteUpdate so we don't even enter a SaveChanges
-        // round-trip when the column is already fresh.
-        var now = DateTime.UtcNow;
-        var freshnessThreshold = now - TimeSpan.FromMinutes(1);
-        if (apiToken.LastUsedAt is null || apiToken.LastUsedAt < freshnessThreshold)
-        {
-            try
-            {
-                await db.ApiTokens
-                    .Where(t => t.Id == apiToken.Id && (t.LastUsedAt == null || t.LastUsedAt < freshnessThreshold))
-                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.LastUsedAt, now), ct);
-            }
-            catch
-            {
-                // Best-effort — never break a clone because the timestamp
-                // write failed (e.g. DB contention during a migration).
-            }
-        }
+        // a single session. The store's TouchLastUsedAsync coalesces via
+        // ExecuteUpdate so we don't pay a SaveChanges round-trip when the column
+        // is already fresh.
+        await apiTokens.TouchLastUsedAsync(apiToken.Id, DateTime.UtcNow, TimeSpan.FromMinutes(1), ct);
 
         // Populate the principal so downstream code (e.g. audit actor) can see
         // the authenticated user without a second DB round-trip.
