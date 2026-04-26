@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:parity": "vitest run src/__tests__/markdown.parity.test.ts"
   },
   "dependencies": {

@@ -26,5 +26,10 @@ wwwroot/
 Thumbs.db
 .DS_Store
 
+# Coverage outputs (Cobertura uploaded as CI artifacts; not committed)
+TestResults/
+coverage/
+src/Scribegate.Web/Client/coverage/
+
 # Local tooling
 .claude/settings.local.json

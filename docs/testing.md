@@ -84,12 +84,49 @@ does not need `WebApplicationFactory`.
 Three parallel jobs (see `.github/workflows/ci.yml`):
 
 - **`test-dotnet`** — matrix `ubuntu-latest` + `windows-latest`. Restores,
-  builds, then runs the three xUnit v3 executable test projects via
-  `dotnet run --no-build -c Release --project ...`. Coverage collection is
-  deferred until the Microsoft.Testing.Platform coverage extension is wired in.
-- **`test-frontend`** — ubuntu only. `npm ci`, `tsc --noEmit`, then
-  `npm run test:run` followed by `npm run test:parity`.
+  builds, installs the `dotnet-coverage` global tool, then runs each of the
+  three xUnit v3 executable test projects via
+  `dotnet-coverage collect -f cobertura -o coverage/<layer>.cobertura.xml ...`.
+  The `dotnet-coverage` wrapper instruments the process out-of-band and emits
+  Cobertura XML — this decouples coverage from the in-runner MTP extension
+  whose package versions don't yet line up with `xunit.v3` 2.0.0.
+- **`test-frontend`** — ubuntu only. `npm ci`, `tsc --noEmit`,
+  `npm run test:coverage` (Vitest with the `cobertura` reporter; output at
+  `src/Scribegate.Web/Client/coverage/cobertura-coverage.xml`), then
+  `npm run test:parity` as a sanity check.
 - **`publish-check`** — unchanged end-to-end build / publish sanity.
+
+## Coverage artifacts
+
+Each CI run uploads three workflow artifacts:
+
+| Artifact | Job | Contents |
+|---|---|---|
+| `coverage-dotnet-ubuntu-latest` | test-dotnet (linux) | `core.cobertura.xml`, `data.cobertura.xml`, `web.cobertura.xml` |
+| `coverage-dotnet-windows-latest` | test-dotnet (windows) | same three files |
+| `coverage-frontend` | test-frontend | `cobertura-coverage.xml` (Vitest v8 provider) |
+
+Open the run in GitHub Actions and download the artifact zip to inspect a
+report locally (every Cobertura viewer — VS Code "Coverage Gutters",
+ReportGenerator, IntelliJ — accepts these files unchanged). There is **no
+threshold gate** in M7; we want a stable signal before turning failure
+knobs. Threshold + badge wiring is tracked for M8.
+
+### Generating coverage locally
+
+```bash
+# .NET — one file per test project
+dotnet tool install --global dotnet-coverage
+dotnet build Scribegate.slnx -c Release -p:SkipClientBuild=true
+dotnet-coverage collect -f cobertura -o coverage/core.cobertura.xml \
+  "dotnet run --no-build -c Release --project tests/Scribegate.Core.Tests"
+
+# Frontend
+cd src/Scribegate.Web/Client && npm run test:coverage
+# → src/Scribegate.Web/Client/coverage/cobertura-coverage.xml
+```
+
+The `coverage/` directories are gitignored.
 
 ## Known gotchas
 
