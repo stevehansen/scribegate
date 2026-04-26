@@ -68,15 +68,26 @@ public class SecurityTests : IClassFixture<ScribegateWebAppFactory>
         using var reader = new StreamReader(entry!.Open(), Encoding.UTF8);
         var html = await reader.ReadToEndAsync();
 
-        // 1. Raw HTML escaped — assert the live opening tags are absent.
-        //    The escaped text content (e.g. "&lt;img ... onerror=...&gt;")
-        //    legitimately contains substrings like "onerror="; that's
-        //    safe because they're text, not attributes. So the property
-        //    we pin is "no live tag," not "no substring."
-        html.Should().NotContain("<script", because: "DisableHtml() must escape literal <script> blocks");
-        html.Should().NotContain("<img ", because: "raw <img> tags from markdown must be escaped, not rendered");
-        html.Should().Contain("&lt;script", because: "the escaped form is what makes it visible-but-safe");
-        html.Should().Contain("&lt;img ", because: "raw img tags must come through as escaped text");
+        // The site-export layout legitimately emits its own chrome
+        // (e.g. `<script src="assets/prism.js">` for syntax highlighting).
+        // So scope the "no live tag" assertions to the rendered article
+        // body — this is what the markdown pipeline owns end-to-end.
+        var bodyStart = html.IndexOf("<main>", StringComparison.Ordinal);
+        var bodyEnd = html.IndexOf("</main>", StringComparison.Ordinal);
+        bodyStart.Should().BeGreaterThan(0, because: "the site layout must wrap content in <main>");
+        bodyEnd.Should().BeGreaterThan(bodyStart);
+        var body = html.Substring(bodyStart, bodyEnd - bodyStart);
+
+        // 1. Raw HTML escaped — assert the live opening tags are absent
+        //    *inside the rendered article*. The escaped text content
+        //    (e.g. "&lt;img ... onerror=...&gt;") legitimately contains
+        //    substrings like "onerror="; that's safe because they're
+        //    text, not attributes. So the property we pin is "no live
+        //    tag in the body," not "no substring anywhere in the file."
+        body.Should().NotContain("<script", because: "DisableHtml() must escape literal <script> blocks in the rendered body");
+        body.Should().NotContain("<img ", because: "raw <img> tags from markdown must be escaped, not rendered");
+        body.Should().Contain("&lt;script", because: "the escaped form is what makes it visible-but-safe");
+        body.Should().Contain("&lt;img ", because: "raw img tags must come through as escaped text");
 
         // 2. Dangerous URL schemes neutralised. The AST walker rewrites
         //    every matching href to "#" before HTML rendering — so the
