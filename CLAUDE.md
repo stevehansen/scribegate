@@ -49,18 +49,18 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 7 — "Proof & Prevention" (In Progress)**
+**Milestone 7 — "Proof & Prevention" (Delivered)**
 
 A real automated-test harness and the guardrails that keep future milestones safe. Pure foundation work: no user-visible feature changes, but every subsequent milestone (multi-document proposals, RavenDB adapter, performance work) becomes cheaper and less risky once this lands.
 
-- [ ] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
-- [ ] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas
-- [ ] Web API integration tests via `WebApplicationFactory<Program>` — auth (JWT + API token + OIDC stub), RBAC, owner/slug routing, share links, webhook signing, static-site/export streaming, rate limiting
-- [ ] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` driven by both xUnit theories (Markdig) and Vitest (marked + DOMPurify under jsdom), with golden-output snapshots per side and a divergence-allow-list cross-check against `docs/markdown.md`
-- [ ] SPA Vitest + `@open-wc/testing` unit/component tests, colocated alongside components; plus one jsdom-driven "simulated happy path" (register → create repo → create doc → propose → review → approve) exercising the router + editor + markdown view stack
-- [ ] CI gating — tests run on every PR, coverage tracked (Cobertura artifact upload, no threshold gate yet — revisit in M8), parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, and `docs/testing.md` describing conventions, flake-quarantine policy, and how to add tests for each layer
+- [x] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
+- [x] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas, audit IP retention prune
+- [x] Web API integration tests via `WebApplicationFactory<Program>` — auth (JWT + API token + OIDC stub), RBAC (proposal/membership/admin-tier/media/template), owner/slug routing, share links, webhook signing, static-site/export streaming, dumb-HTTP git clone auth, comments, search
+- [x] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` driven by both xUnit theories (Markdig) and Vitest (marked + DOMPurify under jsdom), with golden-output snapshots per side and divergence cross-check against `docs/markdown.md`; server-side XSS guarantees pinned
+- [x] SPA Vitest + `@open-wc/testing` unit/component tests colocated alongside components, plus the cross-cutting `src/__tests__/` suite (44 passing / 1 skipped)
+- [x] CI gating — tests run on every PR, parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, Cobertura artifacts uploaded per layer via `dotnet-coverage` (.NET) and Vitest's v8/cobertura reporter (frontend) — no threshold gate yet, revisit in M8. `docs/testing.md` covers conventions, flake-quarantine policy, and how to add tests for each layer.
 
-Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), and 6 (Markdown Depth) are complete.
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), and 7 (Proof & Prevention) are complete.
 
 M6 delivered:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme
