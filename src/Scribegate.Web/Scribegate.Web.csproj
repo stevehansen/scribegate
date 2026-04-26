@@ -37,6 +37,19 @@
     <Exec Command="npm run build" WorkingDirectory="Client/" />
   </Target>
 
+  <!-- Mirror the freshly-built SPA bundle into wwwroot so `dotnet run` serves
+       the current frontend in Debug too. Without this, wwwroot drifts behind
+       Client/dist after every Vite build and developers see stale UI (the
+       CI copies dist→wwwroot explicitly, so this just closes the local gap). -->
+  <Target Name="MirrorClientDistToWwwroot" AfterTargets="BuildClient" BeforeTargets="Build" Condition="Exists('Client/dist')">
+    <ItemGroup>
+      <ClientDistFiles Include="Client/dist/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ClientDistFiles)"
+          DestinationFolder="wwwroot/%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="PublishClient" BeforeTargets="Publish" Condition="Exists('Client/package.json') And '$(SkipClientBuild)' != 'true'">
     <Exec Command="npm ci --ignore-scripts" WorkingDirectory="Client/" />
     <Exec Command="npm run build" WorkingDirectory="Client/" />
