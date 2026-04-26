@@ -27,7 +27,7 @@ namespace Scribegate.Web.Tests;
 //  * Disposal clears the SQLite connection pool before deleting the temp
 //    dir — on Windows a pooled handle keeps the file locked and the rmdir
 //    would otherwise fail.
-public sealed class ScribegateWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
+public class ScribegateWebAppFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public string DataPath { get; } = Path.Combine(
         Path.GetTempPath(),
