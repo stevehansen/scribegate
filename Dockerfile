@@ -12,6 +12,7 @@ ARG VERSION=0.0.0-dev
 WORKDIR /app
 COPY src/Scribegate.Core/*.csproj src/Scribegate.Core/
 COPY src/Scribegate.Data/*.csproj src/Scribegate.Data/
+COPY src/Scribegate.Analyzers/*.csproj src/Scribegate.Analyzers/
 COPY src/Scribegate.Web/*.csproj src/Scribegate.Web/
 RUN dotnet restore src/Scribegate.Web
 COPY src/ src/
