@@ -33,6 +33,8 @@ builder.Services.AddScoped<NotificationService>();
 // Domain command services — ports in Scribegate.Core, adapters in Scribegate.Web.
 builder.Services.AddScoped<Scribegate.Core.Services.IProposalApprovalContext, Scribegate.Web.Services.EfProposalApprovalContext>();
 builder.Services.AddScoped<Scribegate.Core.Services.ProposalApprovalService>();
+builder.Services.AddScoped<Scribegate.Core.Services.IDocumentCommandContext, Scribegate.Web.Services.EfDocumentCommandContext>();
+builder.Services.AddScoped<Scribegate.Core.Services.DocumentCommandService>();
 
 // Webhook dispatch: singleton queue + hosted worker; HttpClient factory for deliveries
 builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();

@@ -1,4 +1,5 @@
 using Scribegate.Core.Entities;
+using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
@@ -105,17 +106,15 @@ public static class DocumentEndpoints
         string repoSlug,
         CreateDocumentRequest request,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
-        IRevisionStore revisionStore,
-        IRevisionSignatureStore signatureStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
-        SignatureService signatureService,
-        TierService tierService,
-        IWebhookDispatcher webhooks,
+        DocumentCommandService documents,
         CancellationToken ct)
     {
+        // Authorization stays at the endpoint (RFC #7). The repository load
+        // here is the cheap lookup needed to authorize against the repo's
+        // membership; the service does its own FindRepositoryAsync for the
+        // command work.
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null)
             return ApiResults.NotFound("Repository", repoSlug);
@@ -125,110 +124,54 @@ public static class DocumentEndpoints
         if (denied is not null) return denied;
 
         var errors = ValidateCreateRequest(request);
-        if (errors.Count > 0)
-            return ApiResults.ValidationError(errors);
+        if (errors.Count > 0) return ApiResults.ValidationError(errors);
 
         var normalizedPath = PathHelper.NormalizePath(request.Path!);
-
         if (!PathHelper.IsValidPath(normalizedPath))
             return ApiResults.ValidationError("path", ApiErrorCodes.InvalidFormat,
                 $"The path '{normalizedPath}' is not valid.",
                 "Paths must use forward slashes, contain only letters, numbers, dots, hyphens, and underscores, and end with .md. No '..' traversal allowed.");
 
-        var existing = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
-        if (existing is not null)
-            return ApiResults.Conflict(
-                ApiErrorCodes.PathAlreadyExists,
-                $"A document at path '{normalizedPath}' already exists in this repository.",
-                $"Use PUT /api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath} to update it, or choose a different path.",
-                "path");
-
         var user = await userContext.RequireCurrentUserAsync(ct);
-        var userId = user.Id;
-        var username = user.Username;
 
-        // Quota check: max documents per repo
+        var result = await documents.CreateAsync(new CreateDocumentCommand(
+            owner, repoSlug, normalizedPath,
+            request.Content, request.Message ?? "Initial content",
+            user.Id, user.Username), ct);
+
+        return result switch
         {
-            var limits = await tierService.GetLimitsForUserAsync(user, ct);
-            if (!limits.IsUnlimited(limits.MaxDocumentsPerRepo))
-            {
-                var docs = await documentStore.ListByRepositoryAsync(repo.Id, ct: ct);
-                if (docs.Count >= limits.MaxDocumentsPerRepo)
-                    return Results.Json(new
+            DocumentCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            DocumentCommandResult.PathAlreadyExistsCase =>
+                ApiResults.Conflict(
+                    ApiErrorCodes.PathAlreadyExists,
+                    $"A document at path '{normalizedPath}' already exists in this repository.",
+                    $"Use PUT /api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath} to update it, or choose a different path.",
+                    "path"),
+            DocumentCommandResult.QuotaExceededCase q =>
+                Results.Json(new
+                {
+                    error = new ApiError
                     {
-                        error = new ApiError
-                        {
-                            Code = ApiErrorCodes.QuotaExceeded,
-                            Message = $"This repository has reached the maximum of {limits.MaxDocumentsPerRepo} documents for your plan.",
-                            Details = $"Your {user.Tier} plan allows up to {limits.MaxDocumentsPerRepo} documents per repository. Upgrade your plan or delete existing documents.",
-                        }
-                    }, statusCode: 403);
-            }
-        }
-
-        // Parse frontmatter
-        var frontmatterJson = request.Content is not null ? FrontmatterService.ToJson(request.Content) : null;
-
-        var doc = new Document
-        {
-            Id = Guid.CreateVersion7(),
-            RepositoryId = repo.Id,
-            Path = normalizedPath,
-            CreatedById = userId,
-            FrontmatterJson = frontmatterJson,
+                        Code = ApiErrorCodes.QuotaExceeded,
+                        Message = $"This repository has reached the maximum of {q.MaxDocumentsPerRepo} documents for your plan.",
+                        Details = $"Your {q.Tier} plan allows up to {q.MaxDocumentsPerRepo} documents per repository. Upgrade your plan or delete existing documents.",
+                    }
+                }, statusCode: 403),
+            DocumentCommandResult.CreatedCase c =>
+                Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/documents/{c.Path}", new DocumentResponse
+                {
+                    Id = c.DocumentId,
+                    Path = c.Path,
+                    Content = c.Content,
+                    CurrentRevisionId = c.CurrentRevisionId,
+                    CreatedAt = c.DocumentCreatedAt,
+                    CreatedBy = user.Username ?? user.Id.ToString(),
+                    UpdatedAt = c.RevisionCreatedAt,
+                }),
+            _ => throw new InvalidOperationException($"Unhandled DocumentCommandResult: {result.GetType().Name}"),
         };
-
-        await documentStore.CreateAsync(doc, ct);
-
-        string? content = null;
-        DateTime? updatedAt = null;
-        if (!string.IsNullOrEmpty(request.Content))
-        {
-            var revision = new Revision
-            {
-                Id = Guid.CreateVersion7(),
-                DocumentId = doc.Id,
-                Content = request.Content,
-                Message = request.Message ?? "Initial content",
-                CreatedById = userId,
-                ParentRevisionId = null,
-            };
-
-            await revisionStore.CreateAsync(revision, ct);
-
-            var signature = signatureService.SignRevision(revision);
-            await signatureStore.AttachAsync(signature, ct);
-
-            doc.CurrentRevisionId = revision.Id;
-            await documentStore.UpdateAsync(doc, ct);
-
-            content = revision.Content;
-            updatedAt = revision.CreatedAt;
-        }
-
-        await audit.LogAsync(
-            AuditEventTypes.DocumentCreated, userId, username,
-            "Document", doc.Id,
-            new { owner, path = doc.Path, repositorySlug = repoSlug }, ct);
-
-        webhooks.Dispatch(WebhookEventTypes.DocumentCreated, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            document = new { id = doc.Id, path = doc.Path, revisionId = doc.CurrentRevisionId },
-            actor = new { id = userId, username },
-            timestamp = DateTime.UtcNow,
-        });
-
-        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/documents/{normalizedPath}", new DocumentResponse
-        {
-            Id = doc.Id,
-            Path = doc.Path,
-            Content = content,
-            CurrentRevisionId = doc.CurrentRevisionId,
-            CreatedAt = doc.CreatedAt,
-            CreatedBy = username ?? userId.ToString(),
-            UpdatedAt = updatedAt,
-        });
     }
 
     private static async Task<IResult> UpdateDocument(
@@ -237,14 +180,9 @@ public static class DocumentEndpoints
         string path,
         UpdateDocumentRequest request,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
-        IRevisionStore revisionStore,
-        IRevisionSignatureStore signatureStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
-        SignatureService signatureService,
-        IWebhookDispatcher webhooks,
+        DocumentCommandService documents,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -254,12 +192,6 @@ public static class DocumentEndpoints
         var denied = await authz.RequireRepositoryRoleAsync(
             repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
-
-        var normalizedPath = PathHelper.NormalizePath(path);
-
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
-        if (doc is null)
-            return ApiResults.NotFound("Document", normalizedPath);
 
         var errors = new List<ApiFieldError>();
 
@@ -289,55 +221,35 @@ public static class DocumentEndpoints
                 Details = $"Provided message is {request.Message.Trim().Length} characters.",
             });
 
-        if (errors.Count > 0)
-            return ApiResults.ValidationError(errors);
+        if (errors.Count > 0) return ApiResults.ValidationError(errors);
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        var username = userContext.GetUsername();
+        var normalizedPath = PathHelper.NormalizePath(path);
+        var user = await userContext.RequireCurrentUserAsync(ct);
 
-        var revision = new Revision
+        var result = await documents.UpdateAsync(new UpdateDocumentCommand(
+            owner, repoSlug, normalizedPath,
+            request.Content!, request.Message!.Trim(),
+            user.Id, user.Username), ct);
+
+        return result switch
         {
-            Id = Guid.CreateVersion7(),
-            DocumentId = doc.Id,
-            Content = request.Content!,
-            Message = request.Message!.Trim(),
-            CreatedById = userId,
-            ParentRevisionId = doc.CurrentRevisionId,
+            DocumentCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            DocumentCommandResult.DocumentNotFoundCase =>
+                ApiResults.NotFound("Document", normalizedPath),
+            DocumentCommandResult.UpdatedCase u =>
+                Results.Ok(new DocumentResponse
+                {
+                    Id = u.DocumentId,
+                    Path = u.Path,
+                    Content = u.Content,
+                    CurrentRevisionId = u.CurrentRevisionId,
+                    CreatedAt = u.DocumentCreatedAt,
+                    CreatedBy = user.Username ?? user.Id.ToString(),
+                    UpdatedAt = u.RevisionCreatedAt,
+                }),
+            _ => throw new InvalidOperationException($"Unhandled DocumentCommandResult: {result.GetType().Name}"),
         };
-
-        await revisionStore.CreateAsync(revision, ct);
-
-        var signature = signatureService.SignRevision(revision);
-        await signatureStore.AttachAsync(signature, ct);
-
-        doc.CurrentRevisionId = revision.Id;
-        doc.FrontmatterJson = FrontmatterService.ToJson(request.Content!);
-        await documentStore.UpdateAsync(doc, ct);
-
-        await audit.LogAsync(
-            AuditEventTypes.DocumentUpdated, userId, username,
-            "Document", doc.Id,
-            new { path = doc.Path, revisionId = revision.Id, message = revision.Message }, ct);
-
-        webhooks.Dispatch(WebhookEventTypes.DocumentUpdated, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            document = new { id = doc.Id, path = doc.Path, revisionId = revision.Id },
-            revision = new { id = revision.Id, message = revision.Message },
-            actor = new { id = userId, username },
-            timestamp = DateTime.UtcNow,
-        });
-
-        return Results.Ok(new DocumentResponse
-        {
-            Id = doc.Id,
-            Path = doc.Path,
-            Content = revision.Content,
-            CurrentRevisionId = revision.Id,
-            CreatedAt = doc.CreatedAt,
-            CreatedBy = username ?? userId.ToString(),
-            UpdatedAt = revision.CreatedAt,
-        });
     }
 
     // DELETE is now soft — it archives the document, preserving revisions,
