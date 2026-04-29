@@ -1,6 +1,7 @@
 using System.Net;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Stores;
+using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -9,6 +10,7 @@ public class NotificationService(
     IUserStore users,
     IMembershipStore memberships,
     EmailService emailService,
+    IEmailQueue emailQueue,
     ILogger<NotificationService> logger)
 {
     public async Task NotifyAsync(
@@ -91,12 +93,20 @@ public class NotificationService(
                 </div>
                 """;
 
-            await emailService.SendAsync(user.Email, user.Username, $"[Scribegate] {notification.Title}", htmlBody, ct);
-            await notifications.MarkEmailSentAsync(notification.Id, ct);
+            // The actual SMTP send happens on a background worker. This used to
+            // block the request thread on the SMTP call (~30 s on a slow or
+            // unreachable server); now it's a microsecond enqueue. MarkEmailSent
+            // moves to the worker so the flag still reflects "actually sent."
+            emailQueue.Enqueue(new EmailEnvelope(
+                user.Email,
+                user.Username,
+                $"[Scribegate] {notification.Title}",
+                htmlBody,
+                notification.Id));
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to send notification email for notification {NotificationId}", notification.Id);
+            logger.LogError(ex, "Failed to enqueue notification email for notification {NotificationId}", notification.Id);
         }
     }
 }

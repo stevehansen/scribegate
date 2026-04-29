@@ -39,6 +39,12 @@ builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();
 builder.Services.AddSingleton<Scribegate.Web.Services.IWebhookDispatcher>(sp => sp.GetRequiredService<Scribegate.Web.Services.WebhookDispatcher>());
 builder.Services.AddHostedService<Scribegate.Web.Services.WebhookDeliveryWorker>();
 
+// Email dispatch: singleton queue + hosted worker. NotificationService enqueues
+// instead of blocking the request thread on the SMTP call.
+builder.Services.AddSingleton<Scribegate.Web.Services.EmailQueue>();
+builder.Services.AddSingleton<Scribegate.Web.Services.IEmailQueue>(sp => sp.GetRequiredService<Scribegate.Web.Services.EmailQueue>());
+builder.Services.AddHostedService<Scribegate.Web.Services.EmailDeliveryWorker>();
+
 // Git mirror cache for read-only clone — owns the per-repo semaphores, so
 // it must be singleton. Scope-sensitive collaborators are resolved through
 // IServiceScopeFactory inside the service.
