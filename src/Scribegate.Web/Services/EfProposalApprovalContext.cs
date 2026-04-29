@@ -3,9 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Scribegate.Core;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
+using Scribegate.Data.Events;
 using Scribegate.Web.Api;
 
 namespace Scribegate.Web.Services;
@@ -31,7 +33,8 @@ public sealed class EfProposalApprovalContext(
     SignatureService signatureService,
     AuditService audit,
     NotificationService notifications,
-    IWebhookDispatcher webhooks)
+    IWebhookDispatcher webhooks,
+    IDomainEventScope eventScope)
     : IProposalApprovalContext
 {
     public async Task<ApprovalSnapshot?> LoadAsync(string owner, string repoSlug, Guid proposalId, CancellationToken ct)
@@ -92,8 +95,11 @@ public sealed class EfProposalApprovalContext(
     {
         // Single transaction across the merge writes — closes the orphan-revision
         // window the legacy handler had (revision could land while document pointer
-        // bump rolled back).
-        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // bump rolled back). Wrapping in ScribegateTransaction so the
+        // DomainEventSaveChangesInterceptor skips its post-SaveChanges flush
+        // here; deferred events (when this layer eventually emits them) will
+        // fire from CommitAsync below — never on rollback.
+        await using var tx = ScribegateTransaction.Wrap(await db.Database.BeginTransactionAsync(ct), eventScope);
 
         var doc = outcome.Document;
 
