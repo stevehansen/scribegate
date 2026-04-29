@@ -1,10 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { RepositoryResponse, TemplateSummaryResponse } from '../../api/types.js';
+import type { TemplateSummaryResponse } from '../../api/types.js';
 import * as repoApi from '../../api/repositories.js';
 import * as docApi from '../../api/documents.js';
 import * as templateApi from '../../api/templates.js';
 import { ApiException } from '../../api/client.js';
+import { LoadController } from '../../state/load-controller.js';
 import { boxReset } from '../../styles/shared.js';
 import '../shared/sg-markdown-view.js';
 import '../shared/sg-breadcrumb.js';
@@ -63,16 +64,16 @@ export class SgEditorPage extends LitElement {
   `];
 
   @property() location: any;
-  @state() private _repo: RepositoryResponse | null = null;
   @state() private _content = '';
   @state() private _path = '';
   @state() private _message = '';
-  @state() private _loading = true;
   @state() private _saving = false;
   @state() private _error = '';
   @state() private _isNew = false;
   @state() private _templates: TemplateSummaryResponse[] = [];
   @state() private _selectedTemplateId = '';
+  @state() private _secondaryLoading = false;
+  @state() private _loadError = '';
 
   private get _owner(): string {
     return this.location?.params?.owner ?? '';
@@ -86,41 +87,41 @@ export class SgEditorPage extends LitElement {
     return this.location?.params?.[0] ?? '';
   }
 
+  // Repo load goes through the controller; doc + templates stay imperative
+  // because the doc fetch seeds two-way-bound form state and templates uses
+  // a silent-404 fallback that the controller's error contract can't model.
+  private _repoCtl = new LoadController(this, () =>
+    repoApi.get(this._owner, this._slug));
+
   async connectedCallback() {
     super.connectedCallback();
     this._isNew = this.location?.route?.path?.includes('/edit/new');
 
-    if (!this._owner || !this._slug) {
-      this._error = 'Missing repository owner or slug.';
-      this._loading = false;
-      return;
-    }
-
-    try {
-      this._repo = await repoApi.get(this._owner, this._slug);
-
-      if (!this._isNew && this._editPath) {
+    if (!this._isNew && this._editPath) {
+      this._secondaryLoading = true;
+      try {
         const path = this._editPath.endsWith('.md') ? this._editPath : this._editPath + '.md';
         const doc = await docApi.get(this._owner, this._slug, path);
         this._content = doc.content ?? '';
         this._path = doc.path;
+      } catch {
+        this._loadError = 'Failed to load document.';
+      } finally {
+        this._secondaryLoading = false;
       }
-
-      if (this._isNew) {
-        // Best-effort: templates listing is optional. If a user can't see them
-        // (private repo, non-member) we silently hide the selector rather than
-        // blocking the whole editor.
-        try {
-          const res = await templateApi.list(this._owner, this._slug);
-          this._templates = res.items;
-        } catch {
-          this._templates = [];
-        }
+    } else if (this._isNew) {
+      this._secondaryLoading = true;
+      // Best-effort: templates listing is optional. If a user can't see them
+      // (private repo, non-member) we silently hide the selector rather than
+      // blocking the whole editor.
+      try {
+        const res = await templateApi.list(this._owner, this._slug);
+        this._templates = res.items;
+      } catch {
+        this._templates = [];
+      } finally {
+        this._secondaryLoading = false;
       }
-    } catch {
-      this._error = 'Failed to load.';
-    } finally {
-      this._loading = false;
     }
   }
 
@@ -182,16 +183,25 @@ export class SgEditorPage extends LitElement {
   }
 
   render() {
-    if (this._loading) return html`<p>Loading...</p>`;
+    if (this._repoCtl.status === 'loading' || this._secondaryLoading) {
+      return html`<p>Loading...</p>`;
+    }
+    if (this._repoCtl.status === 'error') {
+      return html`<p class="error">${this._repoCtl.error}</p>`;
+    }
+    if (this._loadError) {
+      return html`<p class="error">${this._loadError}</p>`;
+    }
 
+    const repo = this._repoCtl.data;
     const repoBase = `/${this._owner}/${this._slug}`;
 
     return html`
-      ${this._repo ? html`
+      ${repo ? html`
         <sg-breadcrumb
-          repoOwner=${this._repo.owner}
-          repoSlug=${this._repo.slug}
-          repoName=${this._repo.name}
+          repoOwner=${repo.owner}
+          repoSlug=${repo.slug}
+          repoName=${repo.name}
           path=${this._path}
         ></sg-breadcrumb>
       ` : ''}
