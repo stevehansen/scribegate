@@ -138,12 +138,10 @@ public static class ProposalEndpoints
         string repoSlug,
         CreateProposalRequest request,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
-        IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
         AccountAgeGateService accountAgeGate,
-        IDomainEventBus events,
+        ProposalCommandService proposals,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -169,70 +167,38 @@ public static class ProposalEndpoints
             ct);
         if (ageDenied is not null) return ageDenied;
 
-        Guid? documentId = request.DocumentId;
-        Guid? baseRevisionId = null;
-        string? proposedPath = null;
+        var normalizedPath = !string.IsNullOrWhiteSpace(request.DocumentPath)
+            ? PathHelper.NormalizePath(request.DocumentPath)
+            : null;
 
-        if (request.DocumentId.HasValue)
-        {
-            var doc = await documentStore.GetByIdAsync(request.DocumentId.Value, ct);
-            if (doc is null || doc.RepositoryId != repo.Id)
-                return ApiResults.NotFound("Document", request.DocumentId.Value.ToString());
-            baseRevisionId = doc.CurrentRevisionId;
-        }
-        else if (!string.IsNullOrWhiteSpace(request.DocumentPath))
-        {
-            var normalizedPath = PathHelper.NormalizePath(request.DocumentPath);
-            var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
-            if (doc is not null)
-            {
-                documentId = doc.Id;
-                baseRevisionId = doc.CurrentRevisionId;
-            }
-            else
-            {
-                proposedPath = normalizedPath;
-            }
-        }
-
-        var proposal = new Proposal
-        {
-            Id = Guid.CreateVersion7(),
-            RepositoryId = repo.Id,
-            DocumentId = documentId,
-            Title = request.Title!.Trim(),
-            Description = request.Description?.Trim(),
-            ProposedContent = request.Content!,
-            ProposedPath = proposedPath,
-            BaseRevisionId = baseRevisionId,
-            Status = ProposalStatus.Open,
-            CreatedById = userId,
-        };
-
-        await proposalStore.CreateAsync(proposal, ct);
-
-        await events.PublishAsync(new ProposalCreatedEvent(
-            ProposalId: proposal.Id,
-            RepositoryId: repo.Id,
-            ProposalTitle: proposal.Title,
-            ProposalStatus: proposal.Status.ToString(),
-            ProposedPath: proposal.ProposedPath,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
+        var actorUsername = userContext.GetUsername();
+        var result = await proposals.CreateAsync(new CreateProposalCommand(
+            owner, repoSlug,
+            Title: request.Title!,
+            Description: request.Description,
+            Content: request.Content!,
+            DocumentId: request.DocumentId,
+            NormalizedDocumentPath: normalizedPath,
             ActorId: userId,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
+            ActorUsername: actorUsername), ct);
 
-        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposal.Id}", new ProposalSummary
+        return result switch
         {
-            Id = proposal.Id,
-            Title = proposal.Title,
-            Status = proposal.Status.ToString(),
-            DocumentPath = proposal.ProposedPath,
-            CreatedBy = userContext.GetUsername() ?? userId.ToString(),
-            CreatedAt = proposal.CreatedAt,
-        });
+            ProposalCommandResult.RepositoryNotFoundCase => ApiResults.NotFound("Repository", repoSlug),
+            ProposalCommandResult.DocumentNotFoundCase d => ApiResults.NotFound("Document", d.DocumentId.ToString()),
+            ProposalCommandResult.CreatedCase c => Results.Created(
+                $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{c.ProposalId}",
+                new ProposalSummary
+                {
+                    Id = c.ProposalId,
+                    Title = c.Title,
+                    Status = c.Status,
+                    DocumentPath = c.DocumentPath,
+                    CreatedBy = actorUsername ?? userId.ToString(),
+                    CreatedAt = c.CreatedAt,
+                }),
+            _ => throw new InvalidOperationException($"Unhandled ProposalCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static async Task<IResult> UpdateProposal(
@@ -241,9 +207,9 @@ public static class ProposalEndpoints
         Guid id,
         UpdateProposalRequest request,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
+        ProposalCommandService proposals,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -253,39 +219,36 @@ public static class ProposalEndpoints
             repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
-        var proposal = await proposalStore.GetByIdAsync(id, ct);
-        if (proposal is null || proposal.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Proposal", id.ToString());
-
         var actor = await userContext.RequireCurrentUserAsync(ct);
-        var gate = ProposalPolicy.CanUpdate(proposal, actor, newContent: request.Content is not null);
-        if (!gate.Allowed) return gate.ToHttp();
+        var result = await proposals.UpdateAsync(new UpdateProposalCommand(
+            owner, repoSlug, id, request.Title, request.Description, request.Content,
+            actor.Id, actor.Username), ct);
 
-        if (request.Title is not null) proposal.Title = request.Title.Trim();
-        if (request.Description is not null) proposal.Description = request.Description.Trim();
-        if (request.Content is not null) proposal.ProposedContent = request.Content;
-
-        await proposalStore.UpdateAsync(proposal, ct);
-
-        return Results.Ok(new ProposalSummary
+        return result switch
         {
-            Id = proposal.Id,
-            Title = proposal.Title,
-            Status = proposal.Status.ToString(),
-            DocumentPath = proposal.Document?.Path ?? proposal.ProposedPath,
-            CreatedBy = proposal.CreatedBy?.Username ?? actor.Id.ToString(),
-            CreatedAt = proposal.CreatedAt,
-        });
+            ProposalCommandResult.RepositoryNotFoundCase => ApiResults.NotFound("Repository", repoSlug),
+            ProposalCommandResult.ProposalNotFoundCase => ApiResults.NotFound("Proposal", id.ToString()),
+            ProposalCommandResult.PolicyDeniedCase pd => pd.Policy.ToHttp(),
+            ProposalCommandResult.UpdatedCase u => Results.Ok(new ProposalSummary
+            {
+                Id = u.ProposalId,
+                Title = u.Title,
+                Status = u.Status,
+                DocumentPath = u.DocumentPath,
+                CreatedBy = actor.Username,
+                CreatedAt = u.CreatedAt,
+            }),
+            _ => throw new InvalidOperationException($"Unhandled ProposalCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static async Task<IResult> SubmitProposal(
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        ProposalCommandService proposals,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -295,39 +258,20 @@ public static class ProposalEndpoints
             repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
-        var proposal = await proposalStore.GetByIdAsync(id, ct);
-        if (proposal is null || proposal.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Proposal", id.ToString());
-
         var actor = await userContext.RequireCurrentUserAsync(ct);
-        var gate = ProposalPolicy.CanSubmit(proposal, actor);
-        if (!gate.Allowed) return gate.ToHttp();
+        var result = await proposals.SubmitAsync(
+            new SubmitProposalCommand(owner, repoSlug, id, actor.Id, actor.Username), ct);
 
-        proposal.Status = ProposalStatus.Open;
-        await proposalStore.UpdateAsync(proposal, ct);
-
-        await events.PublishAsync(new ProposalSubmittedEvent(
-            ProposalId: proposal.Id,
-            RepositoryId: repo.Id,
-            ProposalTitle: proposal.Title,
-            ProposalStatus: proposal.Status.ToString(),
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
-            ActorId: actor.Id,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Ok(new { status = "Open" });
+        return MapStatusVerbResult(result, repoSlug, id);
     }
 
     private static async Task<IResult> WithdrawProposal(
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        ProposalCommandService proposals,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -337,31 +281,11 @@ public static class ProposalEndpoints
             repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
-        var proposal = await proposalStore.GetByIdAsync(id, ct);
-        if (proposal is null || proposal.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Proposal", id.ToString());
-
         var actor = await userContext.RequireCurrentUserAsync(ct);
-        var gate = ProposalPolicy.CanWithdraw(proposal, actor);
-        if (!gate.Allowed) return gate.ToHttp();
+        var result = await proposals.WithdrawAsync(
+            new WithdrawProposalCommand(owner, repoSlug, id, actor.Id, actor.Username), ct);
 
-        proposal.Status = ProposalStatus.Withdrawn;
-        proposal.ResolvedAt = DateTime.UtcNow;
-        proposal.ResolvedById = actor.Id;
-        await proposalStore.UpdateAsync(proposal, ct);
-
-        await events.PublishAsync(new ProposalWithdrawnEvent(
-            ProposalId: proposal.Id,
-            RepositoryId: repo.Id,
-            ProposalTitle: proposal.Title,
-            ProposalStatus: proposal.Status.ToString(),
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
-            ActorId: actor.Id,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Ok(new { status = "Withdrawn" });
+        return MapStatusVerbResult(result, repoSlug, id);
     }
 
     private static async Task<IResult> ApproveProposal(
@@ -416,46 +340,37 @@ public static class ProposalEndpoints
         string owner,
         string repoSlug, Guid id,
         IRepositoryStore repoStore,
-        IProposalStore proposalStore,
         IMembershipStore membershipStore,
         UserContext userContext,
-        IDomainEventBus events,
+        ProposalCommandService proposals,
         CancellationToken ct)
     {
+        // Reviewer-role gate stays at the endpoint (matches Approve). The
+        // service trusts the caller has already proven Reviewer/Admin.
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
-        var proposal = await proposalStore.GetByIdAsync(id, ct);
-        if (proposal is null || proposal.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Proposal", id.ToString());
-
         var actor = await userContext.RequireCurrentUserAsync(ct);
         var membership = await membershipStore.GetAsync(actor.Id, repo.Id, ct);
-        var actorCanReview = AuthorizationHelper.CanReview(membership?.Role) || actor.IsAdmin;
+        if (!AuthorizationHelper.CanReview(membership?.Role) && !actor.IsAdmin)
+            return Forbidden("You need Reviewer or Admin role to reject proposals.");
 
-        var gate = ProposalPolicy.CanReject(proposal, actor, actorCanReview);
-        if (!gate.Allowed) return gate.ToHttp();
+        var result = await proposals.RejectAsync(
+            new RejectProposalCommand(owner, repoSlug, id, actor.Id, actor.Username), ct);
 
-        proposal.Status = ProposalStatus.Rejected;
-        proposal.ResolvedAt = DateTime.UtcNow;
-        proposal.ResolvedById = actor.Id;
-        await proposalStore.UpdateAsync(proposal, ct);
-
-        await events.PublishAsync(new ProposalRejectedEvent(
-            ProposalId: proposal.Id,
-            RepositoryId: repo.Id,
-            AuthorId: proposal.CreatedById,
-            ProposalTitle: proposal.Title,
-            ProposalStatus: proposal.Status.ToString(),
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
-            ActorId: actor.Id,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Ok(new { status = "Rejected" });
+        return MapStatusVerbResult(result, repoSlug, id);
     }
+
+    /// <summary>Submit / Withdraw / Reject all return the same shape: status string on success.</summary>
+    private static IResult MapStatusVerbResult(ProposalCommandResult result, string repoSlug, Guid id) =>
+        result switch
+        {
+            ProposalCommandResult.RepositoryNotFoundCase => ApiResults.NotFound("Repository", repoSlug),
+            ProposalCommandResult.ProposalNotFoundCase => ApiResults.NotFound("Proposal", id.ToString()),
+            ProposalCommandResult.PolicyDeniedCase pd => pd.Policy.ToHttp(),
+            ProposalCommandResult.StatusChangedCase s => Results.Ok(new { status = s.Status }),
+            _ => throw new InvalidOperationException($"Unhandled ProposalCommandResult: {result.GetType().Name}"),
+        };
 
     private static IResult Forbidden(string message) =>
         Results.Json(new { error = new ApiError { Code = "FORBIDDEN", Message = message } }, statusCode: 403);
