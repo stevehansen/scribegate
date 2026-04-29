@@ -1,6 +1,5 @@
-using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
-using Scribegate.Core.Events;
+using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -62,22 +61,10 @@ public static class MembershipEndpoints
         AddMemberRequest request,
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
-        IUserStore users,
         UserContext userContext,
-        IDomainEventBus events,
-        TierService tierService,
+        MembershipCommandService memberships,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
-        if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
-
-        var currentUser = await userContext.RequireCurrentUserAsync(ct);
-
-        // Must be repo admin or global admin
-        var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
-        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
-            return Forbidden("You need Admin role to manage members.");
-
         if (string.IsNullOrWhiteSpace(request.Username))
             return ApiResults.ValidationError("username", ApiErrorCodes.Required, "Username is required.");
 
@@ -86,61 +73,42 @@ public static class MembershipEndpoints
                 $"Invalid role '{request.Role}'.",
                 "Allowed values: Reader, Contributor, Reviewer, Admin.");
 
-        var targetUser = await users.FindByUsernameAsync(request.Username, ct);
-        if (targetUser is null)
-            return ApiResults.NotFound("User", request.Username);
+        var deny = await RequireRepoAdminAsync(owner, repoSlug, repoStore, membershipStore, userContext, ct);
+        if (deny.deny is not null) return deny.deny;
 
-        var existing = await membershipStore.GetAsync(targetUser.Id, repo.Id, ct);
-        if (existing is not null)
-            return ApiResults.Conflict("ALREADY_MEMBER", $"User '{targetUser.Username}' is already a member of this repository.",
-                "Use PUT to update their role.", "username");
+        var result = await memberships.AddAsync(new AddMemberCommand(
+            owner, repoSlug, request.Username.Trim(), role, deny.user!.Id, deny.user.Username), ct);
 
-        // Quota check: max members per repo
+        return result switch
         {
-            var limits = await tierService.GetLimitsForUserAsync(currentUser, ct);
-            if (!limits.IsUnlimited(limits.MaxMembersPerRepo))
-            {
-                var memberCount = await membershipStore.CountMembersByRepositoryAsync(repo.Id, ct);
-                if (memberCount >= limits.MaxMembersPerRepo)
-                    return Results.Json(new
+            MembershipCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            MembershipCommandResult.TargetUserNotFoundCase u =>
+                ApiResults.NotFound("User", u.Username),
+            MembershipCommandResult.AlreadyMemberCase a =>
+                ApiResults.Conflict("ALREADY_MEMBER",
+                    $"User '{a.Username}' is already a member of this repository.",
+                    "Use PUT to update their role.", "username"),
+            MembershipCommandResult.QuotaExceededCase q =>
+                Results.Json(new
+                {
+                    error = new ApiError
                     {
-                        error = new ApiError
-                        {
-                            Code = ApiErrorCodes.QuotaExceeded,
-                            Message = $"This repository has reached the maximum of {limits.MaxMembersPerRepo} members for your plan.",
-                            Details = $"Your {currentUser.Tier} plan allows up to {limits.MaxMembersPerRepo} members per repository. Upgrade your plan or remove existing members.",
-                        }
-                    }, statusCode: 403);
-            }
-        }
-
-        var membership = new RepositoryMembership
-        {
-            UserId = targetUser.Id,
-            RepositoryId = repo.Id,
-            Role = role,
+                        Code = ApiErrorCodes.QuotaExceeded,
+                        Message = $"This repository has reached the maximum of {q.MaxMembersPerRepo} members for your plan.",
+                        Details = $"Your {q.Tier} plan allows up to {q.MaxMembersPerRepo} members per repository. Upgrade your plan or remove existing members.",
+                    }
+                }, statusCode: 403),
+            MembershipCommandResult.AddedCase a =>
+                Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/members", new MemberResponse
+                {
+                    UserId = a.UserId,
+                    Username = a.Username,
+                    Email = a.Email,
+                    Role = a.Role.ToString(),
+                }),
+            _ => throw new InvalidOperationException($"Unhandled MembershipCommandResult: {result.GetType().Name}"),
         };
-
-        await membershipStore.CreateAsync(membership, ct);
-
-        await events.PublishAsync(new MemberAddedEvent(
-            RepositoryId: repo.Id,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            TargetUserId: targetUser.Id,
-            TargetUsername: targetUser.Username,
-            Role: role.ToString(),
-            ActorId: currentUser.Id,
-            ActorUsername: currentUser.Username,
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/members", new MemberResponse
-        {
-            UserId = targetUser.Id,
-            Username = targetUser.Username,
-            Email = targetUser.Email,
-            Role = role.ToString(),
-        });
     }
 
     private static async Task<IResult> UpdateMember(
@@ -151,49 +119,36 @@ public static class MembershipEndpoints
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
         UserContext userContext,
-        IDomainEventBus events,
+        MembershipCommandService memberships,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
-        if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
-
-        var currentUser = await userContext.RequireCurrentUserAsync(ct);
-        var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
-        if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
-            return Forbidden("You need Admin role to manage members.");
-
         if (!Enum.TryParse<RepositoryRole>(request.Role, ignoreCase: true, out var role))
             return ApiResults.ValidationError("role", ApiErrorCodes.InvalidFormat,
                 $"Invalid role '{request.Role}'.",
                 "Allowed values: Reader, Contributor, Reviewer, Admin.");
 
-        var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
-        if (membership is null)
-            return ApiResults.NotFound("Member", userId.ToString());
+        var deny = await RequireRepoAdminAsync(owner, repoSlug, repoStore, membershipStore, userContext, ct);
+        if (deny.deny is not null) return deny.deny;
 
-        var oldRole = membership.Role;
-        membership.Role = role;
-        await membershipStore.UpdateAsync(membership, ct);
+        var result = await memberships.UpdateRoleAsync(new UpdateMemberCommand(
+            owner, repoSlug, userId, role, deny.user!.Id, deny.user.Username), ct);
 
-        await events.PublishAsync(new MemberUpdatedEvent(
-            RepositoryId: repo.Id,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            TargetUserId: membership.UserId,
-            TargetUsername: membership.User.Username,
-            OldRole: oldRole.ToString(),
-            NewRole: role.ToString(),
-            ActorId: currentUser.Id,
-            ActorUsername: currentUser.Username,
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Ok(new MemberResponse
+        return result switch
         {
-            UserId = membership.UserId,
-            Username = membership.User.Username,
-            Email = membership.User.Email,
-            Role = role.ToString(),
-        });
+            MembershipCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            MembershipCommandResult.MemberNotFoundCase =>
+                ApiResults.NotFound("Member", userId.ToString()),
+            MembershipCommandResult.UpdatedCase u =>
+                Results.Ok(new MemberResponse
+                {
+                    UserId = u.UserId,
+                    Username = u.Username,
+                    Email = u.Email,
+                    Role = u.NewRole.ToString(),
+                }),
+            _ => throw new InvalidOperationException($"Unhandled MembershipCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static async Task<IResult> RemoveMember(
@@ -203,34 +158,42 @@ public static class MembershipEndpoints
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
         UserContext userContext,
-        IDomainEventBus events,
+        MembershipCommandService memberships,
         CancellationToken ct)
     {
+        var deny = await RequireRepoAdminAsync(owner, repoSlug, repoStore, membershipStore, userContext, ct);
+        if (deny.deny is not null) return deny.deny;
+
+        var result = await memberships.RemoveAsync(new RemoveMemberCommand(
+            owner, repoSlug, userId, deny.user!.Id, deny.user.Username), ct);
+
+        return result switch
+        {
+            MembershipCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            MembershipCommandResult.MemberNotFoundCase =>
+                ApiResults.NotFound("Member", userId.ToString()),
+            MembershipCommandResult.RemovedCase => Results.NoContent(),
+            _ => throw new InvalidOperationException($"Unhandled MembershipCommandResult: {result.GetType().Name}"),
+        };
+    }
+
+    // Resolves (repo, current user, repo admin / global admin) and short-circuits with
+    // either NotFound for the repo or 403 for the role check.
+    private static async Task<(IResult? deny, Scribegate.Core.Entities.User? user)> RequireRepoAdminAsync(
+        string owner, string repoSlug,
+        IRepositoryStore repoStore, IMembershipStore membershipStore,
+        UserContext userContext, CancellationToken ct)
+    {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
-        if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
+        if (repo is null) return (ApiResults.NotFound("Repository", repoSlug), null);
 
         var currentUser = await userContext.RequireCurrentUserAsync(ct);
         var currentMembership = await membershipStore.GetAsync(currentUser.Id, repo.Id, ct);
         if (!AuthorizationHelper.IsAdmin(currentMembership?.Role) && !currentUser.IsAdmin)
-            return Forbidden("You need Admin role to manage members.");
+            return (Forbidden("You need Admin role to manage members."), null);
 
-        var membership = await membershipStore.GetAsync(userId, repo.Id, ct);
-        if (membership is null)
-            return ApiResults.NotFound("Member", userId.ToString());
-
-        await membershipStore.DeleteAsync(userId, repo.Id, ct);
-
-        await events.PublishAsync(new MemberRemovedEvent(
-            RepositoryId: repo.Id,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            TargetUserId: membership.UserId,
-            TargetUsername: membership.User.Username,
-            ActorId: currentUser.Id,
-            ActorUsername: currentUser.Username,
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.NoContent();
+        return (null, currentUser);
     }
 
     private static IResult Forbidden(string message) =>
