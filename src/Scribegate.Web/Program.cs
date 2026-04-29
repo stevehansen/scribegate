@@ -10,6 +10,7 @@ using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Scribegate.Web.Api;
+using Scribegate.Web.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,6 +19,9 @@ var dataPath = builder.Configuration["Scribegate:DataPath"] ?? "data";
 Directory.CreateDirectory(dataPath);
 var connectionString = $"Data Source={Path.Combine(dataPath, "scribegate.db")}";
 
+// Domain-event bus + EF interceptor must register before AddScribegateData
+// so the (sp, options) overload picks the interceptor up at DbContext build.
+builder.Services.AddScribegateDomainEvents();
 builder.Services.AddScribegateData(connectionString);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<UserContext>();
