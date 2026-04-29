@@ -41,6 +41,8 @@ builder.Services.AddScoped<Scribegate.Core.Services.IDocumentCommandContext, Scr
 builder.Services.AddScoped<Scribegate.Core.Services.DocumentCommandService>();
 builder.Services.AddScoped<Scribegate.Core.Services.IMembershipCommandContext, Scribegate.Web.Services.EfMembershipCommandContext>();
 builder.Services.AddScoped<Scribegate.Core.Services.MembershipCommandService>();
+builder.Services.AddScoped<Scribegate.Core.Services.IMediaCommandContext, Scribegate.Web.Services.EfMediaCommandContext>();
+builder.Services.AddScoped<Scribegate.Core.Services.MediaCommandService>();
 
 // Webhook dispatch: singleton queue + hosted worker; HttpClient factory for deliveries
 builder.Services.AddSingleton<Scribegate.Web.Services.WebhookDispatcher>();

@@ -1,5 +1,4 @@
-using Scribegate.Core.Entities;
-using Scribegate.Core.Events;
+using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -7,14 +6,6 @@ namespace Scribegate.Web.Api;
 
 public static class MediaEndpoints
 {
-    private static readonly HashSet<string> AllowedContentTypes =
-    [
-        "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
-        "application/pdf",
-    ];
-
-    private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
-
     public static RouteGroupBuilder MapMediaEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/v1/repositories/{owner}/{repoSlug}/media")
@@ -35,14 +26,13 @@ public static class MediaEndpoints
         string repoSlug,
         IFormFile file,
         IRepositoryStore repoStore,
-        IMediaAssetStore mediaAssets,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
-        TierService tierService,
-        IConfiguration config,
+        MediaCommandService mediaCommands,
         CancellationToken ct)
     {
+        // Repo-role gate stays at the endpoint (RFC #4): the service trusts the
+        // caller has already proven Contributor+ on this repo.
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
@@ -50,94 +40,55 @@ public static class MediaEndpoints
             repo, AuthorizationHelper.CanContribute, userContext, ct);
         if (denied is not null) return denied;
 
-        // Validate file
-        if (file.Length == 0)
-            return ApiResults.ValidationError("file", ApiErrorCodes.Required, "File is empty.");
-
-        if (file.Length > MaxFileSizeBytes)
-            return ApiResults.ValidationError("file", ApiErrorCodes.TooLong,
-                $"File size ({file.Length / 1024 / 1024}MB) exceeds the maximum of {MaxFileSizeBytes / 1024 / 1024}MB.");
-
-        var contentType = file.ContentType?.ToLowerInvariant() ?? "application/octet-stream";
-        if (!AllowedContentTypes.Contains(contentType))
-            return ApiResults.ValidationError("file", ApiErrorCodes.InvalidFormat,
-                $"File type '{contentType}' is not allowed.",
-                $"Allowed types: {string.Join(", ", AllowedContentTypes)}.");
-
         var user = await userContext.RequireCurrentUserAsync(ct);
-        var userId = user.Id;
 
-        // Quota check: storage
+        await using var content = file.OpenReadStream();
+        var result = await mediaCommands.UploadAsync(
+            new UploadMediaCommand(
+                owner, repoSlug,
+                FileName: file.FileName,
+                ContentType: file.ContentType ?? "application/octet-stream",
+                SizeBytes: file.Length,
+                ActorId: user.Id,
+                ActorUsername: user.Username),
+            content, ct);
+
+        return result switch
         {
-            var limits = await tierService.GetLimitsForUserAsync(user, ct);
-            if (!limits.IsUnlimited(limits.MaxStorageMb))
-            {
-                var totalStorageBytes = await mediaAssets.GetStorageUsageByUserAsync(userId, ct);
-                var totalStorageMb = totalStorageBytes / (1024.0 * 1024.0);
-                var newTotalMb = totalStorageMb + (file.Length / (1024.0 * 1024.0));
-
-                if (newTotalMb > limits.MaxStorageMb)
-                    return Results.Json(new
+            MediaCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            MediaCommandResult.FileEmptyCase =>
+                ApiResults.ValidationError("file", ApiErrorCodes.Required, "File is empty."),
+            MediaCommandResult.FileTooLargeCase t =>
+                ApiResults.ValidationError("file", ApiErrorCodes.TooLong,
+                    $"File size ({t.ActualBytes / 1024 / 1024}MB) exceeds the maximum of {t.MaxBytes / 1024 / 1024}MB."),
+            MediaCommandResult.ContentTypeNotAllowedCase c =>
+                ApiResults.ValidationError("file", ApiErrorCodes.InvalidFormat,
+                    $"File type '{c.ContentType}' is not allowed.",
+                    $"Allowed types: {string.Join(", ", c.Allowed)}."),
+            MediaCommandResult.StorageQuotaExceededCase q =>
+                Results.Json(new
+                {
+                    error = new ApiError
                     {
-                        error = new ApiError
-                        {
-                            Code = ApiErrorCodes.QuotaExceeded,
-                            Message = $"Upload would exceed your storage quota of {limits.MaxStorageMb}MB.",
-                            Details = $"You are currently using {totalStorageMb:F1}MB. This file is {file.Length / 1024.0 / 1024.0:F1}MB. Upgrade your plan or delete existing uploads.",
-                        }
-                    }, statusCode: 403);
-            }
-        }
-
-        // Store file on disk
-        var dataPath = config["Scribegate:DataPath"] ?? "data";
-        var mediaDir = Path.Combine(dataPath, "media", repo.Id.ToString());
-        Directory.CreateDirectory(mediaDir);
-
-        var assetId = Guid.CreateVersion7();
-        var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant() ?? "";
-        var storagePath = Path.Combine(mediaDir, $"{assetId}{ext}");
-
-        await using (var stream = new FileStream(storagePath, FileMode.CreateNew))
-        {
-            await file.CopyToAsync(stream, ct);
-        }
-
-        var asset = new MediaAsset
-        {
-            Id = assetId,
-            RepositoryId = repo.Id,
-            FileName = Path.GetFileName(file.FileName),
-            ContentType = contentType,
-            SizeBytes = file.Length,
-            StoragePath = storagePath,
-            UploadedById = userId,
+                        Code = ApiErrorCodes.QuotaExceeded,
+                        Message = $"Upload would exceed your storage quota of {q.MaxStorageMb}MB.",
+                        Details = $"You are currently using {q.CurrentMb:F1}MB. This file is {q.FileMb:F1}MB. Upgrade your plan or delete existing uploads.",
+                    }
+                }, statusCode: 403),
+            MediaCommandResult.UploadedCase u =>
+                Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/media/{u.AssetId}", new MediaAssetResponse
+                {
+                    Id = u.AssetId,
+                    FileName = u.FileName,
+                    ContentType = u.ContentType,
+                    SizeBytes = u.SizeBytes,
+                    Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{u.AssetId}/download",
+                    UploadedBy = u.UploaderUsername,
+                    CreatedAt = u.CreatedAt,
+                }),
+            _ => throw new InvalidOperationException($"Unhandled MediaCommandResult: {result.GetType().Name}"),
         };
-
-        await mediaAssets.CreateAsync(asset, ct);
-
-        await events.PublishAsync(new MediaUploadedEvent(
-            MediaAssetId: asset.Id,
-            RepositoryId: repo.Id,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            FileName: asset.FileName,
-            SizeBytes: asset.SizeBytes,
-            ContentType: contentType,
-            ActorId: userId,
-            ActorUsername: user.Username,
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}", new MediaAssetResponse
-        {
-            Id = asset.Id,
-            FileName = asset.FileName,
-            ContentType = asset.ContentType,
-            SizeBytes = asset.SizeBytes,
-            Url = $"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}/download",
-            UploadedBy = user.Username,
-            CreatedAt = asset.CreatedAt,
-        });
     }
 
     private static async Task<IResult> ListMedia(
@@ -284,45 +235,28 @@ public static class MediaEndpoints
     private static async Task<IResult> DeleteMedia(
         string owner,
         string repoSlug, Guid id,
-        IRepositoryStore repoStore,
-        IMediaAssetStore mediaAssets,
         UserContext userContext,
-        IDomainEventBus events,
+        MediaCommandService mediaCommands,
         CancellationToken ct)
     {
-        var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
-        if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
-
-        var asset = await mediaAssets.FindByIdAsync(id, ct);
-        if (asset is null || asset.RepositoryId != repo.Id)
-            return ApiResults.NotFound("Media", id.ToString());
-
         var user = await userContext.RequireCurrentUserAsync(ct);
-        var userId = user.Id;
 
-        // Only uploader or admin can delete
-        if (asset.UploadedById != userId && !user.IsAdmin)
-            return Results.Json(new
-            {
-                error = new ApiError { Code = "FORBIDDEN", Message = "You can only delete your own uploads." }
-            }, statusCode: 403);
+        var result = await mediaCommands.DeleteAsync(
+            new DeleteMediaCommand(owner, repoSlug, id, user.Id, user.Username), ct);
 
-        // Delete from disk
-        if (File.Exists(asset.StoragePath))
-            File.Delete(asset.StoragePath);
-
-        await mediaAssets.DeleteAsync(asset.Id, ct);
-
-        await events.PublishAsync(new MediaDeletedEvent(
-            MediaAssetId: asset.Id,
-            RepositoryId: repo.Id,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            FileName: asset.FileName,
-            ActorId: userId,
-            ActorUsername: user.Username,
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.NoContent();
+        return result switch
+        {
+            MediaCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            MediaCommandResult.MediaNotFoundCase =>
+                ApiResults.NotFound("Media", id.ToString()),
+            MediaCommandResult.ForbiddenCase =>
+                Results.Json(new
+                {
+                    error = new ApiError { Code = "FORBIDDEN", Message = "You can only delete your own uploads." }
+                }, statusCode: 403),
+            MediaCommandResult.DeletedCase => Results.NoContent(),
+            _ => throw new InvalidOperationException($"Unhandled MediaCommandResult: {result.GetType().Name}"),
+        };
     }
 }
