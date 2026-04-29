@@ -453,7 +453,39 @@ Every revision is signed with ECDSA P-256 at creation time. The signature curren
 
 ---
 
-## 7. Design Principles Summary
+## 7. Hybrid Command Layer (RFC #4)
+
+### Decision
+
+Mutating endpoints split into two patterns based on internal complexity:
+
+- **Trivial CRUD handlers** stay inline in `Scribegate.Web.Api`. Their only duplication is the prelude/postlude (resolve repo + role, fire audit/webhook), and that's a Web concern.
+- **Domain-rich aggregates** get a per-aggregate command service in `Scribegate.Core/Services/` behind a single port (`I*CommandContext`). The service owns preconditions, ordering, signing, and event emission. The Web adapter (`Ef*CommandContext`) composes the existing stores, `TierService`, `IDomainEventBus`, and any disk I/O.
+
+Pattern 1 (`EndpointGateway`) was contemplated and skipped: `RequireRepositoryRoleAsync` already consolidates the prelude well enough. Pattern 2 carried all the value.
+
+### Status
+
+| Service | Verbs | Status |
+|---|---|---|
+| `DocumentCommandService` | Create, Update | Shipped |
+| `DocumentCommandService` | Archive, Unarchive, Move | **Deferred** — still inline in `DocumentEndpoints`. Same shape, smaller payoff. |
+| `MembershipCommandService` | Add, UpdateRole, Remove | Shipped |
+| `MediaCommandService` | Upload, Delete | Shipped |
+| `ProposalCommandService` | Create, Update, Submit, Withdraw, Reject | Shipped |
+| `ProposalApprovalService` | Approve | Shipped earlier (RFC #3); kept separate because the merge transaction has different shape (signed revision + multi-entity write). |
+
+CQRS / MediatR was explicitly rejected — every handler customizes its audit + webhook payload, so a generic pipeline degenerates into a `switch` on command type.
+
+### Boundary Test Pattern
+
+Each command service has an in-memory port fake (`InMemory*CommandContext` in `tests/Scribegate.Core.Tests`) that replaces SQLite + the event bus with `Dictionary` state. One test per result-variant branch per verb. No `WebApplicationFactory`, no SQLite, no HTTP — these are seconds-fast unit tests covering domain logic.
+
+### Authorization Boundary
+
+Repository-role authz (Reader / Contributor / Reviewer / Admin) stays at the endpoint via `AuthorizationHelper.RequireRepositoryRoleAsync`. The service trusts the caller has already proven role. Per-asset / per-author checks that depend on data the service is already loading (e.g. "only the proposal author can withdraw", "only the uploader or a global admin can delete media") live in the service and surface as a `Forbidden` / `PolicyDenied` result variant.
+
+## 8. Design Principles Summary
 
 These decisions reinforce the core product principles:
 
