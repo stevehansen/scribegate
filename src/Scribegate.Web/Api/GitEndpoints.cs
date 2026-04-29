@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Caching.Memory;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Services;
 
@@ -82,7 +83,7 @@ public static class GitEndpoints
         IApiTokenStore apiTokens,
         IMembershipStore memberships,
         GitMirrorService mirrorService,
-        AuditService audit,
+        IDomainEventBus events,
         IMemoryCache cache,
         CancellationToken ct)
     {
@@ -95,7 +96,7 @@ public static class GitEndpoints
         if (!TryResolveSafePath(mirrorPath, filePath, out var safePath) || !File.Exists(safePath))
             return Results.NotFound();
 
-        await LogCloneIfFirstAsync(auth.Repo!, owner, auth.User, http, audit, cache, ct);
+        await LogCloneIfFirstAsync(auth.Repo!, owner, auth.User, http, events, cache, ct);
 
         // Return plain text regardless of whether the client hinted at smart
         // HTTP via ?service=git-upload-pack. Modern git falls back to dumb
@@ -367,7 +368,7 @@ public static class GitEndpoints
         string ownerUsername,
         User? user,
         HttpContext http,
-        AuditService audit,
+        IDomainEventBus events,
         IMemoryCache cache,
         CancellationToken ct)
     {
@@ -384,21 +385,16 @@ public static class GitEndpoints
 
         try
         {
-            await audit.LogAsync(
-                AuditEventTypes.RepositoryCloned,
-                actorId: user?.Id,
-                actorUsername: user?.Username,
-                targetType: "Repository",
-                targetId: repo.Id,
-                details: new
-                {
-                    owner = ownerUsername,
-                    slug = repo.Slug,
-                    userAgent = string.IsNullOrEmpty(userAgent) ? null : userAgent,
-                    visibility = repo.Visibility.ToString(),
-                    authenticated = user is not null,
-                },
-                ct);
+            await events.PublishAsync(new RepositoryClonedEvent(
+                RepositoryId: repo.Id,
+                RepositoryOwner: ownerUsername,
+                RepositorySlug: repo.Slug,
+                Visibility: repo.Visibility.ToString(),
+                UserAgent: string.IsNullOrEmpty(userAgent) ? null : userAgent,
+                Authenticated: user is not null,
+                ActorId: user?.Id,
+                ActorUsername: user?.Username,
+                OccurredAt: DateTime.UtcNow), ct);
         }
         catch
         {

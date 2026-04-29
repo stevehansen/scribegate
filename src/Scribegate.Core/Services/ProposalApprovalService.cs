@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 
 namespace Scribegate.Core.Services;
 
@@ -102,11 +103,25 @@ public sealed class ProposalApprovalService(IProposalApprovalContext ctx)
         proposal.ResolvedAt = DateTime.UtcNow;
         proposal.ResolvedById = req.ReviewerId;
 
-        await ctx.PersistMergeAsync(new MergeOutcome(revision, signature, doc, proposal), documentIsNew, ct);
+        var merged = new ProposalMergedEvent(
+            ProposalId: proposal.Id,
+            RepositoryId: repo.Id,
+            DocumentId: doc.Id,
+            RevisionId: revision.Id,
+            AuthorId: proposal.CreatedById,
+            ReviewerId: req.ReviewerId,
+            ReviewerUsername: req.ReviewerUsername,
+            DocumentPath: doc.Path,
+            RepositoryOwner: req.Owner,
+            RepositorySlug: repo.Slug,
+            RepositoryName: repo.Name,
+            ProposalTitle: proposal.Title,
+            ProposalStatus: proposal.Status.ToString(),
+            RevisionMessage: revision.Message,
+            ApprovalCount: approvals,
+            OccurredAt: DateTime.UtcNow);
 
-        // Post-commit so a rollback cannot emit phantom events.
-        await ctx.EmitMergedEventsAsync(
-            new ApprovalEmittedEvent(req, repo, proposal, doc, revision, approvals, required), ct);
+        await ctx.PersistMergeAsync(new MergeOutcome(revision, signature, doc, proposal), documentIsNew, merged, ct);
 
         return ApprovalResult.Merged(revision.Id, doc.Id, approvals, required);
     }

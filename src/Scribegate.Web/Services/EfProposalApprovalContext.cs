@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core;
 using Scribegate.Core.Entities;
@@ -14,10 +13,12 @@ namespace Scribegate.Web.Services;
 
 /// <summary>
 /// Production adapter for <see cref="IProposalApprovalContext"/>. Composes the
-/// existing stores plus signature, audit, notification, and webhook services.
+/// existing stores plus the signature service and the domain-event bus.
 /// <see cref="PersistMergeAsync"/> wraps the four merge writes in a single
-/// <c>IDbContextTransaction</c> — fixing the orphan-revision window the legacy
-/// handler had.
+/// <c>ScribegateTransaction</c> and publishes the <see cref="ProposalMergedEvent"/>
+/// inside the transaction — the immediate audit handler rides the merge,
+/// the deferred notify + webhook handlers fire from <c>CommitAsync</c> only
+/// after the merge succeeds.
 /// </summary>
 [AllowsDbContext("Owns the merge transaction across four entity writes; legitimate Web-layer composition root for ProposalApprovalService.")]
 public sealed class EfProposalApprovalContext(
@@ -32,8 +33,7 @@ public sealed class EfProposalApprovalContext(
     IUserStore users,
     SignatureService signatureService,
     AuditService audit,
-    NotificationService notifications,
-    IWebhookDispatcher webhooks,
+    IDomainEventBus bus,
     IDomainEventScope eventScope)
     : IProposalApprovalContext
 {
@@ -91,14 +91,14 @@ public sealed class EfProposalApprovalContext(
 
     public RevisionSignature Sign(Revision revision) => signatureService.SignRevision(revision);
 
-    public async Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, CancellationToken ct)
+    public async Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, ProposalMergedEvent merged, CancellationToken ct)
     {
         // Single transaction across the merge writes — closes the orphan-revision
-        // window the legacy handler had (revision could land while document pointer
-        // bump rolled back). Wrapping in ScribegateTransaction so the
-        // DomainEventSaveChangesInterceptor skips its post-SaveChanges flush
-        // here; deferred events (when this layer eventually emits them) will
-        // fire from CommitAsync below — never on rollback.
+        // window the legacy handler had (revision could land while document
+        // pointer bump rolled back). Publishing the event INSIDE the wrapper
+        // routes the immediate audit handler through the open transaction
+        // (rolls back together) and buffers notify + webhook handlers until
+        // CommitAsync flushes them post-commit.
         await using var tx = ScribegateTransaction.Wrap(await db.Database.BeginTransactionAsync(ct), eventScope);
 
         var doc = outcome.Document;
@@ -131,42 +131,9 @@ public sealed class EfProposalApprovalContext(
 
         await proposals.UpdateAsync(outcome.Proposal, ct);
 
+        await bus.PublishAsync(merged, ct);
+
         await tx.CommitAsync(ct);
-    }
-
-    public async Task EmitMergedEventsAsync(ApprovalEmittedEvent evt, CancellationToken ct)
-    {
-        await audit.LogAsync(
-            AuditEventTypes.ProposalApproved,
-            evt.Request.ReviewerId,
-            evt.Request.ReviewerUsername,
-            "Proposal",
-            evt.Proposal.Id,
-            new
-            {
-                revisionId = evt.Revision.Id,
-                documentPath = evt.Document.Path,
-                approvalCount = evt.ApprovalCount,
-            },
-            ct);
-
-        await notifications.NotifyAsync(
-            evt.Proposal.CreatedById,
-            NotificationTypes.ProposalApproved,
-            $"Proposal approved: {evt.Proposal.Title}",
-            $"Your proposal has been approved and merged by {evt.Request.ReviewerUsername}.",
-            $"/api/v1/repositories/{evt.Request.Owner}/{evt.Request.RepoSlug}/proposals/{evt.Proposal.Id}",
-            ct);
-
-        webhooks.Dispatch(WebhookEventTypes.ProposalApproved, evt.Repository.Id, new
-        {
-            repository = new { id = evt.Repository.Id, slug = evt.Repository.Slug, name = evt.Repository.Name },
-            proposal = new { id = evt.Proposal.Id, title = evt.Proposal.Title, status = evt.Proposal.Status.ToString() },
-            document = new { id = evt.Document.Id, path = evt.Document.Path },
-            revision = new { id = evt.Revision.Id, message = evt.Revision.Message },
-            actor = new { id = evt.Request.ReviewerId, username = evt.Request.ReviewerUsername },
-            timestamp = DateTime.UtcNow,
-        });
     }
 
     public string? ExtractFrontmatterJson(string content) => FrontmatterService.ToJson(content);

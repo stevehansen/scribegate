@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -26,7 +27,7 @@ public static class ReportEndpoints
         CreateReportRequest request,
         IContentReportStore reportStore,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var errors = new List<ApiFieldError>();
@@ -102,10 +103,14 @@ public static class ReportEndpoints
 
         await reportStore.CreateAsync(report, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ContentReported, userId, userContext.GetUsername(),
-            report.TargetType, report.TargetId,
-            new { reportId = report.Id, reason = reason.ToString() }, ct);
+        await events.PublishAsync(new ContentReportedEvent(
+            ReportId: report.Id,
+            TargetType: report.TargetType,
+            TargetId: report.TargetId,
+            Reason: reason.ToString(),
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/reports/{report.Id}", MapToResponse(report));
     }
@@ -156,7 +161,7 @@ public static class ReportEndpoints
         ResolveReportRequest request,
         UserContext userContext,
         IContentReportStore reportStore,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var admin = await userContext.GetCurrentUserAsync(ct);
@@ -193,10 +198,14 @@ public static class ReportEndpoints
 
         await reportStore.UpdateAsync(report, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ReportReviewed, admin.Id, admin.Username,
-            "ContentReport", report.Id,
-            new { newStatus = newStatus.ToString(), targetType = report.TargetType, targetId = report.TargetId }, ct);
+        await events.PublishAsync(new ContentReportReviewedEvent(
+            ReportId: report.Id,
+            NewStatus: newStatus.ToString(),
+            TargetType: report.TargetType,
+            TargetId: report.TargetId,
+            ActorId: admin.Id,
+            ActorUsername: admin.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(MapToResponse(report));
     }

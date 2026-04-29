@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -83,7 +84,7 @@ public static class RepositoryEndpoints
         IMembershipStore membershipStore,
         UserContext userContext,
         ISystemSettingStore settings,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         CancellationToken ct)
     {
@@ -186,10 +187,15 @@ public static class RepositoryEndpoints
 
         var ownerUsername = user.Username;
 
-        await audit.LogAsync(
-            AuditEventTypes.RepositoryCreated, userId, userContext.GetUsername(),
-            "Repository", repo.Id,
-            new { owner = ownerUsername, name = repo.Name, slug = repo.Slug, visibility = repo.Visibility.ToString() }, ct);
+        await events.PublishAsync(new RepositoryCreatedEvent(
+            RepositoryId: repo.Id,
+            RepositoryName: repo.Name,
+            RepositorySlug: repo.Slug,
+            RepositoryOwner: ownerUsername,
+            Visibility: repo.Visibility.ToString(),
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{ownerUsername}/{repo.Slug}", MapToResponse(repo, ownerUsername));
     }
@@ -202,7 +208,7 @@ public static class RepositoryEndpoints
         UserContext userContext,
         ISystemSettingStore settings,
         AuthorizationHelper authz,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
@@ -287,10 +293,15 @@ public static class RepositoryEndpoints
         await store.UpdateAsync(repo, ct);
 
         var updateUserId = await userContext.GetCurrentUserIdAsync(ct);
-        await audit.LogAsync(
-            AuditEventTypes.RepositoryUpdated, updateUserId, userContext.GetUsername(),
-            "Repository", repo.Id,
-            new { owner, name = repo.Name, slug = repo.Slug, requiredApprovals = repo.RequiredApprovals }, ct);
+        await events.PublishAsync(new RepositoryUpdatedEvent(
+            RepositoryId: repo.Id,
+            RepositoryName: repo.Name,
+            RepositorySlug: repo.Slug,
+            RepositoryOwner: owner,
+            RequiredApprovals: repo.RequiredApprovals,
+            ActorId: updateUserId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(MapToResponse(repo, owner));
     }
@@ -301,7 +312,7 @@ public static class RepositoryEndpoints
         IRepositoryStore store,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await store.GetByOwnerAndSlugAsync(owner, slug, ct);
@@ -316,10 +327,14 @@ public static class RepositoryEndpoints
 
         await store.DeleteAsync(repo.Id, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.RepositoryDeleted, deleteUserId, userContext.GetUsername(),
-            "Repository", repo.Id,
-            new { owner, name = repo.Name, slug = repo.Slug }, ct);
+        await events.PublishAsync(new RepositoryDeletedEvent(
+            RepositoryId: repo.Id,
+            RepositoryName: repo.Name,
+            RepositorySlug: repo.Slug,
+            RepositoryOwner: owner,
+            ActorId: deleteUserId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }

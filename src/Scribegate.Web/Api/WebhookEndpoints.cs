@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
@@ -70,7 +71,7 @@ public static class WebhookEndpoints
         IWebhookStore webhookStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         IConfiguration config,
         CancellationToken ct)
     {
@@ -101,8 +102,17 @@ public static class WebhookEndpoints
 
         await webhookStore.CreateAsync(hook, ct);
 
-        await audit.LogAsync(AuditEventTypes.WebhookCreated, userId, userContext.GetUsername(),
-            "Webhook", hook.Id, new { owner, repo.Slug, hook.Url, hook.Enabled, events = request.Events }, ct);
+        await events.PublishAsync(new WebhookCreatedEvent(
+            WebhookId: hook.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            Url: hook.Url,
+            Enabled: hook.Enabled,
+            Events: request.Events!.ToList(),
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/webhooks/{hook.Id}", new WebhookCreatedResponse
         {
@@ -125,12 +135,13 @@ public static class WebhookEndpoints
         IWebhookStore webhookStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         IConfiguration config,
         CancellationToken ct)
     {
         var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
+        var repo = scoped.Repo!;
         var hook = scoped.Hook!;
 
         var errors = ValidatePayload(request.Url, request.Events, secret: null, allowPrivate: AllowPrivate(config), newRequired: false);
@@ -161,8 +172,15 @@ public static class WebhookEndpoints
         hook.UpdatedAt = DateTime.UtcNow;
         await webhookStore.UpdateAsync(hook, ct);
 
-        await audit.LogAsync(AuditEventTypes.WebhookUpdated, userId, userContext.GetUsername(),
-            "Webhook", hook.Id, new { hook.Url, hook.Enabled, secretReset = request.ResetSecret == true }, ct);
+        await events.PublishAsync(new WebhookUpdatedEvent(
+            WebhookId: hook.Id,
+            RepositoryId: repo.Id,
+            Url: hook.Url,
+            Enabled: hook.Enabled,
+            SecretReset: request.ResetSecret == true,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         var response = ToResponse(hook);
         if (newSecret is null) return Results.Ok(response);
@@ -193,18 +211,24 @@ public static class WebhookEndpoints
         IWebhookStore webhookStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var scoped = await LoadScoped(owner, repoSlug, id, repoStore, webhookStore, authz, userContext, ct);
         if (scoped.Err is not null) return scoped.Err;
+        var repo = scoped.Repo!;
         var hook = scoped.Hook!;
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
         await webhookStore.DeleteAsync(hook.Id, ct);
 
-        await audit.LogAsync(AuditEventTypes.WebhookDeleted, userId, userContext.GetUsername(),
-            "Webhook", hook.Id, new { hook.Url }, ct);
+        await events.PublishAsync(new WebhookDeletedEvent(
+            WebhookId: hook.Id,
+            RepositoryId: repo.Id,
+            Url: hook.Url,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }
@@ -249,7 +273,7 @@ public static class WebhookEndpoints
         IWebhookStore webhookStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         IWebhookDispatcher dispatcher,
         CancellationToken ct)
     {
@@ -272,8 +296,13 @@ public static class WebhookEndpoints
             timestamp = DateTime.UtcNow,
         });
 
-        await audit.LogAsync(AuditEventTypes.WebhookTested, userId, userContext.GetUsername(),
-            "Webhook", hook.Id, new { hook.Url }, ct);
+        await events.PublishAsync(new WebhookTestedEvent(
+            WebhookId: hook.Id,
+            RepositoryId: repo.Id,
+            Url: hook.Url,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Accepted();
     }

@@ -1,4 +1,5 @@
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
@@ -264,10 +265,9 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
-        IWebhookDispatcher webhooks,
+        IDomainEventBus events,
         CancellationToken ct)
-        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, audit, webhooks, ct);
+        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, events, ct);
 
     private static async Task<IResult> ArchiveDocument(
         string owner,
@@ -277,8 +277,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
-        IWebhookDispatcher webhooks,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -305,18 +304,16 @@ public static class DocumentEndpoints
         doc.ArchivedById = userId;
         await documentStore.UpdateAsync(doc, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.DocumentArchived, userId, userContext.GetUsername(),
-            "Document", doc.Id,
-            new { owner, path = normalizedPath, repositorySlug = repoSlug }, ct);
-
-        webhooks.Dispatch(WebhookEventTypes.DocumentDeleted, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            document = new { id = doc.Id, path = normalizedPath, archived = true },
-            actor = new { id = userId, username = userContext.GetUsername() },
-            timestamp = DateTime.UtcNow,
-        });
+        await events.PublishAsync(new DocumentArchivedEvent(
+            DocumentId: doc.Id,
+            RepositoryId: repo.Id,
+            DocumentPath: normalizedPath,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            RepositoryName: repo.Name,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }
@@ -329,7 +326,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -363,10 +360,15 @@ public static class DocumentEndpoints
         await documentStore.UpdateAsync(doc, ct);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
-        await audit.LogAsync(
-            AuditEventTypes.DocumentUnarchived, userId, userContext.GetUsername(),
-            "Document", doc.Id,
-            new { owner, path = normalizedPath, repositorySlug = repoSlug }, ct);
+        await events.PublishAsync(new DocumentUnarchivedEvent(
+            DocumentId: doc.Id,
+            RepositoryId: repo.Id,
+            DocumentPath: normalizedPath,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }
@@ -396,8 +398,7 @@ public static class DocumentEndpoints
         IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
-        IWebhookDispatcher webhooks,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -439,18 +440,17 @@ public static class DocumentEndpoints
         await documentStore.UpdateAsync(doc, ct);
 
         var userId = await userContext.GetCurrentUserIdAsync(ct);
-        await audit.LogAsync(
-            AuditEventTypes.DocumentMoved, userId, userContext.GetUsername(),
-            "Document", doc.Id,
-            new { owner, oldPath, newPath = newNormalized, repositorySlug = repoSlug }, ct);
-
-        webhooks.Dispatch(WebhookEventTypes.DocumentMoved, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            document = new { id = doc.Id, path = newNormalized, oldPath },
-            actor = new { id = userId, username = userContext.GetUsername() },
-            timestamp = DateTime.UtcNow,
-        });
+        await events.PublishAsync(new DocumentMovedEvent(
+            DocumentId: doc.Id,
+            RepositoryId: repo.Id,
+            OldPath: oldPath,
+            NewPath: newNormalized,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            RepositoryName: repo.Name,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(new DocumentResponse
         {

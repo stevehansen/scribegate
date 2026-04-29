@@ -1,6 +1,7 @@
 using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
@@ -66,8 +67,7 @@ public static class ReviewEndpoints
         IReviewStore reviewStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
-        IWebhookDispatcher webhooks,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -101,18 +101,17 @@ public static class ReviewEndpoints
 
         await reviewStore.CreateAsync(review, ct);
 
-        await audit.LogAsync(AuditEventTypes.ReviewSubmitted, actor.Id, userContext.GetUsername(),
-            "Review", review.Id,
-            new { proposalId, verdict = verdict.ToString() }, ct);
-
-        webhooks.Dispatch(WebhookEventTypes.ReviewSubmitted, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            proposal = new { id = proposal.Id, title = proposal.Title },
-            review = new { id = review.Id, verdict = verdict.ToString() },
-            actor = new { id = actor.Id, username = userContext.GetUsername() },
-            timestamp = DateTime.UtcNow,
-        });
+        await events.PublishAsync(new ReviewSubmittedEvent(
+            ReviewId: review.Id,
+            ProposalId: proposalId,
+            RepositoryId: repo.Id,
+            Verdict: verdict.ToString(),
+            ProposalTitle: proposal.Title,
+            RepositorySlug: repo.Slug,
+            RepositoryName: repo.Name,
+            ActorId: actor.Id,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}/reviews", new Models.ReviewResponse
         {

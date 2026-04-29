@@ -1,5 +1,6 @@
 using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -34,7 +35,7 @@ public static class ShareLinkEndpoints
         IRevisionStore revisionStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -102,11 +103,19 @@ public static class ShareLinkEndpoints
 
         await shareLinkStore.CreateAsync(link, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ShareLinkCreated, userId, userContext.GetUsername(),
-            "ShareLink", link.Id,
-            new { owner, slug = repo.Slug, documentId = doc.Id, path = doc.Path, expiresAt, permanent = request.Permanent, pinnedRevisionId = request.RevisionId },
-            ct);
+        await events.PublishAsync(new ShareLinkCreatedEvent(
+            ShareLinkId: link.Id,
+            RepositoryId: repo.Id,
+            DocumentId: doc.Id,
+            DocumentPath: doc.Path,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            PinnedRevisionId: request.RevisionId,
+            Permanent: request.Permanent,
+            ExpiresAt: expiresAt,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/shares/{link.Id}", new ShareLinkCreatedResponse
         {
@@ -189,7 +198,7 @@ public static class ShareLinkEndpoints
         IShareLinkStore shareLinkStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -215,11 +224,15 @@ public static class ShareLinkEndpoints
         link.RevokedById = actor.Id;
         await shareLinkStore.UpdateAsync(link, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ShareLinkRevoked, actor.Id, userContext.GetUsername(),
-            "ShareLink", link.Id,
-            new { owner, slug = repo.Slug, documentId = link.DocumentId },
-            ct);
+        await events.PublishAsync(new ShareLinkRevokedEvent(
+            ShareLinkId: link.Id,
+            RepositoryId: repo.Id,
+            DocumentId: link.DocumentId,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            ActorId: actor.Id,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }
@@ -228,7 +241,7 @@ public static class ShareLinkEndpoints
         string token,
         IShareLinkStore shareLinkStore,
         IRevisionStore revisionStore,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix))
@@ -299,11 +312,11 @@ public static class ShareLinkEndpoints
 
         try
         {
-            await audit.LogAsync(
-                AuditEventTypes.ShareLinkAccessed, actorId: null, actorUsername: null,
-                "ShareLink", link.Id,
-                new { documentId = link.DocumentId, revisionId = revision.Id },
-                ct);
+            await events.PublishAsync(new ShareLinkAccessedEvent(
+                ShareLinkId: link.Id,
+                DocumentId: link.DocumentId,
+                RevisionId: revision.Id,
+                OccurredAt: DateTime.UtcNow), ct);
         }
         catch
         {

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Data;
 using Scribegate.Web.Models;
@@ -30,7 +31,7 @@ public static class AdminEndpoints
         UserContext userContext,
         EmailService email,
         ISystemSettingStore settings,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var user = await userContext.GetCurrentUserAsync(ct);
@@ -62,10 +63,13 @@ public static class AdminEndpoints
         var sent = await email.TrySendAsync(toEmail, user?.Username ?? "admin",
             $"[{instanceName}] SMTP test", html, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.SettingChanged, userId, principal.FindFirstValue("username"),
-            "Smtp", null,
-            new { action = "test", toEmail, success = sent.Success, error = sent.Error }, ct);
+        await events.PublishAsync(new SmtpTestRunEvent(
+            ToEmail: toEmail,
+            Success: sent.Success,
+            Error: sent.Error,
+            ActorId: userId,
+            ActorUsername: principal.FindFirstValue("username"),
+            OccurredAt: DateTime.UtcNow), ct);
 
         if (!sent.Success)
             return Results.Json(new
@@ -151,7 +155,7 @@ public static class AdminEndpoints
         ClaimsPrincipal principal,
         UserContext userContext,
         ISystemSettingStore settings,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         if (!await userContext.IsCurrentUserAdminAsync(ct))
@@ -171,10 +175,13 @@ public static class AdminEndpoints
 
         var userId = userContext.TryGetCurrentUserId();
         var isSecret = SettingDefinitions.ByKey.TryGetValue(key, out var def) && def.Type == "secret";
-        await audit.LogAsync(
-            AuditEventTypes.SettingChanged, userId, principal.FindFirstValue("username"),
-            "SystemSetting", null,
-            new { key, oldValue = isSecret ? "***" : oldValue, newValue = isSecret ? "***" : newValue }, ct);
+        await events.PublishAsync(new SystemSettingChangedEvent(
+            Key: key,
+            OldValue: isSecret ? "***" : oldValue,
+            NewValue: isSecret ? "***" : newValue,
+            ActorId: userId,
+            ActorUsername: principal.FindFirstValue("username"),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(new SettingResponse
         {
@@ -198,7 +205,7 @@ public static class AdminEndpoints
         ClaimsPrincipal principal,
         UserContext userContext,
         IUserStore users,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var admin = await userContext.GetCurrentUserAsync(ct);
@@ -219,10 +226,13 @@ public static class AdminEndpoints
         await users.UpdateAsync(user, ct);
         if (user.Id == admin.Id) userContext.InvalidateCurrentUser();
 
-        await audit.LogAsync(
-            AuditEventTypes.SettingChanged, admin.Id, principal.FindFirstValue("username"),
-            "User", userId,
-            new { field = "tier", oldValue = oldTier, newValue = request.Tier }, ct);
+        await events.PublishAsync(new UserTierChangedEvent(
+            TargetUserId: userId,
+            OldTier: oldTier,
+            NewTier: request.Tier!,
+            ActorId: admin.Id,
+            ActorUsername: principal.FindFirstValue("username"),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(new { userId, tier = user.Tier });
     }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -79,7 +80,7 @@ public static class TemplateEndpoints
         IDocumentTemplateStore templateStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -129,10 +130,15 @@ public static class TemplateEndpoints
             throw;
         }
 
-        await audit.LogAsync(
-            AuditEventTypes.DocumentTemplateCreated, userId, userContext.GetUsername(),
-            "DocumentTemplate", template.Id,
-            new { owner, repositorySlug = repoSlug, template.Name }, ct);
+        await events.PublishAsync(new DocumentTemplateCreatedEvent(
+            TemplateId: template.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repoSlug,
+            TemplateName: template.Name,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         // Re-read so the Creator nav property is populated for the response.
         var created = await templateStore.GetByIdAsync(template.Id, ct) ?? template;
@@ -150,7 +156,7 @@ public static class TemplateEndpoints
         IDocumentTemplateStore templateStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -205,10 +211,15 @@ public static class TemplateEndpoints
             throw;
         }
 
-        await audit.LogAsync(
-            AuditEventTypes.DocumentTemplateUpdated, userId, userContext.GetUsername(),
-            "DocumentTemplate", template.Id,
-            new { owner, repositorySlug = repoSlug, template.Name }, ct);
+        await events.PublishAsync(new DocumentTemplateUpdatedEvent(
+            TemplateId: template.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repoSlug,
+            TemplateName: template.Name,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         var updated = await templateStore.GetByIdAsync(template.Id, ct) ?? template;
         return Results.Ok(ToResponse(updated));
@@ -222,7 +233,7 @@ public static class TemplateEndpoints
         IDocumentTemplateStore templateStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -239,10 +250,15 @@ public static class TemplateEndpoints
 
         await templateStore.DeleteAsync(template.Id, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.DocumentTemplateDeleted, userId, userContext.GetUsername(),
-            "DocumentTemplate", template.Id,
-            new { owner, repositorySlug = repoSlug, template.Name }, ct);
+        await events.PublishAsync(new DocumentTemplateDeletedEvent(
+            TemplateId: template.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repoSlug,
+            TemplateName: template.Name,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }

@@ -1,5 +1,6 @@
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -63,7 +64,7 @@ public static class MembershipEndpoints
         IMembershipStore membershipStore,
         IUserStore users,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         CancellationToken ct)
     {
@@ -122,9 +123,16 @@ public static class MembershipEndpoints
 
         await membershipStore.CreateAsync(membership, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberAdded, currentUser.Id, currentUser.Username,
-            "RepositoryMembership", repo.Id,
-            new { owner, slug = repo.Slug, targetUser = targetUser.Username, role = role.ToString() }, ct);
+        await events.PublishAsync(new MemberAddedEvent(
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            TargetUserId: targetUser.Id,
+            TargetUsername: targetUser.Username,
+            Role: role.ToString(),
+            ActorId: currentUser.Id,
+            ActorUsername: currentUser.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/members", new MemberResponse
         {
@@ -143,7 +151,7 @@ public static class MembershipEndpoints
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -167,9 +175,17 @@ public static class MembershipEndpoints
         membership.Role = role;
         await membershipStore.UpdateAsync(membership, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberUpdated, currentUser.Id, currentUser.Username,
-            "RepositoryMembership", repo.Id,
-            new { owner, slug = repo.Slug, targetUser = membership.User.Username, oldRole = oldRole.ToString(), newRole = role.ToString() }, ct);
+        await events.PublishAsync(new MemberUpdatedEvent(
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            TargetUserId: membership.UserId,
+            TargetUsername: membership.User.Username,
+            OldRole: oldRole.ToString(),
+            NewRole: role.ToString(),
+            ActorId: currentUser.Id,
+            ActorUsername: currentUser.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Ok(new MemberResponse
         {
@@ -187,7 +203,7 @@ public static class MembershipEndpoints
         IRepositoryStore repoStore,
         IMembershipStore membershipStore,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -204,9 +220,15 @@ public static class MembershipEndpoints
 
         await membershipStore.DeleteAsync(userId, repo.Id, ct);
 
-        await audit.LogAsync(AuditEventTypes.MemberRemoved, currentUser.Id, currentUser.Username,
-            "RepositoryMembership", repo.Id,
-            new { owner, slug = repo.Slug, targetUser = membership.User.Username }, ct);
+        await events.PublishAsync(new MemberRemovedEvent(
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            TargetUserId: membership.UserId,
+            TargetUsername: membership.User.Username,
+            ActorId: currentUser.Id,
+            ActorUsername: currentUser.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }

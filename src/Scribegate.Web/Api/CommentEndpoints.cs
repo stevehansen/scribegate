@@ -1,5 +1,6 @@
 using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 using Scribegate.Web.Services;
@@ -70,8 +71,7 @@ public static class CommentEndpoints
         UserContext userContext,
         AuthorizationHelper authz,
         AccountAgeGateService accountAgeGate,
-        NotificationService notifications,
-        IWebhookDispatcher webhooks,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -112,24 +112,20 @@ public static class CommentEndpoints
 
         await commentStore.CreateAsync(comment, ct);
 
-        // Notify proposal author about the comment
-        if (proposal.CreatedById != userId)
-        {
-            await notifications.NotifyAsync(
-                proposal.CreatedById, NotificationTypes.CommentAdded,
-                $"New comment on: {proposal.Title}",
-                $"{userContext.GetUsername()} commented on your proposal.",
-                $"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}", ct);
-        }
-
-        webhooks.Dispatch(WebhookEventTypes.CommentCreated, repo.Id, new
-        {
-            repository = new { id = repo.Id, slug = repo.Slug, name = repo.Name },
-            proposal = new { id = proposal.Id, title = proposal.Title },
-            comment = new { id = comment.Id, lineReference = comment.LineReference, parentCommentId = comment.ParentCommentId },
-            actor = new { id = userId, username = userContext.GetUsername() },
-            timestamp = DateTime.UtcNow,
-        });
+        await events.PublishAsync(new CommentCreatedEvent(
+            CommentId: comment.Id,
+            ProposalId: proposalId,
+            RepositoryId: repo.Id,
+            ProposalAuthorId: proposal.CreatedById,
+            ProposalTitle: proposal.Title,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            RepositoryName: repo.Name,
+            ParentCommentId: comment.ParentCommentId,
+            LineReference: comment.LineReference,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/proposals/{proposalId}/comments", new CommentResponse
         {

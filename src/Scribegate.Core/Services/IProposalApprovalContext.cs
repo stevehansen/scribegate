@@ -1,4 +1,5 @@
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 
 namespace Scribegate.Core.Services;
 
@@ -26,24 +27,10 @@ public sealed record MergeOutcome(
 public sealed record ReviewRecordedContext(Guid ReviewerId, string? ReviewerUsername);
 
 /// <summary>
-/// Snapshot passed to <see cref="IProposalApprovalContext.EmitMergedEventsAsync"/>
-/// once the merge transaction has committed. Will collapse to a single
-/// <c>ProposalMergedEvent</c> publish when the domain-events bus lands (RFC #5).
-/// </summary>
-public sealed record ApprovalEmittedEvent(
-    ApprovalRequest Request,
-    Repository Repository,
-    Proposal Proposal,
-    Document Document,
-    Revision Revision,
-    int ApprovalCount,
-    int RequiredApprovals);
-
-/// <summary>
 /// Port consumed by <see cref="ProposalApprovalService"/>. The production adapter
 /// (<c>EfProposalApprovalContext</c>) composes the existing stores, signature
-/// service, audit, notification, and webhook dispatch behind these ten methods.
-/// Test adapters can be ~50 lines of in-memory dictionaries.
+/// service, audit, and the domain-event bus behind these methods. Test adapters
+/// can be ~50 lines of in-memory dictionaries.
 /// </summary>
 public interface IProposalApprovalContext
 {
@@ -77,18 +64,14 @@ public interface IProposalApprovalContext
     RevisionSignature Sign(Revision revision);
 
     /// <summary>
-    /// Atomically writes the merge: creates-or-updates the document, inserts the
-    /// revision and its signature, updates the proposal. The production adapter
-    /// wraps these in a single <c>IDbContextTransaction</c>.
+    /// Atomically writes the merge (document, revision + signature, proposal)
+    /// inside a <c>ScribegateTransaction</c> and publishes
+    /// <paramref name="merged"/> through the domain-event bus before commit, so
+    /// the immediate audit handler rides the merge and the deferred notify +
+    /// webhook handlers fire only after the commit succeeds. A rollback rolls
+    /// back the audit row with the merge and drops the deferred fan-out.
     /// </summary>
-    Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, CancellationToken ct);
-
-    /// <summary>
-    /// Post-commit fan-out: <c>proposal.approved</c> audit row, author notification,
-    /// webhook dispatch. Runs only after <see cref="PersistMergeAsync"/> commits so
-    /// a rollback cannot emit phantom events.
-    /// </summary>
-    Task EmitMergedEventsAsync(ApprovalEmittedEvent evt, CancellationToken ct);
+    Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, ProposalMergedEvent merged, CancellationToken ct);
 
     /// <summary>
     /// Stateless YAML-frontmatter extraction. Routed through the port so Core stays

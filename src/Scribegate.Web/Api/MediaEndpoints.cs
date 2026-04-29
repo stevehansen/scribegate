@@ -1,4 +1,5 @@
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -37,7 +38,7 @@ public static class MediaEndpoints
         IMediaAssetStore mediaAssets,
         UserContext userContext,
         AuthorizationHelper authz,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         IConfiguration config,
         CancellationToken ct)
@@ -115,10 +116,17 @@ public static class MediaEndpoints
 
         await mediaAssets.CreateAsync(asset, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.MediaUploaded, userId, user.Username,
-            "MediaAsset", asset.Id,
-            new { owner, slug = repo.Slug, fileName = asset.FileName, sizeBytes = asset.SizeBytes, contentType }, ct);
+        await events.PublishAsync(new MediaUploadedEvent(
+            MediaAssetId: asset.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            FileName: asset.FileName,
+            SizeBytes: asset.SizeBytes,
+            ContentType: contentType,
+            ActorId: userId,
+            ActorUsername: user.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/repositories/{owner}/{repoSlug}/media/{asset.Id}", new MediaAssetResponse
         {
@@ -279,7 +287,7 @@ public static class MediaEndpoints
         IRepositoryStore repoStore,
         IMediaAssetStore mediaAssets,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -305,10 +313,15 @@ public static class MediaEndpoints
 
         await mediaAssets.DeleteAsync(asset.Id, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.MediaDeleted, userId, user.Username,
-            "MediaAsset", asset.Id,
-            new { owner, slug = repo.Slug, fileName = asset.FileName }, ct);
+        await events.PublishAsync(new MediaDeletedEvent(
+            MediaAssetId: asset.Id,
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            FileName: asset.FileName,
+            ActorId: userId,
+            ActorUsername: user.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }

@@ -1,4 +1,5 @@
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -28,7 +29,7 @@ public static class AuthEndpoints
         IUserStore users,
         JwtService jwt,
         ISystemSettingStore settings,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         CancellationToken ct)
     {
@@ -163,10 +164,13 @@ public static class AuthEndpoints
 
         await users.CreateAsync(user, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.UserRegistered, user.Id, user.Username,
-            "User", user.Id,
-            new { isFirstUser, isAdmin = user.IsAdmin }, ct);
+        await events.PublishAsync(new UserRegisteredEvent(
+            UserId: user.Id,
+            Username: user.Username,
+            IsFirstUser: isFirstUser,
+            IsAdmin: user.IsAdmin,
+            Provider: null,
+            OccurredAt: DateTime.UtcNow), ct);
 
         var token = jwt.GenerateToken(user);
 
@@ -182,7 +186,7 @@ public static class AuthEndpoints
         LoginRequest request,
         IUserStore users,
         JwtService jwt,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var errors = new List<ApiFieldError>();
@@ -201,10 +205,9 @@ public static class AuthEndpoints
         var user = await users.FindByEmailAsync(email, ct);
         if (user is null || user.PasswordHash is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
         {
-            await audit.LogAsync(
-                AuditEventTypes.UserLoginFailed, null, null,
-                "User", null,
-                new { email }, ct);
+            await events.PublishAsync(new UserLoginFailedEvent(
+                Email: email,
+                OccurredAt: DateTime.UtcNow), ct);
 
             return Results.Json(new
             {
@@ -217,9 +220,11 @@ public static class AuthEndpoints
             }, statusCode: 401);
         }
 
-        await audit.LogAsync(
-            AuditEventTypes.UserLoggedIn, user.Id, user.Username,
-            "User", user.Id, null, ct);
+        await events.PublishAsync(new UserLoggedInEvent(
+            UserId: user.Id,
+            Username: user.Username,
+            Provider: null,
+            OccurredAt: DateTime.UtcNow), ct);
 
         var token = jwt.GenerateToken(user);
 
@@ -307,7 +312,7 @@ public static class AuthEndpoints
         CreateApiTokenRequest request,
         UserContext userContext,
         IApiTokenStore apiTokens,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         CancellationToken ct)
     {
@@ -366,10 +371,12 @@ public static class AuthEndpoints
 
         await apiTokens.CreateAsync(apiToken, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ApiTokenCreated, userId, user.Username,
-            "ApiToken", apiToken.Id,
-            new { name = apiToken.Name }, ct);
+        await events.PublishAsync(new ApiTokenCreatedEvent(
+            TokenId: apiToken.Id,
+            UserId: userId,
+            TokenName: apiToken.Name,
+            ActorUsername: user.Username,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Created($"/api/v1/auth/tokens", new ApiTokenCreatedResponse
         {
@@ -407,7 +414,7 @@ public static class AuthEndpoints
         Guid id,
         UserContext userContext,
         IApiTokenStore apiTokens,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var userId = userContext.TryGetCurrentUserId();
@@ -422,10 +429,12 @@ public static class AuthEndpoints
 
         await apiTokens.RevokeAsync(id, ct);
 
-        await audit.LogAsync(
-            AuditEventTypes.ApiTokenRevoked, userId, userContext.GetUsername(),
-            "ApiToken", id,
-            new { name = token.Name }, ct);
+        await events.PublishAsync(new ApiTokenRevokedEvent(
+            TokenId: id,
+            ActorId: userId.Value,
+            ActorUsername: userContext.GetUsername(),
+            TokenName: token.Name,
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.NoContent();
     }

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -80,7 +81,7 @@ public static class OidcEndpoints
         IUserStore users,
         JwtService jwt,
         ISystemSettingStore settings,
-        AuditService audit,
+        IDomainEventBus events,
         TierService tierService,
         CancellationToken ct)
     {
@@ -168,16 +169,20 @@ public static class OidcEndpoints
 
             await users.CreateAsync(user, ct);
 
-            await audit.LogAsync(
-                AuditEventTypes.UserRegistered, user.Id, user.Username,
-                "User", user.Id,
-                new { provider, isFirstUser, viaOidc = true }, ct);
+            await events.PublishAsync(new UserRegisteredEvent(
+                UserId: user.Id,
+                Username: user.Username,
+                IsFirstUser: isFirstUser,
+                IsAdmin: user.IsAdmin,
+                Provider: provider,
+                OccurredAt: DateTime.UtcNow), ct);
         }
 
-        await audit.LogAsync(
-            AuditEventTypes.UserLoggedIn, user.Id, user.Username,
-            "User", user.Id,
-            new { provider, viaOidc = true }, ct);
+        await events.PublishAsync(new UserLoggedInEvent(
+            UserId: user.Id,
+            Username: user.Username,
+            Provider: provider,
+            OccurredAt: DateTime.UtcNow), ct);
 
         // Issue JWT for the user
         var token = jwt.GenerateToken(user);

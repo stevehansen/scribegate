@@ -8,6 +8,7 @@ using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 
 namespace Scribegate.Web.Api;
@@ -75,7 +76,7 @@ public static class SiteEndpoints
         IMediaAssetStore mediaAssetStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         IWebHostEnvironment env,
         ILoggerFactory loggerFactory,
         CancellationToken ct)
@@ -263,17 +264,16 @@ public static class SiteEndpoints
         }
 
         // Audit after the zip has been fully composed so totals are real.
-        await audit.LogAsync(
-            AuditEventTypes.SiteGenerated, userId, userContext.GetUsername(),
-            "Repository", repo.Id,
-            new
-            {
-                owner,
-                slug = repo.Slug,
-                documentCount = generatedCount,
-                sizeBytes = totalBytes,
-                sizeCapReached = overflow,
-            }, ct);
+        await events.PublishAsync(new SiteGeneratedEvent(
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            DocumentCount: generatedCount,
+            SizeBytes: totalBytes,
+            SizeCapReached: overflow,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Stream(tempStream, "application/zip", fileName);
     }

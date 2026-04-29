@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Stores;
 
 namespace Scribegate.Web.Api;
@@ -29,7 +30,7 @@ public static class ExportEndpoints
         IRevisionStore revisionStore,
         AuthorizationHelper authz,
         UserContext userContext,
-        AuditService audit,
+        IDomainEventBus events,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -136,17 +137,16 @@ public static class ExportEndpoints
 
         // Audit after the zip has been fully composed so totals reflect what
         // the caller actually received — mirrors SiteEndpoints.GenerateSite.
-        await audit.LogAsync(
-            AuditEventTypes.RepositoryExported, userId, userContext.GetUsername(),
-            "Repository", repo.Id,
-            new
-            {
-                owner,
-                slug = repo.Slug,
-                documentCount = exportedCount,
-                sizeBytes = totalBytes,
-                sizeCapReached = overflow,
-            }, ct);
+        await events.PublishAsync(new RepositoryExportedEvent(
+            RepositoryId: repo.Id,
+            RepositoryOwner: owner,
+            RepositorySlug: repo.Slug,
+            DocumentCount: exportedCount,
+            SizeBytes: totalBytes,
+            SizeCapReached: overflow,
+            ActorId: userId,
+            ActorUsername: userContext.GetUsername(),
+            OccurredAt: DateTime.UtcNow), ct);
 
         return Results.Stream(tempStream, "application/zip", fileName);
     }

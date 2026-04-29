@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
+using Scribegate.Core.Events;
 using Scribegate.Core.Services;
 using Xunit;
 
@@ -125,8 +126,10 @@ public class ProposalApprovalServiceTests
         ctx.LastMergeOutcome!.Document.CurrentRevisionId.Should().Be(merged.RevisionId);
         ctx.LastMergeOutcome.Proposal.Status.Should().Be(ProposalStatus.Approved);
         ctx.LastMergeOutcome.Signature.RevisionId.Should().Be(merged.RevisionId);
-        ctx.EmittedEvent.Should().NotBeNull();
-        ctx.EmittedEvent!.ApprovalCount.Should().Be(1);
+        ctx.PublishedEvent.Should().NotBeNull();
+        ctx.PublishedEvent!.ApprovalCount.Should().Be(1);
+        ctx.PublishedEvent.RevisionId.Should().Be(merged.RevisionId);
+        ctx.PublishedEvent.DocumentId.Should().Be(merged.DocumentId);
     }
 
     [Fact]
@@ -204,7 +207,7 @@ internal sealed class InMemoryProposalApprovalContext(
     public bool MergeWasPersisted { get; private set; }
     public bool LastMergeWasNewDocument { get; private set; }
     public MergeOutcome? LastMergeOutcome { get; private set; }
-    public ApprovalEmittedEvent? EmittedEvent { get; private set; }
+    public ProposalMergedEvent? PublishedEvent { get; private set; }
 
     private readonly Dictionary<(Guid, string), Document> _byPath = [];
 
@@ -239,17 +242,12 @@ internal sealed class InMemoryProposalApprovalContext(
             ContentHash = "0",
         };
 
-    public Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, CancellationToken ct)
+    public Task PersistMergeAsync(MergeOutcome outcome, bool documentIsNew, ProposalMergedEvent merged, CancellationToken ct)
     {
         MergeWasPersisted = true;
         LastMergeWasNewDocument = documentIsNew;
         LastMergeOutcome = outcome;
-        return Task.CompletedTask;
-    }
-
-    public Task EmitMergedEventsAsync(ApprovalEmittedEvent evt, CancellationToken ct)
-    {
-        EmittedEvent = evt;
+        PublishedEvent = merged;
         return Task.CompletedTask;
     }
 

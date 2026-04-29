@@ -1,5 +1,6 @@
 using Scribegate.Core;
 using Scribegate.Core.Entities;
+using Scribegate.Core.Events;
 using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Api;
@@ -8,8 +9,10 @@ namespace Scribegate.Web.Services;
 
 /// <summary>
 /// Production adapter for <see cref="IDocumentCommandContext"/>. Composes the
-/// existing stores plus the signature, frontmatter, tier, audit, and webhook
-/// services. Mirrors <c>EfProposalApprovalContext</c>'s shape.
+/// existing stores plus the signature, frontmatter, and tier services. The
+/// audit + webhook fan-out runs through the domain-event bus
+/// (<see cref="DocumentCreatedEvent"/> / <see cref="DocumentUpdatedEvent"/>),
+/// matching the shape <c>EfProposalApprovalContext</c> uses.
 /// </summary>
 public sealed class EfDocumentCommandContext(
     IRepositoryStore repos,
@@ -19,8 +22,7 @@ public sealed class EfDocumentCommandContext(
     IUserStore users,
     SignatureService signatureService,
     TierService tierService,
-    AuditService audit,
-    IWebhookDispatcher webhooks)
+    IDomainEventBus bus)
     : IDocumentCommandContext
 {
     public Task<Repository?> FindRepositoryAsync(string owner, string repoSlug, CancellationToken ct)
@@ -78,57 +80,34 @@ public sealed class EfDocumentCommandContext(
         await documents.UpdateAsync(document, ct);
     }
 
-    public async Task EmitDocumentCreatedAsync(DocumentEmittedEvent evt, CancellationToken ct)
-    {
-        await audit.LogAsync(
-            AuditEventTypes.DocumentCreated,
-            evt.ActorId,
-            evt.ActorUsername,
-            "Document",
-            evt.Document.Id,
-            new
-            {
-                owner = evt.Owner,
-                path = evt.Document.Path,
-                repositorySlug = evt.Repository.Slug,
-            },
-            ct);
+    public Task EmitDocumentCreatedAsync(DocumentEmittedEvent evt, CancellationToken ct) =>
+        bus.PublishAsync(new DocumentCreatedEvent(
+            DocumentId: evt.Document.Id,
+            RepositoryId: evt.Repository.Id,
+            DocumentPath: evt.Document.Path,
+            CurrentRevisionId: evt.Document.CurrentRevisionId,
+            RepositoryOwner: evt.Owner,
+            RepositorySlug: evt.Repository.Slug,
+            RepositoryName: evt.Repository.Name,
+            ActorId: evt.ActorId,
+            ActorUsername: evt.ActorUsername,
+            OccurredAt: DateTime.UtcNow), ct);
 
-        webhooks.Dispatch(WebhookEventTypes.DocumentCreated, evt.Repository.Id, new
-        {
-            repository = new { id = evt.Repository.Id, slug = evt.Repository.Slug, name = evt.Repository.Name },
-            document = new { id = evt.Document.Id, path = evt.Document.Path, revisionId = evt.Document.CurrentRevisionId },
-            actor = new { id = evt.ActorId, username = evt.ActorUsername },
-            timestamp = DateTime.UtcNow,
-        });
-    }
-
-    public async Task EmitDocumentUpdatedAsync(DocumentEmittedEvent evt, CancellationToken ct)
+    public Task EmitDocumentUpdatedAsync(DocumentEmittedEvent evt, CancellationToken ct)
     {
         if (evt.Revision is null)
             throw new InvalidOperationException("DocumentUpdated event requires a revision.");
 
-        await audit.LogAsync(
-            AuditEventTypes.DocumentUpdated,
-            evt.ActorId,
-            evt.ActorUsername,
-            "Document",
-            evt.Document.Id,
-            new
-            {
-                path = evt.Document.Path,
-                revisionId = evt.Revision.Id,
-                message = evt.Revision.Message,
-            },
-            ct);
-
-        webhooks.Dispatch(WebhookEventTypes.DocumentUpdated, evt.Repository.Id, new
-        {
-            repository = new { id = evt.Repository.Id, slug = evt.Repository.Slug, name = evt.Repository.Name },
-            document = new { id = evt.Document.Id, path = evt.Document.Path, revisionId = evt.Revision.Id },
-            revision = new { id = evt.Revision.Id, message = evt.Revision.Message },
-            actor = new { id = evt.ActorId, username = evt.ActorUsername },
-            timestamp = DateTime.UtcNow,
-        });
+        return bus.PublishAsync(new DocumentUpdatedEvent(
+            DocumentId: evt.Document.Id,
+            RepositoryId: evt.Repository.Id,
+            DocumentPath: evt.Document.Path,
+            RevisionId: evt.Revision.Id,
+            RevisionMessage: evt.Revision.Message,
+            RepositorySlug: evt.Repository.Slug,
+            RepositoryName: evt.Repository.Name,
+            ActorId: evt.ActorId,
+            ActorUsername: evt.ActorUsername,
+            OccurredAt: DateTime.UtcNow), ct);
     }
 }
