@@ -44,6 +44,16 @@ public class ParityTheoryTests
             yield return new TheoryDataRow<string, string>(c.Id, c.Markdown);
     }
 
+    // Cross-pipeline parity is asserted only on entries tagged
+    // parity: "exact" in corpus.json. The known-divergent entries
+    // ("diverges") are listed in docs/markdown.md.
+    public static IEnumerable<TheoryDataRow<string>> ParityExactCorpus()
+    {
+        foreach (var c in CorpusLoader.Load())
+            if (c.Parity == "exact")
+                yield return new TheoryDataRow<string>(c.Id);
+    }
+
     [Theory]
     [MemberData(nameof(Corpus))]
     public void MarkdigOutput_MatchesGolden(string id, string markdown)
@@ -67,15 +77,31 @@ public class ParityTheoryTests
             $"golden mismatch for '{id}'. If this is intentional, delete {goldenPath} and re-run to refresh.");
     }
 
-    // Cross-side divergence — stubbed. See docs/markdown.md for the known
-    // Markdig vs. marked differences (GFM extensions, footnote syntax, etc.).
-    [Fact(Skip = "TODO: cross-compare Markdig and marked goldens. See docs/markdown.md for known divergences.")]
-    public void Markdig_And_Marked_Agree()
+    // Cross-pipeline parity: load the two committed goldens and assert byte
+    // equality for entries tagged parity: "exact". Both sides seed their
+    // own golden when missing, so this only runs once both pipelines have
+    // produced output for the id.
+    [Theory]
+    [MemberData(nameof(ParityExactCorpus))]
+    public void Markdig_And_Marked_Agree(string id)
     {
+        var markdigPath = Path.Combine(FixtureRoot.Get(), "markdig-golden", $"{id}.html");
+        var markedPath = Path.Combine(FixtureRoot.Get(), "marked-golden", $"{id}.html");
+
+        File.Exists(markdigPath).Should().BeTrue(
+            $"missing markdig golden for '{id}'. Run the .NET parity theory locally to seed it.");
+        File.Exists(markedPath).Should().BeTrue(
+            $"missing marked golden for '{id}'. Run the Vitest parity test locally to seed it.");
+
+        var markdig = File.ReadAllText(markdigPath);
+        var marked = File.ReadAllText(markedPath);
+
+        markdig.Should().Be(marked,
+            $"Markdig and marked emit different HTML for '{id}'. If this is a real divergence, change corpus.json's parity to 'diverges' and document it in docs/markdown.md.");
     }
 }
 
-internal sealed record MarkdownCase(string Id, string Description, string Markdown);
+internal sealed record MarkdownCase(string Id, string Description, string Markdown, string Parity = "exact");
 
 internal static class CorpusLoader
 {

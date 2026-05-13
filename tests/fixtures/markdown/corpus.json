@@ -2,41 +2,121 @@
   {
     "id": "paragraph-plain",
     "description": "Plain paragraph",
-    "markdown": "Hello world."
+    "markdown": "Hello world.",
+    "parity": "exact"
   },
   {
-    "id": "heading-atx-h2",
-    "description": "ATX heading level 2",
-    "markdown": "## Section title"
+    "id": "paragraph-multi",
+    "description": "Two paragraphs separated by a blank line",
+    "markdown": "First paragraph.\n\nSecond paragraph.",
+    "parity": "exact"
+  },
+  {
+    "id": "emphasis-bold",
+    "description": "Bold emphasis with **",
+    "markdown": "This is **bold** text.",
+    "parity": "exact"
+  },
+  {
+    "id": "emphasis-italic",
+    "description": "Italic emphasis with *",
+    "markdown": "This is *italic* text.",
+    "parity": "exact"
+  },
+  {
+    "id": "emphasis-bold-italic",
+    "description": "Bold and italic combined",
+    "markdown": "This is ***both*** emphasised.",
+    "parity": "exact"
+  },
+  {
+    "id": "inline-code",
+    "description": "Inline code with backticks",
+    "markdown": "Use `printf()` to print.",
+    "parity": "exact"
   },
   {
     "id": "code-fenced-no-lang",
     "description": "Fenced code block with no language",
-    "markdown": "```\nlet x = 1;\n```"
+    "markdown": "```\nlet x = 1;\n```",
+    "parity": "exact"
   },
   {
     "id": "code-fenced-csharp",
     "description": "Fenced code block with language=csharp",
-    "markdown": "```csharp\nvar x = 1;\n```"
+    "markdown": "```csharp\nvar x = 1;\n```",
+    "parity": "exact"
   },
   {
-    "id": "table-gfm",
-    "description": "GFM pipe table",
-    "markdown": "| Col | Val |\n| --- | --- |\n| a   | 1   |"
+    "id": "blockquote-simple",
+    "description": "Single-line blockquote",
+    "markdown": "> Quoted line.",
+    "parity": "exact"
   },
   {
-    "id": "task-list",
-    "description": "GFM task list",
-    "markdown": "- [x] done\n- [ ] todo"
+    "id": "list-unordered",
+    "description": "Unordered list with three items",
+    "markdown": "- alpha\n- beta\n- gamma",
+    "parity": "exact"
+  },
+  {
+    "id": "list-ordered",
+    "description": "Ordered list with three items",
+    "markdown": "1. first\n2. second\n3. third",
+    "parity": "exact"
   },
   {
     "id": "link-inline",
     "description": "Inline link",
-    "markdown": "See [the site](https://scribegate.dev) for details."
+    "markdown": "See [the site](https://scribegate.dev) for details.",
+    "parity": "exact"
+  },
+  {
+    "id": "link-with-title",
+    "description": "Inline link with title attribute",
+    "markdown": "See [the site](https://scribegate.dev \"Scribegate home\") for details.",
+    "parity": "exact"
+  },
+  {
+    "id": "escaped-html-chars",
+    "description": "Literal <angle> tag in text — Markdig escapes via DisableHtml, DOMPurify strips the unknown tag entirely",
+    "markdown": "Use <angle> brackets carefully.",
+    "parity": "diverges"
+  },
+  {
+    "id": "ampersand-escape",
+    "description": "Literal ampersand outside an entity",
+    "markdown": "Ben & Jerry's.",
+    "parity": "exact"
+  },
+  {
+    "id": "heading-atx-h2",
+    "description": "ATX heading level 2 — Markdig adds auto-id anchor; marked does not",
+    "markdown": "## Section title",
+    "parity": "diverges"
+  },
+  {
+    "id": "table-gfm",
+    "description": "GFM pipe table — Markdig and marked emit different whitespace between rows",
+    "markdown": "| Col | Val |\n| --- | --- |\n| a   | 1   |",
+    "parity": "diverges"
+  },
+  {
+    "id": "task-list",
+    "description": "GFM task list — Markdig adds task-list-item classes; marked does not",
+    "markdown": "- [x] done\n- [ ] todo",
+    "parity": "diverges"
   },
   {
     "id": "image-bare-filename",
-    "description": "Image with bare filename (media-by-name resolution candidate)",
-    "markdown": "![diagram](diagram.png)"
+    "description": "Image with bare filename — Markdig self-closes <img/>, marked uses <img>",
+    "markdown": "![diagram](diagram.png)",
+    "parity": "diverges"
+  },
+  {
+    "id": "thematic-break",
+    "description": "Thematic break — Markdig emits <hr />, marked emits <hr>",
+    "markdown": "Before.\n\n---\n\nAfter.",
+    "parity": "diverges"
   }
 ]

@@ -7,8 +7,9 @@
 // First run: golden is created from the actual output.
 // Subsequent runs: byte-for-byte equality is asserted.
 //
-// Cross-side divergence (Markdig vs marked) is tracked as a TODO and
-// documented in docs/markdown.md.
+// Cross-pipeline parity (Markdig vs marked byte equality on parity: "exact"
+// entries) is asserted in the .NET ParityTheoryTests — there's no need for
+// a duplicate check here.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -45,6 +46,7 @@ interface Corpus {
   id: string;
   description: string;
   markdown: string;
+  parity?: 'exact' | 'diverges';
 }
 
 // The corpus ships at the repo root, shared with the .NET Markdig parity test.
@@ -80,11 +82,4 @@ describe('markdown parity — marked pipeline', () => {
       expect(clean).toBe(expected);
     });
   }
-
-  // TODO: cross-compare Markdig and marked outputs once the corpus grows.
-  // The current Markdig pipeline adds GFM footnotes + figures; marked does
-  // not. See docs/markdown.md for the known divergence table.
-  it.skip('Markdig and marked agree across corpus (TODO)', () => {
-    // intentionally empty — tracked in docs/markdown.md.
-  });
 });
