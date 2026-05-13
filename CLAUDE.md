@@ -49,18 +49,18 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 8 — "Polish & Parity" (In progress)**
+**Milestone 8 — "Polish & Parity" (Complete)**
 
-Consolidation milestone: close out M7's deferrals (Playwright E2E, coverage threshold + badge) and the remaining `docs/markdown.md` rendering divergences before moving on to bigger two-way-door work (multi-document proposals, RavenDB adapter, managed-hosting prep). No new domain entities, no new resources, no migrations.
+Consolidation milestone: closed out M7's deferrals (Playwright E2E, coverage threshold + badge) and the four `docs/markdown.md` rendering divergences before moving on to bigger two-way-door work (multi-document proposals, RavenDB adapter, managed-hosting prep). No new domain entities, no new resources, no migrations.
 
 - [x] Playwright E2E smoke suite — single golden-path spec (register → create repo → create doc → submit proposal → approve) in `tests/Scribegate.E2E/`, run as the `test-e2e` CI job. A second user is registered out-of-band and added as Reviewer to drive the approve step, since the API forbids self-review. Auth variants and full-feature coverage deliberately out of scope.
 - [x] Coverage threshold + badge — soft floor per layer in `coverage-thresholds.json` enforced by `scripts/check-coverage.mjs` in both `test-dotnet` and `test-frontend`. A `coverage-badge` job on `main` aggregates the Cobertura artifacts (weighted by lines-valid), writes a Shields-endpoint `coverage.json`, and force-pushes it to the `coverage-data` orphan branch. README and `docs/testing.md` updated. Hard targets deferred.
 - [x] Activate Markdig ↔ marked parity test — corpus expanded to 20 entries; each tagged `parity: "exact"` (14) or `"diverges"` (6). `Markdig_And_Marked_Agree` is now a real Theory over the exact set asserting byte equality between the two committed goldens. Vitest's placeholder `it.skip` removed. `docs/markdown.md` divergence #3 marked fixed.
 - [x] `UseMediaLinks` divergence fix on client — `sg-markdown-view._upgradeVideoImages()` walks the rendered DOM after `_resolveMediaReferences` and replaces matching `<img>` elements with `<video controls preload="metadata">`. Alt text becomes `aria-label`; query strings/fragments tolerated; `data:`/`blob:` skipped. No DOMPurify config change needed because the upgrade runs imperatively after sanitisation. `docs/markdown.md` divergence #1 marked fixed.
 - [x] Share-link media resolution — `GET /api/v1/shares/{token}` now exposes `repositoryOwner` + `repositorySlug`. New anonymous `GET /api/v1/shares/{token}/media/by-name/{fileName}` streams assets scoped to the share's repo (revoked/expired tokens 404). `sg-markdown-view` takes a `shareToken` property; `sg-share-page` wires it through so relative image refs resolve in public viewers.
-- [ ] KaTeX dynamic import — lazy-load KaTeX + `marked-katex-extension` only when the source contains `$…$`. Drops ~270 KB gzip from the main SPA chunk.
+- [x] KaTeX dynamic import — `lib/katex-lazy.ts` defers `katex`, `marked-katex-extension`, and the KaTeX stylesheet to the first content render that matches `$…$` / `$$…$$`. `sg-markdown-view.willUpdate` kicks the (idempotent) registration and re-renders on completion; the stylesheet is injected once into `<head>`. Vite splits KaTeX into its own chunk — math-free pages never load it. `docs/markdown.md` divergence #4 marked fixed.
 
-Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), and 7 (Proof & Prevention) are complete.
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), 7 (Proof & Prevention), and 8 (Polish & Parity) are complete.
 
 M7 delivered:
 - [x] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI

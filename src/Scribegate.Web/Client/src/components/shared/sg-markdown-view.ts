@@ -1,12 +1,12 @@
-import { LitElement, html, css, unsafeCSS } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import katexStyles from 'katex/dist/katex.min.css?inline';
 import { boxReset } from '../../styles/shared.js';
 import { highlightAllUnder } from '../../lib/highlight.js';
 import { renderMermaidBlocks } from '../../lib/mermaid.js';
+import { ensureKatexRegistered, hasMath } from '../../lib/katex-lazy.js';
 import '../../lib/markdown-extensions.js';
 
 // marked v15 has GFM enabled by default (tables, strikethrough, task lists, autolinks).
@@ -74,7 +74,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 
 @customElement('sg-markdown-view')
 export class SgMarkdownView extends LitElement {
-  static styles = [boxReset, unsafeCSS(katexStyles), css`
+  static styles = [boxReset, css`
     :host { display: block; line-height: 1.7; color: var(--sg-text); }
     h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; line-height: 1.3; color: var(--sg-text); }
     h1 { font-size: 1.875rem; border-bottom: 1px solid var(--sg-border); padding-bottom: 0.375rem; }
@@ -173,6 +173,20 @@ export class SgMarkdownView extends LitElement {
   // values resolve through the anonymous share-scoped media endpoint
   // instead of the repository-scoped one (which requires auth).
   @property() shareToken = '';
+
+  // Tracks whether marked-katex-extension has been registered on the marked
+  // singleton via the lazy loader. Re-rendering after first registration
+  // upgrades the visible math from raw `$…$` to KaTeX HTML.
+  private _katexLoadingFor: string | null = null;
+
+  willUpdate(changed: Map<string, unknown>) {
+    super.willUpdate(changed);
+    if (!changed.has('content')) return;
+    if (!hasMath(this.content)) return;
+    if (this._katexLoadingFor === this.content) return;
+    this._katexLoadingFor = this.content;
+    void ensureKatexRegistered().then(() => this.requestUpdate());
+  }
 
   render() {
     const rendered = renderMarkdown(this.content);

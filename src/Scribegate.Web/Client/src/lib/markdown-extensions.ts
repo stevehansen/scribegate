@@ -1,21 +1,14 @@
 // Marked extensions that bring the SPA renderer to parity with the server-side
-// Markdig pipeline: footnotes, definition lists, KaTeX math, and GitHub-style
-// emoji shortcodes. Registered once as a side effect of importing this module.
+// Markdig pipeline: footnotes, definition lists, and GitHub-style emoji
+// shortcodes. Registered once as a side effect of importing this module.
+//
+// KaTeX (~270 KB gzip) lives in lib/katex-lazy.ts and is registered on
+// demand the first time sg-markdown-view detects math in a document.
 import { marked, type Tokens } from 'marked';
 import markedFootnote from 'marked-footnote';
-import markedKatex from 'marked-katex-extension';
 import { get as getEmoji } from 'node-emoji';
 
 marked.use(markedFootnote());
-
-marked.use(
-  markedKatex({
-    // Render pure HTML — MathML tags would need extra DOMPurify allowances and
-    // the visible output is the HTML span tree anyway.
-    output: 'html',
-    throwOnError: false,
-  }),
-);
 
 marked.use({
   extensions: [emojiExtension(), deflistExtension()],
