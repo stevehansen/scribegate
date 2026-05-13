@@ -57,7 +57,7 @@ Consolidation milestone: close out M7's deferrals (Playwright E2E, coverage thre
 - [x] Coverage threshold + badge — soft floor per layer in `coverage-thresholds.json` enforced by `scripts/check-coverage.mjs` in both `test-dotnet` and `test-frontend`. A `coverage-badge` job on `main` aggregates the Cobertura artifacts (weighted by lines-valid), writes a Shields-endpoint `coverage.json`, and force-pushes it to the `coverage-data` orphan branch. README and `docs/testing.md` updated. Hard targets deferred.
 - [x] Activate Markdig ↔ marked parity test — corpus expanded to 20 entries; each tagged `parity: "exact"` (14) or `"diverges"` (6). `Markdig_And_Marked_Agree` is now a real Theory over the exact set asserting byte equality between the two committed goldens. Vitest's placeholder `it.skip` removed. `docs/markdown.md` divergence #3 marked fixed.
 - [x] `UseMediaLinks` divergence fix on client — `sg-markdown-view._upgradeVideoImages()` walks the rendered DOM after `_resolveMediaReferences` and replaces matching `<img>` elements with `<video controls preload="metadata">`. Alt text becomes `aria-label`; query strings/fragments tolerated; `data:`/`blob:` skipped. No DOMPurify config change needed because the upgrade runs imperatively after sanitisation. `docs/markdown.md` divergence #1 marked fixed.
-- [ ] Share-link media resolution — `GET /api/v1/shares/{token}` exposes owner/slug; new share-scoped `GET /api/v1/shares/{token}/media/by-name/{fileName}` resolves relative media refs in public share pages.
+- [x] Share-link media resolution — `GET /api/v1/shares/{token}` now exposes `repositoryOwner` + `repositorySlug`. New anonymous `GET /api/v1/shares/{token}/media/by-name/{fileName}` streams assets scoped to the share's repo (revoked/expired tokens 404). `sg-markdown-view` takes a `shareToken` property; `sg-share-page` wires it through so relative image refs resolve in public viewers.
 - [ ] KaTeX dynamic import — lazy-load KaTeX + `marked-katex-extension` only when the source contains `$…$`. Drops ~270 KB gzip from the main SPA chunk.
 
 Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), and 7 (Proof & Prevention) are complete.
@@ -260,6 +260,7 @@ POST   /api/v1/repositories/{owner}/{slug}/shares                   # Create sha
 GET    /api/v1/repositories/{owner}/{slug}/shares                   # List share links (?path= for one doc) [auth]
 DELETE /api/v1/repositories/{owner}/{slug}/shares/{id}              # Revoke share link [creator/admin]
 GET    /api/v1/shares/{token}                                       # Resolve public share link (anonymous, rate-limited)
+GET    /api/v1/shares/{token}/media/by-name/{fileName}              # Resolve share-scoped media by filename (anonymous, rate-limited)
 
 POST   /api/v1/repositories/{owner}/{slug}/webhooks                 # Create webhook [repo admin]
 GET    /api/v1/repositories/{owner}/{slug}/webhooks                 # List webhooks [repo admin]

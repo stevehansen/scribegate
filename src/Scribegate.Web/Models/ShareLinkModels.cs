@@ -43,6 +43,7 @@ public sealed class ShareLinkListResponse
 
 public sealed class PublicShareLinkResponse
 {
+    public required string RepositoryOwner { get; init; }
     public required string RepositorySlug { get; init; }
     public required string RepositoryName { get; init; }
     public required string DocumentPath { get; init; }

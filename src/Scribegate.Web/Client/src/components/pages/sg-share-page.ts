@@ -95,7 +95,13 @@ export class SgSharePage extends LitElement {
         </div>
       </header>
 
-      <sg-markdown-view content=${this._data.content}></sg-markdown-view>
+      <sg-markdown-view
+        .content=${this._data.content}
+        owner=${this._data.repositoryOwner}
+        slug=${this._data.repositorySlug}
+        documentPath=${this._data.documentPath}
+        shareToken=${this._token}
+      ></sg-markdown-view>
     `;
   }
 }

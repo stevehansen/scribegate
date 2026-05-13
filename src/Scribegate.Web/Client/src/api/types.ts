@@ -275,6 +275,7 @@ export interface ShareLinkListResponse {
 }
 
 export interface PublicShareLinkResponse {
+  repositoryOwner: string;
   repositorySlug: string;
   repositoryName: string;
   documentPath: string;

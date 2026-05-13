@@ -21,6 +21,9 @@ public static class ShareLinkEndpoints
             .WithTags("ShareLinks");
 
         publicGroup.MapGet("/{token}", ResolveShareLink).AllowAnonymous().RequireRateLimiting("share-resolve");
+        publicGroup.MapGet("/{token}/media/by-name/{fileName}", ResolveShareMediaByName)
+            .AllowAnonymous()
+            .RequireRateLimiting("share-resolve");
 
         return repoGroup;
     }
@@ -288,6 +291,9 @@ public static class ShareLinkEndpoints
         // cannot leak secondary state or change what we return.
         var response = new PublicShareLinkResponse
         {
+            // Owner is eagerly included by IShareLinkStore.GetByTokenHashAsync;
+            // the null-forgiving `!` reflects that contract.
+            RepositoryOwner = link.Repository.Owner!.Username,
             RepositorySlug = link.Repository.Slug,
             RepositoryName = link.Repository.Name,
             DocumentPath = link.Document.Path,
@@ -324,6 +330,43 @@ public static class ShareLinkEndpoints
         }
 
         return Results.Ok(response);
+    }
+
+    // Share-scoped media resolution. Lets the public share viewer turn a bare
+    // `![diagram](diagram.png)` reference inside the shared document into a
+    // streaming download — without exposing any other repository's assets,
+    // and without granting a logged-out viewer access to repo internals
+    // beyond the media files already implicitly shared by the document.
+    private static async Task<IResult> ResolveShareMediaByName(
+        string token,
+        string fileName,
+        IShareLinkStore shareLinkStore,
+        IMediaAssetStore mediaAssets,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)
+            || fileName.Contains('/')
+            || fileName.Contains('\\')
+            || fileName.Contains('\0')
+            || fileName == "." || fileName == "..")
+            return ShareNotFound();
+
+        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix))
+            return ShareNotFound();
+
+        var tokenHash = ShareLinkTokenService.HashToken(token);
+        var link = await shareLinkStore.GetByTokenHashAsync(tokenHash, ct);
+        if (link is null) return ShareNotFound();
+        if (link.RevokedAt.HasValue) return ShareNotFound();
+        if (link.ExpiresAt.HasValue && link.ExpiresAt.Value < DateTime.UtcNow)
+            return ShareNotFound();
+
+        var asset = await mediaAssets.FindLatestByFileNameAsync(link.RepositoryId, fileName, ct);
+        if (asset is null) return ShareNotFound();
+
+        if (!File.Exists(asset.StoragePath)) return ShareNotFound();
+
+        return Results.File(asset.StoragePath, asset.ContentType, asset.FileName);
     }
 
     private static IResult ShareNotFound() =>

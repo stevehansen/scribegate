@@ -7,7 +7,7 @@
 // the exported helper that carries the security-relevant logic.
 
 import { describe, it, expect } from 'vitest';
-import { resolveRelativeDocumentHref, resolveRelativeMediaSrc, isVideoSrc } from './sg-markdown-view.js';
+import { resolveRelativeDocumentHref, resolveRelativeMediaSrc, resolveShareMediaSrc, isVideoSrc } from './sg-markdown-view.js';
 
 describe('resolveRelativeDocumentHref', () => {
   it('rewrites top-level README links against the repository root', () => {
@@ -67,6 +67,24 @@ describe('resolveRelativeMediaSrc', () => {
   it('encodes weird characters in the filename', () => {
     const out = resolveRelativeMediaSrc('a b.png', 'alice', 'docs');
     expect(out).toBe('/api/v1/repositories/alice/docs/media/by-name/a%20b.png');
+  });
+});
+
+describe('resolveShareMediaSrc', () => {
+  it('rewrites a bare filename to the share-scoped media endpoint', () => {
+    const out = resolveShareMediaSrc('diagram.png', 'sg_token_xyz');
+    expect(out).toBe('/api/v1/shares/sg_token_xyz/media/by-name/diagram.png');
+  });
+
+  it('returns null when the share token is missing', () => {
+    expect(resolveShareMediaSrc('diagram.png', '')).toBeNull();
+  });
+
+  it('shares the validation rules with the repo-scoped resolver', () => {
+    expect(resolveShareMediaSrc('/x.png', 'sg_token_xyz')).toBeNull();
+    expect(resolveShareMediaSrc('https://example.com/x.png', 'sg_token_xyz')).toBeNull();
+    expect(resolveShareMediaSrc('data:image/png;base64,xyz', 'sg_token_xyz')).toBeNull();
+    expect(resolveShareMediaSrc('a/b.png', 'sg_token_xyz')).toBeNull();
   });
 });
 

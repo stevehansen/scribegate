@@ -169,6 +169,10 @@ export class SgMarkdownView extends LitElement {
   // When set alongside owner/slug, relative <a href> values are rewritten as
   // if the markdown were opened at its canonical document route.
   @property() documentPath = '';
+  // Set on public share-link pages — when present, relative <img src>
+  // values resolve through the anonymous share-scoped media endpoint
+  // instead of the repository-scoped one (which requires auth).
+  @property() shareToken = '';
 
   render() {
     const rendered = renderMarkdown(this.content);
@@ -207,11 +211,12 @@ export class SgMarkdownView extends LitElement {
   }
 
   private _resolveMediaReferences() {
-    if (!this.owner || !this.slug) return;
     const imgs = this.renderRoot.querySelectorAll<HTMLImageElement>('img');
     for (const img of Array.from(imgs)) {
       const src = img.getAttribute('src') ?? '';
-      const resolved = resolveRelativeMediaSrc(src, this.owner, this.slug);
+      const resolved = this.shareToken
+        ? resolveShareMediaSrc(src, this.shareToken)
+        : (this.owner && this.slug ? resolveRelativeMediaSrc(src, this.owner, this.slug) : null);
       if (resolved && resolved !== src) img.setAttribute('src', resolved);
     }
   }
@@ -273,6 +278,22 @@ export function resolveRelativeDocumentHref(
 // for anything that must pass through unchanged (absolute URL paths, scheme-
 // qualified URLs, data/blob URIs, or anything containing a path separator).
 export function resolveRelativeMediaSrc(src: string, owner: string, slug: string): string | null {
+  const trimmed = filenameOrNull(src);
+  if (trimmed === null) return null;
+  return `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/media/by-name/${encodeURIComponent(trimmed)}`;
+}
+
+// Share-scoped variant: same rules as resolveRelativeMediaSrc, but the URL
+// points at the anonymous /api/v1/shares/{token}/media/by-name route so
+// public share-link viewers don't need to be authenticated to load images.
+export function resolveShareMediaSrc(src: string, token: string): string | null {
+  if (!token) return null;
+  const trimmed = filenameOrNull(src);
+  if (trimmed === null) return null;
+  return `/api/v1/shares/${encodeURIComponent(token)}/media/by-name/${encodeURIComponent(trimmed)}`;
+}
+
+function filenameOrNull(src: string): string | null {
   if (!src) return null;
   if (src.startsWith('http://') || src.startsWith('https://')) return null;
   if (src.startsWith('//') || src.startsWith('/')) return null;
@@ -281,6 +302,5 @@ export function resolveRelativeMediaSrc(src: string, owner: string, slug: string
   const trimmed = src.startsWith('./') ? src.slice(2) : src;
   if (trimmed.includes('/') || trimmed.includes('\\') || trimmed === '..' || trimmed === '.') return null;
   if (!trimmed) return null;
-
-  return `/api/v1/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/media/by-name/${encodeURIComponent(trimmed)}`;
+  return trimmed;
 }

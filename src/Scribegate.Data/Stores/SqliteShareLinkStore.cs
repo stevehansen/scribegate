@@ -14,6 +14,7 @@ public class SqliteShareLinkStore(ScribegateDbContext db) : IShareLinkStore
     public Task<ShareLink?> GetByTokenHashAsync(string tokenHash, CancellationToken ct = default) =>
         db.ShareLinks
             .Include(s => s.Repository)
+                .ThenInclude(r => r.Owner)
             .Include(s => s.Document)
                 .ThenInclude(d => d.CurrentRevision)
             .Include(s => s.Revision)
