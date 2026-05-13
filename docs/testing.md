@@ -1,6 +1,7 @@
 # Testing
 
-Scribegate ships three layered test projects plus a Vitest suite for the SPA.
+Scribegate ships three layered .NET test projects, a Vitest suite for the SPA,
+and a Playwright smoke suite that drives the full stack from a real browser.
 All of it runs on every pull request via `.github/workflows/ci.yml`.
 
 ## Layers & where each test belongs
@@ -11,6 +12,7 @@ All of it runs on every pull request via `.github/workflows/ci.yml`.
 | Data + storage | `tests/Scribegate.Data.Tests` | Core + Data | EF configurations, migrations, FTS5 triggers, store-level queries. Spins up a real SQLite *file* per test. |
 | Full stack | `tests/Scribegate.Web.Tests` | Core + Data + Web | API endpoints via `WebApplicationFactory<Program>`, auth flows, Markdown parity snapshots. |
 | SPA | `src/Scribegate.Web/Client/src/**` | — | Vitest + jsdom. Colocated `.test.ts` files for component logic, shared `src/__tests__/` for cross-cutting/parity. |
+| End-to-end | `tests/Scribegate.E2E` | — | Playwright spec(s) that drive the SPA against a real ASP.NET host with a fresh SQLite DB per run. One golden-path smoke spec — auth variants and feature-by-feature coverage stay in the API/SPA layers. |
 
 Pick the lowest layer that can reach the code under test. A slug-regex test
 does not need `WebApplicationFactory`.
@@ -53,6 +55,45 @@ does not need `WebApplicationFactory`.
   `localStorage` shim so auth state tests are deterministic.
 - Use `@open-wc/testing`'s `fixture` / `html` helpers for Lit components.
 
+## How to add a Playwright spec
+
+The E2E suite is intentionally tiny — one golden-path smoke spec that proves
+the auth → write → review → merge loop works end-to-end. Don't add specs that
+duplicate API or component coverage; reach for the layer that exercises the
+narrowest surface.
+
+1. Add `specs/<feature>.spec.ts` under `tests/Scribegate.E2E/`. Each spec
+   mints its own user(s) via the registration UI or `request.post('/api/v1/auth/register')`
+   so the suite is parallel-safe against the single shared SQLite DB the
+   webServer launches.
+2. Prefer semantic locators (`getByRole`, `getByLabel`, `getByPlaceholder`,
+   `getByText`) — they pierce Lit's shadow DOM. CSS selectors do not.
+3. If a flow needs a stable hook the accessibility tree can't reach, add a
+   `data-testid="..."` to the component and use `getByTestId(...)`. Don't add
+   testids speculatively.
+4. Self-approval is forbidden by the proposal service. The golden-path spec
+   registers a second user via the API and adds them as a Reviewer to avoid
+   driving the members-page UI; mirror that pattern when you need a second
+   identity.
+
+### Running locally
+
+```bash
+cd tests/Scribegate.E2E
+npm ci
+npm run install:browsers        # one-time, installs Chromium under ~/.cache
+npm test                        # full suite, headless
+npm run test:headed             # watch a browser
+npm run test:debug              # Playwright Inspector
+SKIP_CLIENT_BUILD=1 npm test    # reuse the existing wwwroot for fast re-runs
+PLAYWRIGHT_PORT=5199 npm test   # change the host port (default 5099)
+```
+
+The webServer config builds the SPA, copies `dist/` into
+`src/Scribegate.Web/wwwroot/`, then launches `dotnet run --no-launch-profile`
+against a unique temp `Scribegate:DataPath` (cleaned up on exit). Playwright
+probes `GET /healthz` before running specs.
+
 ## Markdown parity workflow
 
 - Corpus: `tests/fixtures/markdown/corpus.json`. Each entry has `id`,
@@ -81,7 +122,7 @@ does not need `WebApplicationFactory`.
 
 ## CI shape
 
-Three parallel jobs (see `.github/workflows/ci.yml`):
+Four parallel jobs (see `.github/workflows/ci.yml`):
 
 - **`test-dotnet`** — matrix `ubuntu-latest` + `windows-latest`. Restores,
   builds, installs the `dotnet-coverage` global tool, then runs each of the
@@ -94,6 +135,11 @@ Three parallel jobs (see `.github/workflows/ci.yml`):
   `npm run test:coverage` (Vitest with the `cobertura` reporter; output at
   `src/Scribegate.Web/Client/coverage/cobertura-coverage.xml`), then
   `npm run test:parity` as a sanity check.
+- **`test-e2e`** — ubuntu only. Builds the SPA + copies it into `wwwroot`,
+  builds the ASP.NET host, installs Chromium via a cached browser store,
+  then runs the Playwright suite. The Playwright `webServer` config launches
+  `dotnet run` against a fresh temp `Scribegate:DataPath` and waits for
+  `/healthz` before the first spec.
 - **`publish-check`** — unchanged end-to-end build / publish sanity.
 
 ## Coverage artifacts
