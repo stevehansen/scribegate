@@ -7,7 +7,7 @@
 // the exported helper that carries the security-relevant logic.
 
 import { describe, it, expect } from 'vitest';
-import { resolveRelativeDocumentHref, resolveRelativeMediaSrc } from './sg-markdown-view.js';
+import { resolveRelativeDocumentHref, resolveRelativeMediaSrc, isVideoSrc } from './sg-markdown-view.js';
 
 describe('resolveRelativeDocumentHref', () => {
   it('rewrites top-level README links against the repository root', () => {
@@ -67,5 +67,34 @@ describe('resolveRelativeMediaSrc', () => {
   it('encodes weird characters in the filename', () => {
     const out = resolveRelativeMediaSrc('a b.png', 'alice', 'docs');
     expect(out).toBe('/api/v1/repositories/alice/docs/media/by-name/a%20b.png');
+  });
+});
+
+describe('isVideoSrc', () => {
+  it('matches the extensions Markdig\'s UseMediaLinks treats as videos', () => {
+    expect(isVideoSrc('demo.mp4')).toBe(true);
+    expect(isVideoSrc('clip.webm')).toBe(true);
+    expect(isVideoSrc('archive.ogg')).toBe(true);
+    expect(isVideoSrc('phone.MOV')).toBe(true);
+  });
+
+  it('matches through the media-by-name endpoint URL', () => {
+    expect(isVideoSrc('/api/v1/repositories/alice/docs/media/by-name/demo.mp4')).toBe(true);
+  });
+
+  it('ignores query strings and fragments after the extension', () => {
+    expect(isVideoSrc('demo.mp4?v=2')).toBe(true);
+    expect(isVideoSrc('demo.mp4#start=10')).toBe(true);
+  });
+
+  it('rejects non-video extensions and empty input', () => {
+    expect(isVideoSrc('diagram.png')).toBe(false);
+    expect(isVideoSrc('chart.svg')).toBe(false);
+    expect(isVideoSrc('')).toBe(false);
+  });
+
+  it('rejects data: and blob: URIs even if the extension looks video-like', () => {
+    expect(isVideoSrc('data:video/mp4;base64,xyz')).toBe(false);
+    expect(isVideoSrc('blob:http://x/y.mp4')).toBe(false);
   });
 });

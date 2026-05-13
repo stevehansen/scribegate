@@ -71,7 +71,7 @@ Both surfaces treat document content as untrusted and apply defence in depth:
 
 ## Known divergences worth fixing later
 
-1. **`UseMediaLinks` on server, plain `<img>` on client** — a video reference like `![demo](demo.mp4)` shows a broken image on the SPA. Either add a client post-process that upgrades `<img src="*.mp4">` to `<video>`, or drop `UseMediaLinks` on the server. Tracked as a follow-up.
+1. ~~**`UseMediaLinks` on server, plain `<img>` on client**~~ **Fixed in M8.** `sg-markdown-view` walks the rendered DOM after sanitisation and replaces `<img src="*.{mp4,webm,ogg,mov}">` with `<video controls preload="metadata">` (alt text becomes `aria-label`). Query strings and fragments after the extension are tolerated; `data:` and `blob:` URIs are skipped.
 2. **Share-link pages** (`/s/{token}`) do not resolve relative media references because the public share payload omits `repositoryOwner`. Fix requires either exposing the owner on the share payload or adding a share-scoped media endpoint.
 3. ~~**Cross-pipeline parity is still incomplete**~~ **Fixed in M8.** `tests/Scribegate.Web.Tests/Markdown/ParityTheoryTests.cs` now asserts byte equality between the two committed goldens for every `corpus.json` entry tagged `parity: "exact"`. Entries that legitimately diverge (heading auto-ids, GFM task-list classes, XHTML self-close style, table whitespace, raw `<tag>` escaping) are tagged `parity: "diverges"` and excluded from the cross check.
 4. **KaTeX is eagerly bundled** — importing `katex` into the main SPA chunk added ~270 KB (gzip). Fine for a docs-heavy app, but a candidate for dynamic-import gating ("only load when the document contains `$…$`") if startup weight becomes a concern.

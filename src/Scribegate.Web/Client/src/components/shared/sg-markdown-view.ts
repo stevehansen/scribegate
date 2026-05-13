@@ -180,11 +180,14 @@ export class SgMarkdownView extends LitElement {
     //    repo path so inline README renders behave like full document views.
     // 2) Rewrite relative <img> src values to the media endpoint so
     //    `![diagram](foo.png)` resolves against the repo's MediaAssets.
-    // 3) Render Mermaid diagrams (replaces <pre> blocks).
-    // 4) Highlight remaining fenced code blocks via Prism.
-    // All four passes are safe no-ops when there's nothing to do.
+    // 3) Upgrade <img src="*.{mp4,webm,ogg,mov}"> to <video controls> so the
+    //    SPA matches Markdig's server-side UseMediaLinks behaviour.
+    // 4) Render Mermaid diagrams (replaces <pre> blocks).
+    // 5) Highlight remaining fenced code blocks via Prism.
+    // All passes are safe no-ops when there's nothing to do.
     this._resolveDocumentReferences();
     this._resolveMediaReferences();
+    this._upgradeVideoImages();
     await renderMermaidBlocks(this.renderRoot);
     highlightAllUnder(this.renderRoot);
   }
@@ -212,6 +215,32 @@ export class SgMarkdownView extends LitElement {
       if (resolved && resolved !== src) img.setAttribute('src', resolved);
     }
   }
+
+  private _upgradeVideoImages() {
+    const imgs = this.renderRoot.querySelectorAll<HTMLImageElement>('img');
+    for (const img of Array.from(imgs)) {
+      const src = img.getAttribute('src') ?? '';
+      if (!isVideoSrc(src)) continue;
+      const video = document.createElement('video');
+      video.setAttribute('src', src);
+      video.setAttribute('controls', '');
+      video.setAttribute('preload', 'metadata');
+      const alt = img.getAttribute('alt');
+      if (alt) video.setAttribute('aria-label', alt);
+      img.replaceWith(video);
+    }
+  }
+}
+
+// Matches the file extensions Markdig's UseMediaLinks treats as <video> sources.
+// Query string and fragment are ignored so cache-busting parameters don't break
+// the upgrade.
+const VIDEO_EXT_RE = /\.(mp4|webm|ogg|mov)(?:[?#]|$)/i;
+
+export function isVideoSrc(src: string): boolean {
+  if (!src) return false;
+  if (src.startsWith('data:') || src.startsWith('blob:')) return false;
+  return VIDEO_EXT_RE.test(src);
 }
 
 // Returns a rewritten absolute repo route when `href` is a relative link that
