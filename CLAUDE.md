@@ -49,18 +49,26 @@ See `docs/spec.md` section 2 for full property definitions and `docs/design-deci
 
 ## Current Milestone
 
-**Milestone 7 — "Proof & Prevention" (Delivered)**
+**Milestone 8 — "Polish & Parity" (In progress)**
 
-A real automated-test harness and the guardrails that keep future milestones safe. Pure foundation work: no user-visible feature changes, but every subsequent milestone (multi-document proposals, RavenDB adapter, performance work) becomes cheaper and less risky once this lands.
+Consolidation milestone: close out M7's deferrals (Playwright E2E, coverage threshold + badge) and the remaining `docs/markdown.md` rendering divergences before moving on to bigger two-way-door work (multi-document proposals, RavenDB adapter, managed-hosting prep). No new domain entities, no new resources, no migrations.
 
+- [ ] Playwright E2E smoke suite — single golden-path spec (register → create repo → create doc → submit proposal → approve) in a new `tests/Scribegate.E2E/` Node project, run as its own `test-e2e` CI job. Auth variants and full-feature coverage deliberately out of scope.
+- [ ] Coverage threshold + badge — soft floor (regression detector at "current minus 2 pp" per layer) via ReportGenerator over the Cobertura artifacts CI already uploads, plus a Shields.io endpoint badge driven by `main`-only runs. Hard targets deferred.
+- [ ] Activate Markdig ↔ marked parity test — drop the `[Skip]` on `Markdig_And_Marked_Agree` (and the Vitest twin); tag each `corpus.json` entry with `parity: "exact" | "diverges"` and assert byte equality on the exact set. Expand corpus to ~20 parity-safe entries.
+- [ ] `UseMediaLinks` divergence fix on client — post-render walker in `sg-markdown-view` upgrades `<img src="*.{mp4,webm,ogg,mov}">` to `<video controls preload="metadata">`, DOMPurify allow-list extended.
+- [ ] Share-link media resolution — `GET /api/v1/shares/{token}` exposes owner/slug; new share-scoped `GET /api/v1/shares/{token}/media/by-name/{fileName}` resolves relative media refs in public share pages.
+- [ ] KaTeX dynamic import — lazy-load KaTeX + `marked-katex-extension` only when the source contains `$…$`. Drops ~270 KB gzip from the main SPA chunk.
+
+Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), and 7 (Proof & Prevention) are complete.
+
+M7 delivered:
 - [x] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
 - [x] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas, audit IP retention prune
 - [x] Web API integration tests via `WebApplicationFactory<Program>` — auth (JWT + API token + OIDC stub), RBAC (proposal/membership/admin-tier/media/template), owner/slug routing, share links, webhook signing, static-site/export streaming, dumb-HTTP git clone auth, comments, search
 - [x] Markdown rendering regression tests — shared `tests/fixtures/markdown/corpus.json` driven by both xUnit theories (Markdig) and Vitest (marked + DOMPurify under jsdom), with golden-output snapshots per side and divergence cross-check against `docs/markdown.md`; server-side XSS guarantees pinned
 - [x] SPA Vitest + `@open-wc/testing` unit/component tests colocated alongside components, plus the cross-cutting `src/__tests__/` suite (44 passing / 1 skipped)
-- [x] CI gating — tests run on every PR, parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, Cobertura artifacts uploaded per layer via `dotnet-coverage` (.NET) and Vitest's v8/cobertura reporter (frontend) — no threshold gate yet, revisit in M8. `docs/testing.md` covers conventions, flake-quarantine policy, and how to add tests for each layer.
-
-Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), and 7 (Proof & Prevention) are complete.
+- [x] CI gating — tests run on every PR, parallel `test-dotnet` (ubuntu + windows matrix) / `test-frontend` jobs, Cobertura artifacts uploaded per layer via `dotnet-coverage` (.NET) and Vitest's v8/cobertura reporter (frontend). `docs/testing.md` covers conventions, flake-quarantine policy, and how to add tests for each layer.
 
 M6 delivered:
 - [x] Syntax highlighting for fenced code blocks — Prism on the SPA and bundled into static-site exports; `--sg-syn-*` palette tracks the app theme

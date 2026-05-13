@@ -428,6 +428,17 @@ A real automated-test harness and the guardrails that keep future milestones saf
 - [x] CI gating — tests run on every PR via parallel `test-dotnet` and `test-frontend` jobs, with `docs/testing.md` describing conventions and test layering
 - [ ] Playwright E2E deferred to M8 — M7 ships unit/component/parity coverage instead (see `docs/testing.md`)
 
+### Milestone 8 — "Polish & Parity"
+
+Consolidation milestone: close out M7's deferrals and the remaining `docs/markdown.md` rendering divergences before moving on to bigger two-way-door work (multi-document proposals, RavenDB adapter, managed-hosting prep). No new domain entities, no new resources, no migrations.
+
+- [ ] Playwright E2E smoke suite — single golden-path spec (register → create repo → create doc → submit proposal → approve), new `tests/Scribegate.E2E/` Node project, new `test-e2e` CI job. Auth-variant and full-feature coverage are deliberately out of scope.
+- [ ] Coverage threshold + badge — soft floor (regression detector at "current minus 2 pp" per layer) wired via ReportGenerator over the existing Cobertura artifacts, plus a Shields.io endpoint badge driven by `main`-only runs. Hard targets ("must be 80%") are deferred.
+- [ ] Activate Markdig ↔ marked parity test — drop the `[Skip]` on `Markdig_And_Marked_Agree` (and the Vitest twin); tag each `corpus.json` entry with `parity: "exact" | "diverges"` and assert byte equality on the exact set. Expand corpus to ~20 entries focused on parity-safe constructs.
+- [ ] `UseMediaLinks` divergence fix on client — post-render walker in `sg-markdown-view` upgrades `<img src="*.{mp4,webm,ogg,mov}">` to `<video controls preload="metadata">`, DOMPurify allow-list extended.
+- [ ] Share-link media resolution — `GET /api/v1/shares/{token}` exposes owner/slug; new share-scoped `GET /api/v1/shares/{token}/media/by-name/{fileName}` resolves relative media refs in public share pages.
+- [ ] KaTeX dynamic import — lazy-load KaTeX + `marked-katex-extension` only when the source contains `$…$`. Drops ~270 KB gzip from the main SPA chunk.
+
 ---
 
 ## 8. What Scribegate Is Not
