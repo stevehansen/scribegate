@@ -30,6 +30,27 @@ public abstract record DocumentCommandResult
         DateTime DocumentCreatedAt,
         DateTime RevisionCreatedAt) : DocumentCommandResult;
 
+    /// <summary>
+    /// Archive succeeded. <see cref="WasAlreadyArchived"/> distinguishes the
+    /// genuine transition (event emitted) from the idempotent no-op (no event).
+    /// Both map to HTTP 204 at the endpoint.
+    /// </summary>
+    public sealed record ArchivedCase(Guid DocumentId, bool WasAlreadyArchived) : DocumentCommandResult;
+
+    /// <summary>
+    /// Unarchive succeeded. <see cref="WasAlreadyLive"/> distinguishes the
+    /// genuine transition (event emitted) from the idempotent no-op.
+    /// </summary>
+    public sealed record UnarchivedCase(Guid DocumentId, bool WasAlreadyLive) : DocumentCommandResult;
+
+    /// <summary>Move succeeded. Carries enough data for the endpoint to render the response.</summary>
+    public sealed record MovedCase(
+        Guid DocumentId,
+        string NewPath,
+        Guid? CurrentRevisionId,
+        DateTime DocumentCreatedAt,
+        string CreatedByDisplay) : DocumentCommandResult;
+
     public static readonly DocumentCommandResult RepositoryNotFound = new RepositoryNotFoundCase();
 
     public static DocumentCommandResult DocumentNotFound(string path) => new DocumentNotFoundCase(path);
@@ -44,4 +65,12 @@ public abstract record DocumentCommandResult
         Guid id, string path, Guid revisionId, string content,
         DateTime documentCreatedAt, DateTime revisionCreatedAt) =>
         new UpdatedCase(id, path, revisionId, content, documentCreatedAt, revisionCreatedAt);
+    public static DocumentCommandResult Archived(Guid id, bool wasAlreadyArchived) =>
+        new ArchivedCase(id, wasAlreadyArchived);
+    public static DocumentCommandResult Unarchived(Guid id, bool wasAlreadyLive) =>
+        new UnarchivedCase(id, wasAlreadyLive);
+    public static DocumentCommandResult Moved(
+        Guid id, string newPath, Guid? currentRevisionId,
+        DateTime documentCreatedAt, string createdByDisplay) =>
+        new MovedCase(id, newPath, currentRevisionId, documentCreatedAt, createdByDisplay);
 }

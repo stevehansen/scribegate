@@ -468,8 +468,7 @@ Pattern 1 (`EndpointGateway`) was contemplated and skipped: `RequireRepositoryRo
 
 | Service | Verbs | Status |
 |---|---|---|
-| `DocumentCommandService` | Create, Update | Shipped |
-| `DocumentCommandService` | Archive, Unarchive, Move | **Deferred** — still inline in `DocumentEndpoints`. Same shape, smaller payoff. |
+| `DocumentCommandService` | Create, Update, Archive, Unarchive, Move | Shipped |
 | `MembershipCommandService` | Add, UpdateRole, Remove | Shipped |
 | `MediaCommandService` | Upload, Delete | Shipped |
 | `ProposalCommandService` | Create, Update, Submit, Withdraw, Reject | Shipped |

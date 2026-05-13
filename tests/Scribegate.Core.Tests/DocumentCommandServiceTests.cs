@@ -140,6 +140,200 @@ public class DocumentCommandServiceTests
         ctx.EmittedUpdated.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task Archive_RepositoryNotFound_Returns_RepositoryNotFound()
+    {
+        var ctx = new InMemoryDocumentCommandContext();
+
+        var result = await new DocumentCommandService(ctx).ArchiveAsync(
+            new ArchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.RepositoryNotFoundCase>();
+        ctx.EmittedArchived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Archive_DocumentNotFound_Returns_DocumentNotFound()
+    {
+        var ctx = NewContextWithRepoAndActor();
+
+        var result = await new DocumentCommandService(ctx).ArchiveAsync(
+            new ArchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.DocumentNotFoundCase>()
+            .Which.Path.Should().Be(Path);
+        ctx.EmittedArchived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Archive_LiveDoc_TransitionsAndEmits()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        var doc = ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path);
+
+        var result = await new DocumentCommandService(ctx).ArchiveAsync(
+            new ArchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        var archived = result.Should().BeOfType<DocumentCommandResult.ArchivedCase>().Subject;
+        archived.DocumentId.Should().Be(doc.Id);
+        archived.WasAlreadyArchived.Should().BeFalse();
+
+        doc.IsArchived.Should().BeTrue();
+        doc.ArchivedAt.Should().NotBeNull();
+        doc.ArchivedById.Should().Be(ActorId);
+        ctx.DocumentUpdates.Should().ContainSingle().Which.Should().BeSameAs(doc);
+        ctx.EmittedArchived.Should().NotBeNull();
+        ctx.EmittedArchived!.Document.Should().BeSameAs(doc);
+    }
+
+    [Fact]
+    public async Task Archive_AlreadyArchived_NoOp_NoEvent()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        var doc = ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path, archived: true);
+
+        var result = await new DocumentCommandService(ctx).ArchiveAsync(
+            new ArchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        var archived = result.Should().BeOfType<DocumentCommandResult.ArchivedCase>().Subject;
+        archived.DocumentId.Should().Be(doc.Id);
+        archived.WasAlreadyArchived.Should().BeTrue();
+
+        ctx.DocumentUpdates.Should().BeEmpty();
+        ctx.EmittedArchived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Unarchive_RepositoryNotFound_Returns_RepositoryNotFound()
+    {
+        var ctx = new InMemoryDocumentCommandContext();
+
+        var result = await new DocumentCommandService(ctx).UnarchiveAsync(
+            new UnarchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.RepositoryNotFoundCase>();
+    }
+
+    [Fact]
+    public async Task Unarchive_DocumentNotFound_Returns_DocumentNotFound()
+    {
+        var ctx = NewContextWithRepoAndActor();
+
+        var result = await new DocumentCommandService(ctx).UnarchiveAsync(
+            new UnarchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.DocumentNotFoundCase>()
+            .Which.Path.Should().Be(Path);
+    }
+
+    [Fact]
+    public async Task Unarchive_ArchivedDoc_TransitionsAndEmits()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        var doc = ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path, archived: true);
+
+        var result = await new DocumentCommandService(ctx).UnarchiveAsync(
+            new UnarchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        var unarchived = result.Should().BeOfType<DocumentCommandResult.UnarchivedCase>().Subject;
+        unarchived.DocumentId.Should().Be(doc.Id);
+        unarchived.WasAlreadyLive.Should().BeFalse();
+
+        doc.IsArchived.Should().BeFalse();
+        doc.ArchivedAt.Should().BeNull();
+        doc.ArchivedById.Should().BeNull();
+        ctx.EmittedUnarchived.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task Unarchive_AlreadyLive_NoOp_NoEvent()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path);
+
+        var result = await new DocumentCommandService(ctx).UnarchiveAsync(
+            new UnarchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        var unarchived = result.Should().BeOfType<DocumentCommandResult.UnarchivedCase>().Subject;
+        unarchived.WasAlreadyLive.Should().BeTrue();
+
+        ctx.DocumentUpdates.Should().BeEmpty();
+        ctx.EmittedUnarchived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Unarchive_BlockedByLiveDocAtSamePath_Returns_PathAlreadyExists()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path, archived: true);
+        // A different live doc occupies the same path; restore must surface a collision.
+        ctx.SeedDocumentAtPath(ctx.Repository.Id, Path);
+
+        var result = await new DocumentCommandService(ctx).UnarchiveAsync(
+            new UnarchiveDocumentCommand(Owner, RepoSlug, Path, ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.PathAlreadyExistsCase>()
+            .Which.Path.Should().Be(Path);
+        ctx.EmittedUnarchived.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Move_RepositoryNotFound_Returns_RepositoryNotFound()
+    {
+        var ctx = new InMemoryDocumentCommandContext();
+
+        var result = await new DocumentCommandService(ctx).MoveAsync(
+            new MoveDocumentCommand(Owner, RepoSlug, Path, "ideas/new.md", ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.RepositoryNotFoundCase>();
+    }
+
+    [Fact]
+    public async Task Move_DocumentNotFound_Returns_DocumentNotFound()
+    {
+        var ctx = NewContextWithRepoAndActor();
+
+        var result = await new DocumentCommandService(ctx).MoveAsync(
+            new MoveDocumentCommand(Owner, RepoSlug, Path, "ideas/new.md", ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.DocumentNotFoundCase>()
+            .Which.Path.Should().Be(Path);
+    }
+
+    [Fact]
+    public async Task Move_TargetPathOccupied_Returns_PathAlreadyExists()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path);
+        ctx.SeedDocumentAtPath(ctx.Repository.Id, "ideas/new.md");
+
+        var result = await new DocumentCommandService(ctx).MoveAsync(
+            new MoveDocumentCommand(Owner, RepoSlug, Path, "ideas/new.md", ActorId, "alice"), default);
+
+        result.Should().BeOfType<DocumentCommandResult.PathAlreadyExistsCase>()
+            .Which.Path.Should().Be("ideas/new.md");
+        ctx.EmittedMoved.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Move_HappyPath_UpdatesPathAndEmits()
+    {
+        var ctx = NewContextWithRepoAndActor();
+        var doc = ctx.SeedDocumentAtPath(ctx.Repository!.Id, Path);
+
+        var result = await new DocumentCommandService(ctx).MoveAsync(
+            new MoveDocumentCommand(Owner, RepoSlug, Path, "ideas/new.md", ActorId, "alice"), default);
+
+        var moved = result.Should().BeOfType<DocumentCommandResult.MovedCase>().Subject;
+        moved.DocumentId.Should().Be(doc.Id);
+        moved.NewPath.Should().Be("ideas/new.md");
+
+        doc.Path.Should().Be("ideas/new.md");
+        ctx.EmittedMoved.Should().NotBeNull();
+        ctx.EmittedMoved!.OldPath.Should().Be(Path);
+        ctx.EmittedMoved.Document.Path.Should().Be("ideas/new.md");
+    }
+
     private static InMemoryDocumentCommandContext NewContextWithRepoAndActor()
     {
         var ctx = new InMemoryDocumentCommandContext();
@@ -172,12 +366,16 @@ internal sealed class InMemoryDocumentCommandContext : IDocumentCommandContext
     public List<Document> PersistedDocuments { get; } = [];
     public List<Revision> PersistedRevisions { get; } = [];
     public List<RevisionSignature> PersistedSignatures { get; } = [];
+    public List<Document> DocumentUpdates { get; } = [];
     public DocumentEmittedEvent? EmittedCreated { get; private set; }
     public DocumentEmittedEvent? EmittedUpdated { get; private set; }
+    public DocumentEmittedEvent? EmittedArchived { get; private set; }
+    public DocumentEmittedEvent? EmittedUnarchived { get; private set; }
+    public DocumentMovedEmittedEvent? EmittedMoved { get; private set; }
 
-    private readonly Dictionary<(Guid, string), Document> _byPath = [];
+    private readonly List<Document> _docs = [];
 
-    public Document SeedDocumentAtPath(Guid repositoryId, string path)
+    public Document SeedDocumentAtPath(Guid repositoryId, string path, bool archived = false)
     {
         var doc = new Document
         {
@@ -186,8 +384,10 @@ internal sealed class InMemoryDocumentCommandContext : IDocumentCommandContext
             Path = path,
             CreatedById = Guid.NewGuid(),
             CurrentRevisionId = Guid.NewGuid(),
+            IsArchived = archived,
+            ArchivedAt = archived ? DateTime.UtcNow : null,
         };
-        _byPath[(repositoryId, path)] = doc;
+        _docs.Add(doc);
         return doc;
     }
 
@@ -195,7 +395,11 @@ internal sealed class InMemoryDocumentCommandContext : IDocumentCommandContext
         => Task.FromResult(Repository);
 
     public Task<Document?> FindDocumentByPathAsync(Guid repositoryId, string path, CancellationToken ct)
-        => Task.FromResult<Document?>(_byPath.GetValueOrDefault((repositoryId, path)));
+        => Task.FromResult(_docs.FirstOrDefault(d =>
+            d.RepositoryId == repositoryId && d.Path == path && !d.IsArchived));
+
+    public Task<Document?> FindDocumentByPathIncludingArchivedAsync(Guid repositoryId, string path, CancellationToken ct)
+        => Task.FromResult(_docs.FirstOrDefault(d => d.RepositoryId == repositoryId && d.Path == path));
 
     public Task<User?> FindUserAsync(Guid userId, CancellationToken ct)
         => Task.FromResult(Actor);
@@ -240,6 +444,12 @@ internal sealed class InMemoryDocumentCommandContext : IDocumentCommandContext
         return Task.CompletedTask;
     }
 
+    public Task UpdateDocumentAsync(Document document, CancellationToken ct)
+    {
+        DocumentUpdates.Add(document);
+        return Task.CompletedTask;
+    }
+
     public Task EmitDocumentCreatedAsync(DocumentEmittedEvent evt, CancellationToken ct)
     {
         EmittedCreated = evt;
@@ -249,6 +459,24 @@ internal sealed class InMemoryDocumentCommandContext : IDocumentCommandContext
     public Task EmitDocumentUpdatedAsync(DocumentEmittedEvent evt, CancellationToken ct)
     {
         EmittedUpdated = evt;
+        return Task.CompletedTask;
+    }
+
+    public Task EmitDocumentArchivedAsync(DocumentEmittedEvent evt, CancellationToken ct)
+    {
+        EmittedArchived = evt;
+        return Task.CompletedTask;
+    }
+
+    public Task EmitDocumentUnarchivedAsync(DocumentEmittedEvent evt, CancellationToken ct)
+    {
+        EmittedUnarchived = evt;
+        return Task.CompletedTask;
+    }
+
+    public Task EmitDocumentMovedAsync(DocumentMovedEmittedEvent evt, CancellationToken ct)
+    {
+        EmittedMoved = evt;
         return Task.CompletedTask;
     }
 }

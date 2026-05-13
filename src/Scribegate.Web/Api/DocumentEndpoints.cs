@@ -1,9 +1,7 @@
 using Scribegate.Core.Entities;
-using Scribegate.Core.Events;
 using Scribegate.Core.Services;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
-using Scribegate.Web.Services;
 
 namespace Scribegate.Web.Api;
 
@@ -257,27 +255,25 @@ public static class DocumentEndpoints
     // FTS entries, and audit history. Archived docs are hidden from listings
     // and search until they are restored via /unarchive/{path}. Hard delete
     // is reserved for admin tooling and is not exposed via this route.
-    private static async Task<IResult> DeleteDocument(
+    private static Task<IResult> DeleteDocument(
         string owner,
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        DocumentCommandService documents,
         CancellationToken ct)
-        => await ArchiveDocument(owner, repoSlug, path, repoStore, documentStore, userContext, authz, events, ct);
+        => ArchiveDocument(owner, repoSlug, path, repoStore, userContext, authz, documents, ct);
 
     private static async Task<IResult> ArchiveDocument(
         string owner,
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        DocumentCommandService documents,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -289,33 +285,21 @@ public static class DocumentEndpoints
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
+        var user = await userContext.RequireCurrentUserAsync(ct);
 
-        // Archiving an already-archived doc is a no-op from the caller's
-        // point of view, so peek at the archived row too and return early.
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, includeArchived: true, ct: ct);
-        if (doc is null)
-            return ApiResults.NotFound("Document", normalizedPath);
-        if (doc.IsArchived) return Results.NoContent();
+        var result = await documents.ArchiveAsync(new ArchiveDocumentCommand(
+            owner, repoSlug, normalizedPath, user.Id, user.Username), ct);
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-
-        doc.IsArchived = true;
-        doc.ArchivedAt = DateTime.UtcNow;
-        doc.ArchivedById = userId;
-        await documentStore.UpdateAsync(doc, ct);
-
-        await events.PublishAsync(new DocumentArchivedEvent(
-            DocumentId: doc.Id,
-            RepositoryId: repo.Id,
-            DocumentPath: normalizedPath,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
-            ActorId: userId,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.NoContent();
+        return result switch
+        {
+            DocumentCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            DocumentCommandResult.DocumentNotFoundCase =>
+                ApiResults.NotFound("Document", normalizedPath),
+            DocumentCommandResult.ArchivedCase =>
+                Results.NoContent(),
+            _ => throw new InvalidOperationException($"Unhandled DocumentCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static async Task<IResult> UnarchiveDocument(
@@ -323,10 +307,9 @@ public static class DocumentEndpoints
         string repoSlug,
         string path,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        DocumentCommandService documents,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -338,39 +321,26 @@ public static class DocumentEndpoints
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
+        var user = await userContext.RequireCurrentUserAsync(ct);
 
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, includeArchived: true, ct: ct);
-        if (doc is null)
-            return ApiResults.NotFound("Document", normalizedPath);
-        if (!doc.IsArchived) return Results.NoContent();
+        var result = await documents.UnarchiveAsync(new UnarchiveDocumentCommand(
+            owner, repoSlug, normalizedPath, user.Id, user.Username), ct);
 
-        // A non-archived doc may have been created at the same path while this
-        // one was archived. Don't silently collide — tell the caller to move
-        // the live one out of the way first.
-        var live = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
-        if (live is not null && live.Id != doc.Id)
-            return ApiResults.Conflict(
-                ApiErrorCodes.PathAlreadyExists,
-                $"A non-archived document at path '{normalizedPath}' already exists.",
-                "Rename or archive the live document before restoring this one.", "path");
-
-        doc.IsArchived = false;
-        doc.ArchivedAt = null;
-        doc.ArchivedById = null;
-        await documentStore.UpdateAsync(doc, ct);
-
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        await events.PublishAsync(new DocumentUnarchivedEvent(
-            DocumentId: doc.Id,
-            RepositoryId: repo.Id,
-            DocumentPath: normalizedPath,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            ActorId: userId,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.NoContent();
+        return result switch
+        {
+            DocumentCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            DocumentCommandResult.DocumentNotFoundCase =>
+                ApiResults.NotFound("Document", normalizedPath),
+            DocumentCommandResult.PathAlreadyExistsCase =>
+                ApiResults.Conflict(
+                    ApiErrorCodes.PathAlreadyExists,
+                    $"A non-archived document at path '{normalizedPath}' already exists.",
+                    "Rename or archive the live document before restoring this one.", "path"),
+            DocumentCommandResult.UnarchivedCase =>
+                Results.NoContent(),
+            _ => throw new InvalidOperationException($"Unhandled DocumentCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static List<ApiFieldError> ValidateCreateRequest(CreateDocumentRequest request)
@@ -395,10 +365,9 @@ public static class DocumentEndpoints
         string path,
         MoveDocumentRequest request,
         IRepositoryStore repoStore,
-        IDocumentStore documentStore,
         UserContext userContext,
         AuthorizationHelper authz,
-        IDomainEventBus events,
+        DocumentCommandService documents,
         CancellationToken ct)
     {
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
@@ -410,9 +379,6 @@ public static class DocumentEndpoints
         if (denied is not null) return denied;
 
         var normalizedPath = PathHelper.NormalizePath(path);
-        var doc = await documentStore.GetByPathAsync(repo.Id, normalizedPath, ct: ct);
-        if (doc is null)
-            return ApiResults.NotFound("Document", normalizedPath);
 
         if (string.IsNullOrWhiteSpace(request.NewPath))
             return ApiResults.ValidationError("newPath", ApiErrorCodes.Required, "New path is required.");
@@ -428,40 +394,35 @@ public static class DocumentEndpoints
             return ApiResults.ValidationError("newPath", ApiErrorCodes.InvalidFormat,
                 "New path must be different from the current path.");
 
-        var existing = await documentStore.GetByPathAsync(repo.Id, newNormalized, ct: ct);
-        if (existing is not null)
-            return ApiResults.Conflict(
-                ApiErrorCodes.PathAlreadyExists,
-                $"A document at path '{newNormalized}' already exists.",
-                "Choose a different path.", "newPath");
+        var user = await userContext.RequireCurrentUserAsync(ct);
 
-        var oldPath = doc.Path;
-        doc.Path = newNormalized;
-        await documentStore.UpdateAsync(doc, ct);
+        var result = await documents.MoveAsync(new MoveDocumentCommand(
+            owner, repoSlug, normalizedPath, newNormalized, user.Id, user.Username), ct);
 
-        var userId = await userContext.GetCurrentUserIdAsync(ct);
-        await events.PublishAsync(new DocumentMovedEvent(
-            DocumentId: doc.Id,
-            RepositoryId: repo.Id,
-            OldPath: oldPath,
-            NewPath: newNormalized,
-            RepositoryOwner: owner,
-            RepositorySlug: repo.Slug,
-            RepositoryName: repo.Name,
-            ActorId: userId,
-            ActorUsername: userContext.GetUsername(),
-            OccurredAt: DateTime.UtcNow), ct);
-
-        return Results.Ok(new DocumentResponse
+        return result switch
         {
-            Id = doc.Id,
-            Path = doc.Path,
-            Content = null,
-            CurrentRevisionId = doc.CurrentRevisionId,
-            CreatedAt = doc.CreatedAt,
-            CreatedBy = doc.CreatedBy?.Username ?? doc.CreatedById.ToString(),
-            UpdatedAt = null,
-        });
+            DocumentCommandResult.RepositoryNotFoundCase =>
+                ApiResults.NotFound("Repository", repoSlug),
+            DocumentCommandResult.DocumentNotFoundCase =>
+                ApiResults.NotFound("Document", normalizedPath),
+            DocumentCommandResult.PathAlreadyExistsCase =>
+                ApiResults.Conflict(
+                    ApiErrorCodes.PathAlreadyExists,
+                    $"A document at path '{newNormalized}' already exists.",
+                    "Choose a different path.", "newPath"),
+            DocumentCommandResult.MovedCase m =>
+                Results.Ok(new DocumentResponse
+                {
+                    Id = m.DocumentId,
+                    Path = m.NewPath,
+                    Content = null,
+                    CurrentRevisionId = m.CurrentRevisionId,
+                    CreatedAt = m.DocumentCreatedAt,
+                    CreatedBy = m.CreatedByDisplay,
+                    UpdatedAt = null,
+                }),
+            _ => throw new InvalidOperationException($"Unhandled DocumentCommandResult: {result.GetType().Name}"),
+        };
     }
 
     private static DocumentSummary MapToSummary(Document doc) => new()

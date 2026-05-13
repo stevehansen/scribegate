@@ -31,6 +31,9 @@ public sealed class EfDocumentCommandContext(
     public Task<Document?> FindDocumentByPathAsync(Guid repositoryId, string path, CancellationToken ct)
         => documents.GetByPathAsync(repositoryId, path, ct: ct);
 
+    public Task<Document?> FindDocumentByPathIncludingArchivedAsync(Guid repositoryId, string path, CancellationToken ct)
+        => documents.GetByPathAsync(repositoryId, path, includeArchived: true, ct: ct);
+
     public Task<User?> FindUserAsync(Guid userId, CancellationToken ct)
         => users.FindByIdAsync(userId, ct);
 
@@ -80,6 +83,9 @@ public sealed class EfDocumentCommandContext(
         await documents.UpdateAsync(document, ct);
     }
 
+    public Task UpdateDocumentAsync(Document document, CancellationToken ct)
+        => documents.UpdateAsync(document, ct);
+
     public Task EmitDocumentCreatedAsync(DocumentEmittedEvent evt, CancellationToken ct) =>
         bus.PublishAsync(new DocumentCreatedEvent(
             DocumentId: evt.Document.Id,
@@ -110,4 +116,40 @@ public sealed class EfDocumentCommandContext(
             ActorUsername: evt.ActorUsername,
             OccurredAt: DateTime.UtcNow), ct);
     }
+
+    public Task EmitDocumentArchivedAsync(DocumentEmittedEvent evt, CancellationToken ct) =>
+        bus.PublishAsync(new DocumentArchivedEvent(
+            DocumentId: evt.Document.Id,
+            RepositoryId: evt.Repository.Id,
+            DocumentPath: evt.Document.Path,
+            RepositoryOwner: evt.Owner,
+            RepositorySlug: evt.Repository.Slug,
+            RepositoryName: evt.Repository.Name,
+            ActorId: evt.ActorId,
+            ActorUsername: evt.ActorUsername,
+            OccurredAt: DateTime.UtcNow), ct);
+
+    public Task EmitDocumentUnarchivedAsync(DocumentEmittedEvent evt, CancellationToken ct) =>
+        bus.PublishAsync(new DocumentUnarchivedEvent(
+            DocumentId: evt.Document.Id,
+            RepositoryId: evt.Repository.Id,
+            DocumentPath: evt.Document.Path,
+            RepositoryOwner: evt.Owner,
+            RepositorySlug: evt.Repository.Slug,
+            ActorId: evt.ActorId,
+            ActorUsername: evt.ActorUsername,
+            OccurredAt: DateTime.UtcNow), ct);
+
+    public Task EmitDocumentMovedAsync(DocumentMovedEmittedEvent evt, CancellationToken ct) =>
+        bus.PublishAsync(new DocumentMovedEvent(
+            DocumentId: evt.Document.Id,
+            RepositoryId: evt.Repository.Id,
+            OldPath: evt.OldPath,
+            NewPath: evt.Document.Path,
+            RepositoryOwner: evt.Owner,
+            RepositorySlug: evt.Repository.Slug,
+            RepositoryName: evt.Repository.Name,
+            ActorId: evt.ActorId,
+            ActorUsername: evt.ActorUsername,
+            OccurredAt: DateTime.UtcNow), ct);
 }
