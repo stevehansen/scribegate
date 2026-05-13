@@ -154,9 +154,23 @@ Each CI run uploads three workflow artifacts:
 
 Open the run in GitHub Actions and download the artifact zip to inspect a
 report locally (every Cobertura viewer — VS Code "Coverage Gutters",
-ReportGenerator, IntelliJ — accepts these files unchanged). There is **no
-threshold gate** in M7; we want a stable signal before turning failure
-knobs. Threshold + badge wiring is tracked for M8.
+ReportGenerator, IntelliJ — accepts these files unchanged).
+
+### Coverage gate
+
+The `test-dotnet` and `test-frontend` jobs each run `scripts/check-coverage.mjs`
+against their Cobertura output and **fail the build if any layer's measured
+line-rate drops below the floor** in `coverage-thresholds.json`. It's a
+soft floor (regression detector), not a hard target — each entry is the first
+measured value rounded down by ~2 percentage points, and the values move up
+only after the suite stabilises at a new level. Tightening a floor when you
+add tests is a one-line PR.
+
+A separate `coverage-badge` job runs only on `main` pushes: it downloads the
+ubuntu Cobertura artifacts, weights each layer by its `lines-valid` count,
+and force-pushes a `coverage.json` in Shields.io endpoint format to the
+`coverage-data` orphan branch. The README badge reads that file via
+`raw.githubusercontent.com` — PR branches never touch it.
 
 ### Generating coverage locally
 

@@ -1,0 +1,7 @@
+{
+  "_description": "Per-layer line-rate floor for the CI coverage soft gate. CI fails if any layer's measured line-rate drops below its threshold. Values are decimals (0.82 = 82%). Initial floors set to first measured coverage minus ~2 percentage points so day-to-day churn doesn't trip the gate; tighten after the suite stabilises.",
+  "core": 0.82,
+  "data": 0.88,
+  "web": 0.65,
+  "frontend": 0.07
+}

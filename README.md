@@ -1,5 +1,8 @@
 # Scribegate
 
+[![CI](https://github.com/stevehansen/scribegate/actions/workflows/ci.yml/badge.svg)](https://github.com/stevehansen/scribegate/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fstevehansen%2Fscribegate%2Fcoverage-data%2Fcoverage.json)](https://github.com/stevehansen/scribegate/actions/workflows/ci.yml)
+
 **A simplified, self-hosted markdown collaboration platform with editorial review workflows.**
 
 Scribegate is what you get when a wiki and a Git forge have a baby: contributors propose changes to markdown documents through a simple web UI, reviewers approve or reject them, and the approved version becomes the published truth. No CLI, no branches, no merge conflicts.

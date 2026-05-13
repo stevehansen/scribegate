@@ -39,7 +39,6 @@ jobs:
       # projects are executables and run directly via `dotnet run`.
       # `dotnet-coverage` instruments the process out-of-band and emits
       # Cobertura, decoupled from the in-runner extension's MTP version.
-      # No threshold gate yet — revisit in M8.
       - name: Test — Core
         run: dotnet-coverage collect -f cobertura -o coverage/core.cobertura.xml "dotnet run --no-build -c Release --project tests/Scribegate.Core.Tests"
         shell: bash
@@ -50,6 +49,16 @@ jobs:
 
       - name: Test — Web
         run: dotnet-coverage collect -f cobertura -o coverage/web.cobertura.xml "dotnet run --no-build -c Release --project tests/Scribegate.Web.Tests"
+        shell: bash
+
+      - name: Coverage gate (.NET)
+        # Soft floor only — fails if any layer drops below
+        # coverage-thresholds.json. Run once per matrix leg so Windows + Linux
+        # divergence shows up as two separate failures.
+        run: |
+          node scripts/check-coverage.mjs core coverage/core.cobertura.xml
+          node scripts/check-coverage.mjs data coverage/data.cobertura.xml
+          node scripts/check-coverage.mjs web coverage/web.cobertura.xml
         shell: bash
 
       - name: Upload .NET coverage (Cobertura)
@@ -89,6 +98,9 @@ jobs:
       - name: Parity-only (sanity)
         working-directory: src/Scribegate.Web/Client
         run: npm run test:parity
+
+      - name: Coverage gate (frontend)
+        run: node scripts/check-coverage.mjs frontend src/Scribegate.Web/Client/coverage/cobertura-coverage.xml
 
       - name: Upload frontend coverage (Cobertura)
         if: always()
@@ -183,6 +195,57 @@ jobs:
           path: tests/Scribegate.E2E/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  coverage-badge:
+    # Aggregate Cobertura reports from main-branch runs into a single
+    # coverage.json in Shields.io endpoint format, and force-push it to the
+    # `coverage-data` orphan branch. The README badge reads that file via
+    # raw.githubusercontent.com.
+    name: Coverage badge
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [test-dotnet, test-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download .NET coverage (ubuntu)
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-dotnet-ubuntu-latest
+          path: coverage/dotnet
+
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-frontend
+          path: coverage/frontend
+
+      - name: Build badge JSON
+        run: |
+          node scripts/build-coverage-badge.mjs \
+            "coverage/dotnet/core.cobertura.xml coverage/dotnet/data.cobertura.xml coverage/dotnet/web.cobertura.xml coverage/frontend/cobertura-coverage.xml" \
+            coverage.json
+        shell: bash
+
+      - name: Publish coverage.json to coverage-data branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PUBLISH=$(mktemp -d)
+          cp coverage.json "$PUBLISH/coverage.json"
+          cd "$PUBLISH"
+          git init -q -b coverage-data
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add coverage.json
+          git commit -q -m "coverage: update for ${GITHUB_SHA::7}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -fq origin coverage-data
+        shell: bash
 
   publish-check:
     name: Publish (integration check)
