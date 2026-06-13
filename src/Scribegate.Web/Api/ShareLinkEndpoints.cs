@@ -1,6 +1,7 @@
 using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Events;
+using Scribegate.Core.ShareLinks;
 using Scribegate.Core.Stores;
 using Scribegate.Web.Models;
 
@@ -187,7 +188,7 @@ public static class ShareLinkEndpoints
             RevokedAt = l.RevokedAt,
             LastAccessedAt = l.LastAccessedAt,
             AccessCount = l.AccessCount,
-            IsActive = IsActive(l, now),
+            IsActive = ShareLinkLifecycle.IsActive(l, now),
         }).ToList();
 
         return Results.Ok(new ShareLinkListResponse { Items = items, Total = items.Count });
@@ -242,50 +243,17 @@ public static class ShareLinkEndpoints
 
     private static async Task<IResult> ResolveShareLink(
         string token,
+        ShareLinkResolver resolver,
         IShareLinkStore shareLinkStore,
-        IRevisionStore revisionStore,
         IDomainEventBus events,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix))
-            return ShareNotFound();
+        var resolution = await resolver.ResolveAsync(token, DateTime.UtcNow, ct);
+        if (resolution.State != ShareState.Ok) return resolution.ToError();
 
-        var tokenHash = ShareLinkTokenService.HashToken(token);
-        var link = await shareLinkStore.GetByTokenHashAsync(tokenHash, ct);
-        if (link is null) return ShareNotFound();
-
-        if (link.RevokedAt.HasValue)
-            return Results.Json(new
-            {
-                error = new ApiError
-                {
-                    Code = ApiErrorCodes.Revoked,
-                    Message = "This share link has been revoked.",
-                    Details = "Ask the person who shared it to create a new link.",
-                }
-            }, statusCode: 410);
-
-        if (link.ExpiresAt.HasValue && link.ExpiresAt.Value < DateTime.UtcNow)
-            return Results.Json(new
-            {
-                error = new ApiError
-                {
-                    Code = ApiErrorCodes.Expired,
-                    Message = "This share link has expired.",
-                    Details = "Ask the person who shared it to create a new link.",
-                }
-            }, statusCode: 410);
-
-        // Determine revision: pinned or latest
-        Revision? revision = link.Revision;
-        if (revision is null)
-        {
-            var currentRevId = link.Document.CurrentRevisionId;
-            if (!currentRevId.HasValue)
-                return ShareNotFound();
-            revision = link.Document.CurrentRevision ?? await revisionStore.GetByIdAsync(currentRevId.Value, ct);
-        }
-        if (revision is null) return ShareNotFound();
+        var share = resolution.Share!;
+        var link = share.Link;
+        var revision = share.Revision;
 
         // Capture response data before the best-effort write so a failure there
         // cannot leak secondary state or change what we return.
@@ -293,10 +261,10 @@ public static class ShareLinkEndpoints
         {
             // Owner is eagerly included by IShareLinkStore.GetByTokenHashAsync;
             // the null-forgiving `!` reflects that contract.
-            RepositoryOwner = link.Repository.Owner!.Username,
-            RepositorySlug = link.Repository.Slug,
-            RepositoryName = link.Repository.Name,
-            DocumentPath = link.Document.Path,
+            RepositoryOwner = share.Repository.Owner!.Username,
+            RepositorySlug = share.Repository.Slug,
+            RepositoryName = share.Repository.Name,
+            DocumentPath = share.Document.Path,
             Content = revision.Content,
             RevisionId = revision.Id,
             RevisionMessage = revision.Message,
@@ -340,46 +308,17 @@ public static class ShareLinkEndpoints
     private static async Task<IResult> ResolveShareMediaByName(
         string token,
         string fileName,
-        IShareLinkStore shareLinkStore,
+        ShareLinkResolver resolver,
         IMediaAssetStore mediaAssets,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(fileName)
-            || fileName.Contains('/')
-            || fileName.Contains('\\')
-            || fileName.Contains('\0')
-            || fileName == "." || fileName == "..")
-            return ShareNotFound();
+        // Same lifecycle contract as ResolveShareLink (revoked/expired → 410).
+        // Deliberately does NOT bump AccessCount / emit ShareLinkAccessedEvent —
+        // a doc with N inline images must not inflate the link's access count.
+        var resolution = await resolver.ResolveAsync(token, DateTime.UtcNow, ct);
+        if (resolution.State != ShareState.Ok) return resolution.ToError();
 
-        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix))
-            return ShareNotFound();
-
-        var tokenHash = ShareLinkTokenService.HashToken(token);
-        var link = await shareLinkStore.GetByTokenHashAsync(tokenHash, ct);
-        if (link is null) return ShareNotFound();
-        if (link.RevokedAt.HasValue) return ShareNotFound();
-        if (link.ExpiresAt.HasValue && link.ExpiresAt.Value < DateTime.UtcNow)
-            return ShareNotFound();
-
-        var asset = await mediaAssets.FindLatestByFileNameAsync(link.RepositoryId, fileName, ct);
-        if (asset is null) return ShareNotFound();
-
-        if (!File.Exists(asset.StoragePath)) return ShareNotFound();
-
-        return Results.File(asset.StoragePath, asset.ContentType, asset.FileName);
+        return await RepoMediaResolver.StreamByNameAsync(
+            mediaAssets, resolution.Share!.Repository.Id, fileName, ct);
     }
-
-    private static IResult ShareNotFound() =>
-        Results.Json(new
-        {
-            error = new ApiError
-            {
-                Code = ApiErrorCodes.NotFound,
-                Message = "Share link not found.",
-                Details = "The link may have been revoked, expired, or typed incorrectly.",
-            }
-        }, statusCode: 404);
-
-    private static bool IsActive(ShareLink link, DateTime now) =>
-        !link.RevokedAt.HasValue && (!link.ExpiresAt.HasValue || link.ExpiresAt.Value > now);
 }

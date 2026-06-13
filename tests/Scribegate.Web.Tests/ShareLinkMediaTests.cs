@@ -60,6 +60,8 @@ public class ShareLinkMediaTests
         resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    // The media path now shares the document path's lifecycle contract: a revoked
+    // token yields 410 Gone (was 404 before the share-link-lifecycle unification).
     [Fact]
     public async Task Revoked_ShareLink_Cannot_Fetch_Media()
     {
@@ -81,7 +83,37 @@ public class ShareLinkMediaTests
         var resp = await anonymous.GetAsync(
             $"/api/v1/shares/{share.Token}/media/by-name/diagram.png");
 
-        resp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        resp.StatusCode.Should().Be(HttpStatusCode.Gone);
+    }
+
+    // Pins the historical drift closed: GET /shares/{token} and
+    // GET /shares/{token}/media/by-name/{file} must report the SAME lifecycle
+    // status for a revoked link (both 410 Gone), so a public viewer never gets a
+    // helpful "expired/revoked" page whose images 404.
+    [Fact]
+    public async Task Revoked_ShareLink_DocumentAndMedia_ReturnSameStatus()
+    {
+        await using var factory = new ScribegateWebAppFactory();
+        var owner = factory.CreateClient();
+        var (_, ownerToken) = await RegisterAsync(owner, "owner");
+        Authenticate(owner, ownerToken);
+
+        var repo = await CreateRepoAsync(owner, "revoke-parity");
+        await CreateDocumentAsync(owner, repo, "guide.md");
+        await UploadMediaAsync(owner, repo, "diagram.png");
+        var share = await CreateShareAsync(owner, repo, "guide.md");
+
+        var revoke = await owner.DeleteAsync(
+            $"/api/v1/repositories/{repo.Owner}/{repo.Slug}/shares/{share.Id}");
+        revoke.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var anonymous = factory.CreateClient();
+        var docResp = await anonymous.GetAsync($"/api/v1/shares/{share.Token}");
+        var mediaResp = await anonymous.GetAsync(
+            $"/api/v1/shares/{share.Token}/media/by-name/diagram.png");
+
+        docResp.StatusCode.Should().Be(HttpStatusCode.Gone);
+        mediaResp.StatusCode.Should().Be(docResp.StatusCode);
     }
 
     [Fact]

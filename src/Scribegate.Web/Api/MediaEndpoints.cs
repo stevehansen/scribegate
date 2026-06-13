@@ -210,26 +210,15 @@ public static class MediaEndpoints
         HttpContext http,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(fileName)
-            || fileName.Contains('/')
-            || fileName.Contains('\\')
-            || fileName.Contains('\0')
-            || fileName == "." || fileName == "..")
-            return ApiResults.NotFound("Media", fileName);
-
         var repo = await repoStore.GetByOwnerAndSlugAsync(owner, repoSlug, ct);
         if (repo is null) return ApiResults.NotFound("Repository", repoSlug);
 
         if (!await authz.CanReadRepositoryAsync(repo, http, userContext, ct))
             return ApiResults.NotFound("Repository", repoSlug);
 
-        var asset = await mediaAssets.FindLatestByFileNameAsync(repo.Id, fileName, ct);
-        if (asset is null) return ApiResults.NotFound("Media", fileName);
-
-        if (!File.Exists(asset.StoragePath))
-            return ApiResults.NotFound("Media", fileName);
-
-        return Results.File(asset.StoragePath, asset.ContentType, asset.FileName);
+        // Repo scope established (repo-read RBAC); sanitize + lookup + stream is
+        // the shared seam the anonymous share path also uses.
+        return await RepoMediaResolver.StreamByNameAsync(mediaAssets, repo.Id, fileName, ct);
     }
 
     private static async Task<IResult> DeleteMedia(
