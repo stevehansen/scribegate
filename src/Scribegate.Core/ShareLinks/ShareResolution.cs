@@ -8,6 +8,10 @@ namespace Scribegate.Core.ShareLinks;
 /// </summary>
 public enum ShareState
 {
+    // Zero slot is a non-Ok sentinel so a default-initialized ShareResolution
+    // (default(ShareResolution), an empty-sequence FirstOrDefault, etc.) can't
+    // masquerade as a successful resolution with a null Share.
+    Unknown = 0,
     Ok,
     NotFound,
     Revoked,

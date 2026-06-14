@@ -15,7 +15,7 @@ public sealed class ShareLinkResolver(IShareLinkStore links, IRevisionStore revi
 {
     public async Task<ShareResolution> ResolveAsync(string token, DateTime now, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix))
+        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith(ShareLinkTokenDefaults.TokenPrefix, StringComparison.Ordinal))
             return ShareResolution.NotFound();
 
         var tokenHash = ShareLinkTokenService.HashToken(token);
