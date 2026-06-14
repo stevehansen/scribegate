@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Scribegate.Web.Api;
+namespace Scribegate.Core.ShareLinks;
 
 public static class ShareLinkTokenDefaults
 {
