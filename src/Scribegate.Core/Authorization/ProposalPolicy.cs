@@ -11,8 +11,12 @@ namespace Scribegate.Core.Authorization;
 /// </summary>
 /// <remarks>
 /// The Web endpoint pre-checks via these methods so it can return the right
-/// HTTP status without entering a transaction. <see cref="Services.ProposalApprovalService"/>
-/// re-runs <see cref="CanApprove"/> as defence-in-depth — see RFC #7 PR4.
+/// HTTP status without entering a transaction. Approval deliberately has no
+/// predicate here: its preconditions (status, self-review, staleness) need the
+/// loaded target document plus a by-path store lookup and yield richer outcomes
+/// than allow/deny (pending tallies, merge results), so they live inline in
+/// <see cref="Services.ProposalApprovalService"/> and surface as an
+/// <see cref="Services.ApprovalResult"/>.
 /// </remarks>
 public static class ProposalPolicy
 {
