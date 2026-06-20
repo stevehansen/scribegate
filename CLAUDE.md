@@ -62,6 +62,11 @@ Consolidation milestone: closed out M7's deferrals (Playwright E2E, coverage thr
 
 Milestones 1 (Read & Write), 2 (Propose & Review), 3 (Polish & Integrate), 4 (Ecosystem), 5 (Owner/Repo URLs), 6 (Markdown Depth), 7 (Proof & Prevention), and 8 (Polish & Parity) are complete.
 
+**Since M8 (post-milestone hardening — consolidation, not a new feature milestone):**
+
+- [x] RFC #12 — Share-Link Lifecycle deepened into a cohesive module (PR #14). A Core `ShareLinkResolver` returns a discriminated `ShareResolution(ShareState, ResolvedShare?)`; `ShareLinkTokenService` + a new `ShareLinkLifecycle` live in `Scribegate.Core/ShareLinks`; a shared repo-scoped media seam (`RepoMediaResolver`) backs both the share and the by-name media paths. The lifecycle→HTTP mapping is decided in exactly one place (`ShareResolutionExtensions.ToError()`), fixing the historical 404-vs-410 drift between the document and media resolve paths as a correctness win. No new entities/resources/migrations. Closes `docs/architecture-friction.md` #4 and absorbs #7's residual media-resolution drift.
+- [x] Dependency security bumps (dev-only, no production exposure; `npm audit` clean) — `qs` → 6.15.2 (GHSA-q8mj-m7cp-5q26, PR #15); `vite` 6 → 8 which drops esbuild from the tree entirely now that vite bundles with Rolldown/oxc, retiring GHSA-gv7w-rqvm-qjhr; scoped `jsdom → ws` → 8.20.1 (GHSA-58qx-3vcg-4xpx) — both PR #16.
+
 M7 delivered:
 - [x] Test project scaffolding — `tests/Scribegate.Core.Tests`, `tests/Scribegate.Data.Tests`, `tests/Scribegate.Web.Tests` (xUnit v3), wired into the solution and CI
 - [x] Data-layer integration tests against SQLite with per-test-class isolation (per-factory temp-file DB, migrations applied, `SqliteConnection.ClearAllPools()` cleanup) — cover revisions, proposals, approvals, staleness, soft-archive filters, FTS5 triggers, quotas, audit IP retention prune
