@@ -1,6 +1,6 @@
 using System.Text.Json;
 using FluentAssertions;
-using Markdig;
+using Scribegate.Web.Api;
 using Xunit;
 
 namespace Scribegate.Web.Tests.Markdown;
@@ -16,28 +16,6 @@ namespace Scribegate.Web.Tests.Markdown;
 // affected golden file(s) and re-run.
 public class ParityTheoryTests
 {
-    // Keep in lockstep with SiteEndpoints.MarkdownPipeline. The list is
-    // deliberately hand-rolled — we do NOT call UseAdvancedExtensions()
-    // because that enables UseGenericAttributes(), an XSS vector.
-    private static readonly MarkdownPipeline Pipeline = new MarkdownPipelineBuilder()
-        .UseAutoLinks()
-        .UseAutoIdentifiers()
-        .UsePipeTables()
-        .UseGridTables()
-        .UseTaskLists()
-        .UseEmphasisExtras()
-        .UseFootnotes()
-        .UseAbbreviations()
-        .UseListExtras()
-        .UseCitations()
-        .UseCustomContainers()
-        .UseDefinitionLists()
-        .UseFigures()
-        .UseMediaLinks()
-        .UseEmojiAndSmiley(enableSmileys: false)
-        .DisableHtml()
-        .Build();
-
     public static IEnumerable<TheoryDataRow<string, string>> Corpus()
     {
         foreach (var c in CorpusLoader.Load())
@@ -58,7 +36,7 @@ public class ParityTheoryTests
     [MemberData(nameof(Corpus))]
     public void MarkdigOutput_MatchesGolden(string id, string markdown)
     {
-        var html = global::Markdig.Markdown.ToHtml(markdown, Pipeline);
+        var html = SafeMarkdownRenderer.RenderPipelineOnly(markdown);
 
         var goldenPath = Path.Combine(FixtureRoot.Get(), "markdig-golden", $"{id}.html");
         Directory.CreateDirectory(Path.GetDirectoryName(goldenPath)!);
