@@ -2,10 +2,6 @@ using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Markdig;
-using Markdig.Renderers;
-using Markdig.Syntax;
-using Markdig.Syntax.Inlines;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Events;
@@ -20,44 +16,6 @@ public static class SiteEndpoints
     // pathological repo OOMing the generator and gives the caller a clean
     // manifest flag instead of a mid-stream TCP reset.
     private const long MaxSiteBytes = 1L * 1024 * 1024 * 1024;
-
-    // Configure Markdig once.
-    //
-    // IMPORTANT: we deliberately do NOT call UseAdvancedExtensions(), because
-    // it implicitly enables UseGenericAttributes() — the `{#id .class attr=val}`
-    // syntax — which lets anyone with write access inject arbitrary HTML
-    // attributes onto the generated elements. That includes `onclick`,
-    // `onmouseover`, `style="background:url(javascript:...)"` and other vectors
-    // that DisableHtml() does not cover because they are attached to nodes the
-    // renderer produces itself.
-    //
-    // Instead we opt in to the safe subset of the advanced pack explicitly.
-    // Notable omissions:
-    //   - UseGenericAttributes()  — the XSS escape hatch described above
-    //   - UseMathematics()        — MathML is out of scope for the site export
-    //   - UseSmartyPants()        — typographic sugar, irrelevant for our output
-    //
-    // DisableHtml() still matters: it blocks raw <script>/<iframe> passthrough
-    // so a Contributor cannot paste HTML directly into a doc and have it land
-    // in the rendered page.
-    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
-        .UseAutoLinks()
-        .UseAutoIdentifiers()
-        .UsePipeTables()
-        .UseGridTables()
-        .UseTaskLists()
-        .UseEmphasisExtras()
-        .UseFootnotes()
-        .UseAbbreviations()
-        .UseListExtras()
-        .UseCitations()
-        .UseCustomContainers()
-        .UseDefinitionLists()
-        .UseFigures()
-        .UseMediaLinks()
-        .UseEmojiAndSmiley(enableSmileys: false)
-        .DisableHtml()
-        .Build();
 
     public static void MapSiteEndpoints(this IEndpointRouteBuilder routes)
     {
@@ -172,7 +130,19 @@ public static class SiteEndpoints
                     var (metadata, body) = FrontmatterService.Parse(rev.Content);
                     var title = ExtractTitle(metadata) ?? DeriveTitleFromPath(doc.Path);
                     var relativePrefix = RelativeRoot(entryPath);
-                    var renderedBody = RenderMarkdown(body, mediaByName, relativePrefix, referencedMedia);
+                    var renderedBody = SafeMarkdownRenderer.Render(
+                        body,
+                        stripFrontmatter: false,
+                        rewriteLink: ctx =>
+                        {
+                            if (ctx.IsImage
+                                && ctx.TryGetBareFilename(out var filename)
+                                && mediaByName.ContainsKey(filename))
+                            {
+                                referencedMedia.Add(filename);
+                                ctx.Rewrite(relativePrefix + "assets/media/" + filename);
+                            }
+                        });
                     var page = RenderPage(title, repo.Name, renderedBody, entryPath, prism is not null);
                     var bytes = Encoding.UTF8.GetBytes(page);
 
@@ -302,93 +272,6 @@ public static class SiteEndpoints
             log.LogWarning(ex, "Failed to read Prism assets; site export will skip syntax highlighting.");
             return null;
         }
-    }
-
-    // Render markdown to HTML, then walk the AST and neutralise any link with
-    // a dangerous URL scheme. DisableHtml() already blocks raw `<script>` and
-    // `<iframe>` passthrough — this handler closes the `[click](javascript:…)`
-    // vector that Markdig does not filter by default.
-    //
-    // When `mediaByName` is provided, relative `<img>` references with a bare
-    // filename that matches a MediaAsset are rewritten to `{relativePrefix}assets/media/{filename}`
-    // and the filename is added to `referencedMedia` so the caller can embed
-    // the file in the export zip.
-    private static string RenderMarkdown(
-        string body,
-        IReadOnlyDictionary<string, MediaAsset> mediaByName,
-        string relativePrefix,
-        HashSet<string> referencedMedia)
-    {
-        var doc = Markdown.Parse(body, MarkdownPipeline);
-
-        foreach (var link in doc.Descendants<LinkInline>())
-        {
-            if (IsDangerousScheme(link.Url))
-                link.Url = "#";
-
-            // GetDynamicUrl wins over Url at render time if set, so scrub it too.
-            var dynamic = link.GetDynamicUrl?.Invoke();
-            if (IsDangerousScheme(dynamic))
-                link.GetDynamicUrl = () => "#";
-
-            if (link.IsImage && TryResolveBareFilename(link.Url, out var filename)
-                && mediaByName.ContainsKey(filename))
-            {
-                referencedMedia.Add(filename);
-                link.Url = relativePrefix + "assets/media/" + filename;
-                link.GetDynamicUrl = null;
-            }
-        }
-
-        foreach (var auto in doc.Descendants<AutolinkInline>())
-        {
-            if (IsDangerousScheme(auto.Url))
-                auto.Url = "#";
-        }
-
-        using var writer = new StringWriter();
-        var renderer = new HtmlRenderer(writer);
-        MarkdownPipeline.Setup(renderer);
-        renderer.Render(doc);
-        writer.Flush();
-        return writer.ToString();
-    }
-
-    // Mirrors resolveRelativeMediaSrc in sg-markdown-view.ts: a bare filename
-    // (optionally prefixed with `./`), no path separators, no traversal, no
-    // URL scheme. Strips a trailing fragment so `![x](foo.png#id)` still
-    // resolves to `foo.png`.
-    private static bool TryResolveBareFilename(string? url, out string filename)
-    {
-        filename = string.Empty;
-        if (string.IsNullOrWhiteSpace(url)) return false;
-        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) return false;
-        if (url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return false;
-        if (url.StartsWith("//") || url.StartsWith('/')) return false;
-        if (url.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return false;
-        if (url.StartsWith("blob:", StringComparison.OrdinalIgnoreCase)) return false;
-        if (url.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase)) return false;
-
-        var trimmed = url.StartsWith("./") ? url[2..] : url;
-        var hashIndex = trimmed.IndexOf('#');
-        if (hashIndex >= 0) trimmed = trimmed[..hashIndex];
-        var queryIndex = trimmed.IndexOf('?');
-        if (queryIndex >= 0) trimmed = trimmed[..queryIndex];
-        if (trimmed.Length == 0) return false;
-        if (trimmed.Contains('/') || trimmed.Contains('\\')) return false;
-        if (trimmed is "." or "..") return false;
-
-        filename = trimmed;
-        return true;
-    }
-
-    private static bool IsDangerousScheme(string? url)
-    {
-        if (string.IsNullOrEmpty(url)) return false;
-        var trimmed = url.AsSpan().TrimStart();
-        return trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<long> WriteEntryAsync(ZipArchive zip, string path, string content, CancellationToken ct)
