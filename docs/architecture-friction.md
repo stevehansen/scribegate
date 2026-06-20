@@ -115,6 +115,75 @@ Each candidate lists:
 
 ---
 
+## Tier 4 — Fresh sweep (2026-06-20)
+
+> A second exploration once the Tier 1–3 wave (RFCs #3–#13) had closed the original backend-domain friction. These candidates live in surfaces the first map under-covered: the M4 integration/export features, the HTTP edge, the frontend SPA, and the CLI. Numbered 9–15 to continue the global sequence; ranked best-first. Same field shape as above.
+
+### 9. Server-side "safe Markdown render" — no module owns it
+
+`SiteEndpoints.MarkdownPipeline` + `RenderMarkdown`/`IsDangerousScheme`/`TryResolveBareFilename` (Web) + the **verbatim-duplicated** `ParityTheoryTests.Pipeline` (test) + `FrontmatterService` (~3 files)
+
+- **Friction**: The "render untrusted markdown safely" decision — *which* Markdig extensions, the deliberate omission of `UseAdvancedExtensions()`/`UseGenericAttributes()` (the XSS escape hatch), `DisableHtml()`, and the AST pass that scrubs `javascript:`/`vbscript:`/`data:` on `LinkInline`/`AutolinkInline` (incl. the lazy `GetDynamicUrl`) — is co-owned by a private endpoint method and a test that reconstructs the pipeline byte-for-byte under a "keep in lockstep" comment. The XSS rationale exists in exactly one comment block, on the endpoint. The test layer is a second source of truth, and `Scribegate.Web.Tests` carries its own Markdig `PackageReference` just to rebuild it.
+- **Coupling**: Pipeline config + security-critical scrub pass + (site-export-specific) media-reference rewriting all fused into one static endpoint method; the safe core is not reusable by any future render surface (preview endpoint, comment rendering).
+- **Deps**: (1) in-process pure (Markdig is Web-only; Core has zero deps, so the module lives in `Scribegate.Web` like its `DiffService`/`SignatureService` siblings).
+- **Test impact**: `ParityTheoryTests` drops its private pipeline copy (and its Markdig reference) and consumes the module; the end-to-end `SecurityTests` XSS properties become fast unit assertions on the renderer instead of a full-host round trip.
+- **Status (2026-06-20)**: 🎨 **In design — [RFC #31](https://github.com/stevehansen/scribegate/issues/31).** A static `SafeMarkdownRenderer` (Web) owns the safe-subset pipeline + the only copy of the XSS rationale; scrub is unconditional; a `LinkRewriteContext.Rewrite()` struct nulls `GetDynamicUrl` so that footgun is structurally impossible; an `internal RenderPipelineOnly` gives the parity test the one pipeline definition while keeping goldens corpus-independent. Interface chosen from a 4-way parallel design exploration + adversarial critique.
+
+### 10. Streaming archive (zip) builder — duplicated across export + site
+
+`ExportEndpoints` + `SiteEndpoints` + `DeleteOnDisposeFileStream` + `ZipPathSafety` (~4 files)
+
+- **Friction**: The two endpoints are architectural twins — duplicated 1 GiB cap constant, temp-file setup, per-document loop with skipped-manifest tracking, manifest JSON, and async-stream teardown. Only the per-entry transform differs (`.md` raw vs. `.html` rendered + embedded media).
+- **Coupling**: "stream a large zip without OOMing the host" solved twice; overflow/cancellation semantics live in two files.
+- **Deps**: (2) local-substitutable (filesystem temp file).
+- **Test impact**: size-cap / partial-write / cancellation become unit tests against the builder with a mock entry source; both endpoints shrink to thin wrappers. Today only "zip contains README" is asserted end-to-end.
+
+### 11. Webhook delivery internals — never consolidated post-RFC #5
+
+`WebhookDispatcher` (Channel queue) + `WebhookDeliveryWorker` (HTTP + retry-backoff + HMAC signing + disable-after-10) + `WebhookUrlValidator` + `WebhookSerialization` (~4 files)
+
+- **Friction**: RFC #5 moved webhook *fan-out* onto the post-commit bus but left the delivery internals scattered. Retry array, timeout, signed-header names, and the disable threshold are all buried in the worker; there is no "delivery policy" concept. The worker — the part with real behaviour — is **untested**; only the static signing + URL-validation helpers have tests.
+- **Coupling**: queue + delivery + signing + retry + SSRF-validation are one lifecycle split five ways.
+- **Deps**: (4) true external (HTTP) → ports & adapters.
+- **Test impact**: inject an HTTP port; unit-test "response 5xx → retries N → disables at 10" against an in-memory adapter; signing moves from a static-call test to a boundary test.
+
+### 12. Frontend form-submission state — copy-pasted across 8 components
+
+`sg-login-page` + `sg-register-page` + `sg-proposal-create` + `sg-settings-page` + `sg-members-page` + `sg-share-dialog` + `sg-repository-list` + `sg-proposal-page`
+
+- **Friction**: Each re-declares `_error` + `_saving`/`_submitting`/`_loading`, the same `try/catch`→`ApiException`-message mapping, and the same disabled-button render. Naming drifts; none of it is tested.
+- **Coupling**: one concept (async submit lifecycle) fragmented across 8 Lit components.
+- **Deps**: (1) in-process.
+- **Test impact**: a single reactive controller/mixin gets focused tests (idle→submitting→error/success, error formatting); 8 components stop hand-rolling it.
+
+### 13. Client-side Markdown view — 4 imperative DOM passes, component untested
+
+`sg-markdown-view.ts` (+ media-resolution logic copied inline into `sg-share-page.ts`)
+
+- **Friction**: `updated()` runs `_resolveDocumentReferences` → `_resolveMediaReferences` → `_upgradeVideoImages` → `renderMermaidBlocks` → `highlightAllUnder`, each a separate shadow-DOM walk. Tests cover only the pure helpers, never the passes.
+- **Coupling**: render + four post-processing passes co-owned but uncomposable; share-page duplicates the media pass.
+- **Deps**: (1) in-process (jsdom).
+- **Test impact**: a cohesive renderer pipeline becomes unit-testable (HTML in → DOM mutations out); kills the share-page duplication.
+
+### 14. CLI ↔ API coupling — duplicated models + dormant client generation
+
+`src/Scribegate.Cli/Commands/*.cs` (24× `new ApiClient()`, private records mirroring `Web/Models/*`) + dormant `scripts/generate-clients.sh` + empty `clients/{ts,csharp,python}`
+
+- **Friction**: CLI and Web independently own the same wire contract — drift is invisible. The generated-client infrastructure exists but contains no code and needs a running server. CLI has zero tests.
+- **Coupling**: two owners of one contract; a third (the generators) configured but inert.
+- **Deps**: (3) remote-but-owned (generated client over HTTP).
+- **Test impact**: a shared/generated client gives one tested seam instead of per-command model duplication.
+
+### 15. Endpoint prelude/postlude gate — biggest, but a two-way door
+
+All ~22 `*Endpoints.cs` mutation handlers
+
+- **Friction**: each repeats load-repo → `RequireRepositoryRoleAsync` → resolve user → dispatch command → exhaustive result-switch (~100–150 lines/endpoint); quota-exceeded mapping is duplicated across Document/Media/Membership.
+- **Deps**: (1) + (2).
+- **Caveat**: highest LOC, but aggregates have slightly different auth shapes, so a "gate" abstraction needs real design consensus. A later, larger RFC — not an early move.
+
+---
+
 ## Cross-cutting pattern
 
 Across all clusters: extraction "for testability" produced shallow seams where interface ≈ implementation, and the tests that resulted mostly mock the seam wholesale rather than verifying behavior at a real boundary. Deepening means moving the boundary outward (toward the real coupling) and testing through the new boundary instead.
@@ -125,4 +194,10 @@ Across all clusters: extraction "for testability" produced shallow seams where i
 >
 > 1. ~~**#4 Share-Link Lifecycle**~~ — ✅ **Done, RFC #12** (a `ShareResolution`-returning resolver + a shared repo-scoped media seam; fixed the 404-vs-410 drift as a correctness win). It subsumed **#7**'s media-resolution residual.
 > 2. ~~**RFC #7 residual**, filed as **#13**~~ — ✅ **Done (2026-06-20).** Reconciled, not blind-finished: both leftovers were deliberately *not* built. `CanApprove` stays inline (RFC #3's `ApprovalResult` is the right deep abstraction — the preconditions aren't pure predicates); `DocumentPolicy` is unnecessary (no document rule beyond repo RBAC; an adversarial audit confirmed no authz gap). Only the stale `CanApprove` doc-comment at `ProposalPolicy.cs:15` was removed. See candidate #2's Status.
-> 3. **#3 thin-delegate consolidation** (optional, now the only open item) — only if `TierService`/`FrontmatterService`/`DiffService`/`SignatureService` start actively obstructing a change; they're now hidden behind the RFC #3/#4 ports, so the pressure is low.
+> 3. **#3 thin-delegate consolidation** (optional) — only if `TierService`/`FrontmatterService`/`DiffService`/`SignatureService` start actively obstructing a change; they're now hidden behind the RFC #3/#4 ports, so the pressure is low.
+>
+> **Updated 2026-06-20.** Tier 1–3 being spent, a fresh sweep (Tier 4, candidates 9–15) reopened the backlog in the integration/edge/frontend/CLI surfaces. Best-first:
+>
+> 1. **#9 server-side "safe Markdown render"** — 🎨 **in design, [RFC #31](https://github.com/stevehansen/scribegate/issues/31).** The strongest deep-module shape on the board: a small interface hiding the Markdig pipeline + XSS scrub, security-relevant, pure/host-free testable, and it retires the test-as-second-source-of-truth smell.
+> 2. **#10 streaming archive builder** and **#11 webhook delivery** — the next two classic "deep module" targets.
+> 3. **#12 frontend form-submission controller** — the cleanest quick win on the SPA side.
