@@ -21,7 +21,7 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="DiffPlex" Version="1.9.0" />
-    <PackageReference Include="Markdig" Version="0.38.0" />
+    <PackageReference Include="Markdig" Version="0.45.0" />
     <PackageReference Include="LibGit2Sharp" Version="0.30.0" />
   </ItemGroup>
 
