@@ -62,6 +62,12 @@ public static class SafeMarkdownRenderer
         Action<LinkRewriteContext>? rewriteLink = null,
         bool stripFrontmatter = true)
     {
+        // Never throw on degenerate input (the module's contract). A null/empty
+        // body has nothing to render and would otherwise ArgumentNullException
+        // inside FrontmatterService.Parse / Markdown.Parse.
+        if (string.IsNullOrEmpty(body))
+            return string.Empty;
+
         var md = body;
         if (stripFrontmatter)
         {
@@ -137,7 +143,20 @@ public static class SafeMarkdownRenderer
     internal static bool IsDangerousScheme(string? url)
     {
         if (string.IsNullOrEmpty(url)) return false;
-        var trimmed = url.AsSpan().TrimStart();
+
+        // Trim leading C0 control characters (<= U+0020) AND Unicode whitespace
+        // before sniffing the scheme. WHATWG-compliant browsers strip leading
+        // control chars from a URL before parsing it, so "javascript:…"
+        // would otherwise be treated as a script URL by the browser while
+        // slipping past a plain TrimStart (char.IsWhiteSpace misses most C0
+        // controls). Detecting it here keeps the scrub self-sufficient rather
+        // than relying on Markdig's downstream percent-encoding of the href.
+        var span = url.AsSpan();
+        var start = 0;
+        while (start < span.Length && (span[start] <= ' ' || char.IsWhiteSpace(span[start])))
+            start++;
+        var trimmed = span[start..];
+
         return trimmed.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("vbscript:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("data:", StringComparison.OrdinalIgnoreCase);

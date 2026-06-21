@@ -52,6 +52,26 @@ public class SafeMarkdownRendererTests
         html.Should().Contain("href=\"#\"");
     }
 
+    // 2b. Control-character bypass: a leading C0 control char (U+0001 via the
+    //     &#1; entity, or a tab via &#9;) must not slip a dangerous scheme past
+    //     the scrub. WHATWG-compliant browsers strip leading control chars
+    //     before parsing a URL scheme; char.IsWhiteSpace alone misses most C0
+    //     controls, so the scrub trims everything <= ' '. Markdig percent-encodes
+    //     the control char in the emitted href today (so this is defense-in-depth,
+    //     not a live exploit) — but the scrub must be self-sufficient, not
+    //     reliant on the renderer's escaper.
+    [Theory]
+    [InlineData("[x](&#1;javascript:alert(1))")]
+    [InlineData("[x](<javascript:alert(1)>)")]
+    [InlineData("[x](&#9;javascript:alert(1))")]
+    public void Render_NeutralisesControlCharPrefixedScheme(string md)
+    {
+        var html = SafeMarkdownRenderer.Render(md);
+
+        html.Should().NotContain("javascript:");
+        html.Should().Contain("href=\"#\"");
+    }
+
     // 3. Dangerous schemes on autolinks (<scheme:...> form) are rewritten.
     [Fact]
     public void Render_NeutralisesDangerousAutolinkScheme()
@@ -193,6 +213,18 @@ public class SafeMarkdownRendererTests
         // With stripping off, the leading `---` is parsed as markdown (a setext
         // heading / thematic break) and the frontmatter text leaks through.
         html.Should().Contain("title: T");
+    }
+
+    // The renderer never throws on degenerate input: a null or empty body
+    // yields empty output rather than an ArgumentNullException from the
+    // underlying frontmatter/Markdig parse. Pins the "never throws" contract.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Render_ReturnsEmpty_ForNullOrEmptyBody(string? body)
+    {
+        SafeMarkdownRenderer.Render(body!).Should().BeEmpty();
+        SafeMarkdownRenderer.Render(body!, stripFrontmatter: false).Should().BeEmpty();
     }
 
     // 8. RenderPipelineOnly is the unscrubbed parity path: it must STILL emit a
