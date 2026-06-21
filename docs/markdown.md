@@ -61,13 +61,15 @@ Both surfaces treat document content as untrusted and apply defence in depth:
 | Vector | Server handling | Client handling |
 |---|---|---|
 | Raw HTML in markdown | `DisableHtml()` on the Markdig pipeline | DOMPurify with an allow-list of tags and attrs |
-| `javascript:` / `vbscript:` / `data:` URLs in links | AST walker rewrites to `#` after parse | DOMPurify strips; only `http(s)://`, `mailto:`, and relative URLs pass |
+| Dangerous URL schemes in links | AST walker keeps an **allowlist** of safe schemes (`http(s)`, `ftp(s)`, `mailto`, `tel`, `callto`, `sms`, `cid`, `xmpp`) plus scheme-less/relative URLs; everything else (`javascript:`, `vbscript:`, `data:`, `blob:`, `file:`, …) is rewritten to `#`. Scheme detection mirrors a WHATWG URL parser (strips embedded tab/CR/LF, trims leading controls) so it can't be fooled by `java<TAB>script:`. | DOMPurify strips; same allowlist (its default `ALLOWED_URI_REGEXP`) |
 | `onclick` / inline event handlers | `UseGenericAttributes()` deliberately not enabled | DOMPurify strips |
 | External links | Rendered as-is | `afterSanitizeAttributes` hook adds `target="_blank"` + `rel="noopener noreferrer"` |
 | Task-list checkboxes | — | `disabled` attribute forced on |
 | Mermaid SVG output | N/A (server does not render diagrams) | DOMPurify re-sanitises with `USE_PROFILES: { svg: true, svgFilters: true }` |
 
 `UseGenericAttributes` is the notable Markdig extension that is **deliberately excluded** from the server pipeline, because its `{#id .class attr=value}` syntax lets authors attach arbitrary attributes to generated elements, which would bypass `DisableHtml()`.
+
+**Known structural gap (not a live exploit):** `UseMediaLinks` emits `<iframe>`/`<video>`/`<audio>`/`<source>` elements whose `src` is renderer-produced, so it bypasses both `DisableHtml()` and the AST scheme-scrub (which only walks `LinkInline`/`AutolinkInline` URLs). It is safe today because the embed hosts (YouTube, Vimeo) are hard-coded `https://…` prefixes by Markdig and a dangerous-scheme image falls back to a plain `<img>` that the scrub catches. The static-site export has no sanitizer downstream of Markdig, so this would matter if a future Markdig changed how embed `src`/hosts are assembled — `SafeMarkdownRendererTests` pins a YouTube-embed golden to trip CI if that output changes.
 
 ## Known divergences worth fixing later
 
