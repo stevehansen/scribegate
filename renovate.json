@@ -2,5 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Hold System.CommandLine on the 2.0.0-beta4 API. The 2.0 GA removed the entire fluent builder surface Scribegate.Cli is written against (~167 call sites across 6 CLI files), so bumping it fails the build. Re-enable once the CLI is migrated to the GA API.",
+      "matchPackageNames": ["System.CommandLine"],
+      "enabled": false
+    }
   ]
 }
