@@ -140,20 +140,16 @@ public static class SafeMarkdownRenderer
         return true;
     }
 
-    // Safe URL schemes — anything else on a link/autolink is scrubbed to "#".
-    // Mirrors DOMPurify's default ALLOWED_URI_REGEXP (the client-side sanitizer
-    // in sg-markdown-view.ts), so a link the SPA would keep is exactly the set
-    // the server-rendered static-site export keeps. An allowlist — rather than a
-    // javascript/vbscript/data denylist — future-proofs the scrub against novel
-    // script-capable schemes (blob:, filesystem:, a future jar:/...) and removes
-    // its dependence on Markdig having percent-encoded hostile input first.
-    private static readonly HashSet<string> SafeUrlSchemes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "http", "https", "ftp", "ftps", "mailto", "tel", "callto", "sms", "cid", "xmpp",
-    };
-
     // True when `url` carries a scheme that is NOT in the safe allowlist. A
     // scheme-less URL (relative path, fragment, query) is always safe.
+    //
+    // The allowlist (see IsSafeScheme below) mirrors DOMPurify's default
+    // ALLOWED_URI_REGEXP — the client-side sanitizer in sg-markdown-view.ts — so
+    // a link the SPA would keep is exactly the set the server-rendered
+    // static-site export keeps. An allowlist, rather than a
+    // javascript/vbscript/data denylist, future-proofs the scrub against novel
+    // script-capable schemes (blob:, filesystem:, a future jar:/...) and removes
+    // its dependence on Markdig having percent-encoded hostile input first.
     //
     // Scheme detection mirrors a WHATWG URL parser so the check sees what the
     // browser would, not a string a denylist can be tricked past:
@@ -163,27 +159,43 @@ public static class SafeMarkdownRenderer
     //   - the scheme is ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ); if the run
     //     before the first ':' isn't a valid scheme, the ':' is path data
     //     ("foo/ba:r", "javascript%3A...") and the URL is relative => safe
-    // So the scrub is self-sufficient instead of relying on Markdig having
-    // percent-encoded an embedded control char in the emitted href.
+    //
+    // Allocation-free in the common case: the tab/CR/LF strip only allocates
+    // when one is actually present, and the scheme is compared as a span.
     internal static bool IsDangerousScheme(string? url)
     {
         if (string.IsNullOrEmpty(url)) return false;
 
-        var normalized = url.Replace("\t", "").Replace("\n", "").Replace("\r", "");
+        var span = url.AsSpan();
+        if (url.Contains('\t') || url.Contains('\n') || url.Contains('\r'))
+            span = url.Replace("\t", "").Replace("\n", "").Replace("\r", "").AsSpan();
+
         var start = 0;
-        while (start < normalized.Length && (normalized[start] <= ' ' || char.IsWhiteSpace(normalized[start])))
+        while (start < span.Length && (span[start] <= ' ' || char.IsWhiteSpace(span[start])))
             start++;
 
-        var colon = normalized.IndexOf(':', start);
+        var colon = span.IndexOf(':');
         if (colon <= start) return false; // no scheme (relative/fragment/query) => safe
 
-        var scheme = normalized[start..colon];
+        var scheme = span[start..colon];
         if (!char.IsAsciiLetter(scheme[0])) return false;
         foreach (var c in scheme)
             if (!char.IsAsciiLetterOrDigit(c) && c is not ('+' or '-' or '.'))
                 return false; // the ':' belongs to the path, not a scheme => safe
 
-        return !SafeUrlSchemes.Contains(scheme);
+        return !IsSafeScheme(scheme);
+
+        static bool IsSafeScheme(ReadOnlySpan<char> scheme)
+            => scheme.Equals("http", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("https", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("ftp", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("ftps", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("mailto", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("tel", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("callto", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("sms", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("cid", StringComparison.OrdinalIgnoreCase)
+                || scheme.Equals("xmpp", StringComparison.OrdinalIgnoreCase);
     }
 }
 
