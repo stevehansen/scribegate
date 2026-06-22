@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Scribegate.Core.Authorization;
 using Scribegate.Core.Entities;
 using Xunit;

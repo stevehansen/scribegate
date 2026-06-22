@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using Scribegate.Core.Entities;
 using Scribegate.Core.Enums;
 using Scribegate.Core.Events;
