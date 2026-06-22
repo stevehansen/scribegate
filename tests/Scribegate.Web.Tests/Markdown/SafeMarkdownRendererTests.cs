@@ -238,4 +238,97 @@ public class SafeMarkdownRendererTests
         SafeMarkdownRenderer.RenderPipelineOnly(md).Should().Contain("href=\"javascript:");
         SafeMarkdownRenderer.Render(md).Should().NotContain("href=\"javascript:");
     }
+
+    // 9. Scheme handling is an ALLOWLIST, not a javascript/vbscript/data
+    //    denylist. Safe schemes — and relative / scheme-less URLs — pass through
+    //    untouched.
+    [Theory]
+    [InlineData("https://example.com/page")]
+    [InlineData("http://example.com")]
+    [InlineData("mailto:hi@example.com")]
+    [InlineData("tel:+15551234567")]
+    [InlineData("ftp://files.example.com/x")]
+    public void Render_PreservesAllowlistedSchemes(string url)
+    {
+        var html = SafeMarkdownRenderer.Render($"[x]({url})");
+
+        html.Should().Contain($"href=\"{url}\"");
+        html.Should().NotContain("href=\"#\"");
+    }
+
+    [Theory]
+    [InlineData("./docs/page.md")]
+    [InlineData("/absolute/path")]
+    [InlineData("#fragment")]
+    public void Render_PreservesRelativeUrls(string url)
+    {
+        var html = SafeMarkdownRenderer.Render($"[x]({url})");
+
+        html.Should().Contain($"href=\"{url}\"");
+    }
+
+    // 9b. Schemes the old denylist missed (blob:, file:, filesystem:, …) are now
+    //     scrubbed because anything outside the allowlist is treated as dangerous.
+    [Theory]
+    [InlineData("blob:https://evil.example/x")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("filesystem:http://evil.example/x")]
+    public void Render_NeutralisesNonAllowlistedSchemes(string url)
+    {
+        var html = SafeMarkdownRenderer.Render($"[x]({url})");
+
+        html.Should().Contain("href=\"#\"");
+    }
+
+    // 10. IsDangerousScheme is the scrub's core predicate. Pin its WHATWG-style
+    //     parsing directly — including control chars embedded *inside* the scheme
+    //     that the render path would percent-encode away — so the predicate stays
+    //     self-sufficient regardless of how Markdig encodes the emitted href.
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("JavaScript:alert(1)")]
+    [InlineData("  javascript:alert(1)")]      // leading whitespace
+    [InlineData("\tjavascript:alert(1)")]       // leading tab
+    [InlineData("data:image/png;base64,AAAA")] // data: images are blocked too
+    [InlineData("java\tscript:alert(1)")]       // embedded tab (browser strips it -> javascript:)
+    [InlineData("java\nscript:alert(1)")]       // embedded newline
+    [InlineData("java\rscript:alert(1)")]       // embedded CR
+    [InlineData("vbscript:msgbox(1)")]
+    [InlineData("data:text/html,<script>")]
+    [InlineData("blob:https://x")]
+    [InlineData("file:///etc/passwd")]
+    [InlineData("filesystem:http://x")]
+    public void IsDangerousScheme_FlagsScriptCapableAndUnknownSchemes(string url)
+        => SafeMarkdownRenderer.IsDangerousScheme(url).Should().BeTrue();
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("http://example.com")]
+    [InlineData("https://example.com")]
+    [InlineData("HTTPS://EXAMPLE.COM")]         // scheme match is case-insensitive
+    [InlineData("mailto:hi@example.com")]
+    [InlineData("tel:+15551234567")]
+    [InlineData("ftp://files.example.com")]
+    [InlineData("foo.png")]                      // relative, no scheme
+    [InlineData("./foo/bar.png")]
+    [InlineData("/absolute/path")]
+    [InlineData("#fragment")]
+    [InlineData("?query=1")]
+    [InlineData("path/to:thing")]                // ':' is path data, not a scheme
+    [InlineData("javascript%3Aalert(1)")]        // percent-encoded colon -> no real scheme
+    public void IsDangerousScheme_AllowsSafeAndSchemelessUrls(string? url)
+        => SafeMarkdownRenderer.IsDangerousScheme(url).Should().BeFalse();
+
+    // 11. Documents a known structural gap (see docs/markdown.md): UseMediaLinks
+    //     emits a fixed-host <iframe> whose src bypasses the scheme-scrub. Safe
+    //     today because the host prefix is hard-coded https; this golden trips if
+    //     a future Markdig changes how the embed src is assembled.
+    [Fact]
+    public void Render_EmitsFixedHostYouTubeEmbed()
+    {
+        var html = SafeMarkdownRenderer.Render("![v](https://www.youtube.com/watch?v=dQw4w9WgXcQ)");
+
+        html.Should().Contain("<iframe src=\"https://www.youtube.com/embed/dQw4w9WgXcQ\"");
+    }
 }
