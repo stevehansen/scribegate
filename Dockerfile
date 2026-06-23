@@ -1,5 +1,5 @@
 # Stage 1: Build frontend
-FROM node:22-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app/client
 COPY src/Scribegate.Web/Client/package.json src/Scribegate.Web/Client/package-lock.json ./
 RUN npm ci --ignore-scripts
