@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.45.0",
+    "@hey-api/openapi-ts": "^0.97.3",
     "typescript": "~5.9.0"
   },
   "files": ["dist"],
