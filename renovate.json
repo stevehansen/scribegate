@@ -15,7 +15,7 @@
       "allowedVersions": "<8"
     },
     {
-      "description": "package.json carries two scoped ws overrides, both dev-only and both there to keep ws off known-vulnerable versions: jsdom needs ws ^8, @web/dev-server-core 0.7.x needs ws ^7. Renovate reads them as one dep and proposed moving the v7 override to v8 (PR #62), which breaks the test server, and rewriting the v8 override down to v7 (PR #71), which breaks jsdom. Cap the v7 side so only the in-range v7 patches are offered; the jsdom v8 override is untouched by this rule and keeps updating normally.",
+      "description": "@web/dev-server-core 0.7.x requires ws ^7, and package.json pins a scoped override to keep it on a patched v7. Forcing v8 through that override breaks the test server (PR #62). Cap it so only in-range v7 patches are offered. This override used to sit alongside a second one for jsdom on ws ^8; Renovate read the pair as one dep and proposed crossing them in both directions. jsdom 30 dropped its ws dependency entirely, so that override is gone and only this one remains.",
       "matchPackageNames": ["ws"],
       "matchCurrentVersion": "^7",
       "allowedVersions": "<8"
