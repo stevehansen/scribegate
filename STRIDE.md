@@ -73,7 +73,7 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 
 | ID | Threat | Attack Path | L | I | Score | Control (ASVS) | Mitigation |
 |---|---|---|---|---|---|---|---|
-| **S1** | Forged JWT / signature via leaked key file | `.jwt-key` and `.signing-key.pem` are written to the data dir with `File.WriteAllText` (default perms, no restrictive mode). Anyone with read access to the data dir or an unencrypted backup mints tokens for any user incl. admin (`JwtService.cs:62-64`, `SignatureService.cs:29-33`) | 2 | 4 | **8** | V6, V9, V11 | Docker runs non-root (uid 1001), `/data` chowned to app user — limits blast radius. **Recommend:** set `0600` on key files, support an external secret store, add rotation |
+| **S1** ([#72](https://github.com/stevehansen/scribegate/issues/72)) | Forged JWT / signature via leaked key file | `.jwt-key` and `.signing-key.pem` are written to the data dir with `File.WriteAllText` (default perms, no restrictive mode). Anyone with read access to the data dir or an unencrypted backup mints tokens for any user incl. admin (`JwtService.cs:62-64`, `SignatureService.cs:29-33`) | 2 | 4 | **8** | V6, V9, V11 | Docker runs non-root (uid 1001), `/data` chowned to app user — limits blast radius. **Recommend:** set `0600` on key files, support an external secret store, add rotation |
 | S2 | Account enumeration | Login short-circuits before BCrypt when the email is unknown → timing oracle (`AuthEndpoints.cs:206`); register returns explicit `EMAIL_TAKEN` / `USERNAME_TAKEN` (`:132-144`) | 3 | 2 | 6 | V6, V7 | Login error message is generic. **Recommend:** dummy-hash verify on unknown user; generic register conflict |
 | S3 | Stolen-token replay (no revocation) | JWT valid until 24h expiry; logout is client-only (`auth-state.ts:77-82`); `jti` minted but never tracked → no server-side invalidation on theft/password change | 2 | 3 | 6 | V7, V9 | 24h expiry, HS256 fully validated (issuer/audience/lifetime, `Program.cs:131-141`). **Recommend:** `jti` denylist or token-version claim |
 | S4 | OIDC self-provisioning bypasses lockdown | Disabling `RegistrationEnabled` does not stop OIDC auto-provisioning (own `OidcAutoProvision` gate, `OidcEndpoints.cs:140-142`); OIDC path also skips the ToS gate | 2 | 3 | 6 | V10 | Email-verified claim required before linking to an existing account (`:115-134`). **Recommend:** gate auto-provision behind `RegistrationEnabled`; enforce ToS on OIDC |
@@ -125,7 +125,7 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 
 | ID | Threat | Attack Path | L | I | Score | Control (ASVS) | Mitigation |
 |---|---|---|---|---|---|---|---|
-| **E1** | Over-privileged API token | The `scope` field exists but is unenforced — creation rejects any non-empty scope (`AuthEndpoints.cs:333-336`) and the handler grants no scope claim, so every `sg_` token carries the owner's **full identity incl. global admin**, over both REST and git HTTP Basic. A token leaked from CI or an AI agent = full compromise | 2 | 4 | **8** | V8, V9 | Tokens SHA-256 hashed, optional expiry, last-used tracking, hard-delete revocation. **Recommend:** implement scope enforcement; least-privilege tokens; separate read-only clone tokens |
+| **E1** ([#73](https://github.com/stevehansen/scribegate/issues/73)) | Over-privileged API token | The `scope` field exists but is unenforced — creation rejects any non-empty scope (`AuthEndpoints.cs:333-336`) and the handler grants no scope claim, so every `sg_` token carries the owner's **full identity incl. global admin**, over both REST and git HTTP Basic. A token leaked from CI or an AI agent = full compromise | 2 | 4 | **8** | V8, V9 | Tokens SHA-256 hashed, optional expiry, last-used tracking, hard-delete revocation. **Recommend:** implement scope enforcement; least-privilege tokens; separate read-only clone tokens |
 | E2 | Admin bootstrap race | First registered/OIDC user auto-becomes admin (`AuthEndpoints.cs:147`, `OidcEndpoints.cs:155`); registration is on by default; no post-bootstrap promotion API exists | 2 | 3 | 6 | V8 | Standard first-run pattern. **Recommend:** operator registers immediately, then disable registration; document the bootstrap window |
 | E3 | Self-approval of own proposal | Author approves/merges their own proposal | 1 | 3 | 3 | V2, V8 | Blocked in the approval path (`ProposalApprovalService.cs:26-27`) and the eligible-approval tally excludes the author and non-reviewers; self-review allowed only for `Comment` verdicts |
 
@@ -137,8 +137,8 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 
 | ID | Threat | Score | Status | Recommendation |
 |---|---|---|---|---|
-| **S1** | Forged JWT / signature via leaked key file | 8 | Open | Restrict key-file permissions (`0600`), support external secret storage, add rotation |
-| **E1** | Over-privileged (unscoped, admin-capable) API tokens | 8 | Open | Enforce token scopes; issue least-privilege / read-only tokens |
+| **S1** | Forged JWT / signature via leaked key file | 8 | Open — [#72](https://github.com/stevehansen/scribegate/issues/72) | Restrict key-file permissions (`0600`), support external secret storage, add rotation |
+| **E1** | Over-privileged (unscoped, admin-capable) API tokens | 8 | Open — [#73](https://github.com/stevehansen/scribegate/issues/73) | Enforce token scopes; issue least-privilege / read-only tokens |
 
 ### Notable medium findings (Score 6)
 
