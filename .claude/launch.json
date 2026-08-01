@@ -1,0 +1,28 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "src/Scribegate.Web",
+        "--urls",
+        "http://localhost:5199"
+      ],
+      "port": 5199
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "src/Scribegate.Web/Client",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    }
+  ]
+}
