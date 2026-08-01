@@ -303,3 +303,32 @@ Git-compatible read-only clone is served outside `/api/v1/` as a dumb-HTTP trans
 - **CI/CD:** GitHub Actions with trusted publishing (OIDC, no stored keys). See P:\eidet for reference configs.
 - **Errors:** Structured, actionable. Every error has a code, message, details with fix suggestion, and field reference.
 - **Audit/Tracing:** Every mutation is traced (who, what, when, IP). Revisions are immutable, append-only, and signed with ECDSA P-256. Audit events logged for all mutations with actor, target, and JSON details. Admin audit log viewer in the UI.
+
+## Security Documentation
+
+### STRIDE.md Threat Model
+
+This repository includes a STRIDE threat model (`STRIDE.md`) for security analysis.
+
+**When to update STRIDE.md:**
+- Adding new authentication/authorization mechanisms
+- Changing data storage, encryption, or secrets handling
+- Adding new external integrations or API endpoints
+- Modifying trust boundaries (new external connections, database access)
+- After security incidents or penetration test findings
+- When addressing security recommendations from the document
+- **When a change mitigates or resolves an existing finding** — move it to Mitigated/Resolved (update the mitigation text, score/status, and risk-summary row)
+
+**Updates are bidirectional and ride in the same PR.** Whether a change *introduces/surfaces* a threat or *mitigates/resolves* one, the matching `STRIDE.md` edit ships in the **same PR** as the code/config change — never as a follow-up. A fix that closes a tracked finding is not done until `STRIDE.md` (and the linked issue's status) reflects it. Treat a security-relevant diff with no STRIDE.md change as incomplete.
+
+**How to update:**
+1. Add new threats to the relevant STRIDE category (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege)
+2. Assess likelihood (Very Low → High) and impact (Low → Critical)
+3. Document existing mitigations or add recommendations
+4. Link GitHub issues for unresolved findings
+5. Update the Review History table
+6. Update version if using frontmatter
+
+**Tracking critical findings:**
+- Critical/High risk findings should have a linked GitHub issue with `security` label
+- Review STRIDE.md annually or after major releases
