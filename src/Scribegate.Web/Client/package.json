@@ -37,7 +37,6 @@
   },
   "devDependencies": {
     "@open-wc/testing": "^4.0.0",
-    "@types/dompurify": "^3.0.5",
     "@types/prismjs": "^1.26.6",
     "@vitest/coverage-v8": "^4.1.4",
     "jsdom": "^25.0.0",
