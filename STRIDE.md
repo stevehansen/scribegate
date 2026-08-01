@@ -118,8 +118,9 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 | D1 | Export / static-site resource exhaustion | `GET /export` and `GET /site` are authenticated but **not** rate-limited; CPU/IO-heavy, load each document whole into memory, up to a 1 GiB zip (`ExportEndpoints.cs:22`, `SiteEndpoints.cs:25`) | 3 | 2 | 6 | infra | 1 GiB cap + streamed temp file. **Recommend:** add `RequireRateLimiting` and/or a concurrency gate |
 | D2 | Rate-limit collapse behind proxy | Per-IP limiters key on the proxy IP (R1) → auth/share/git buckets become a single shared global bucket; one client can exhaust the auth bucket for everyone | 3 | 2 | 6 | infra | Buckets still bound total attempts. **Recommend:** `ForwardedHeaders` so limits key on the real client; proxy-level limiting |
 | D3 | Webhook queue / delivery abuse | Flood of events overruns the bounded delivery channel | 1 | 1 | 1 | infra | Bounded channel (1024, `DropWrite`); auto-disable after 10 failures; per-attempt + client timeouts |
+| ~~D4~~ | ~~Process kill via deeply nested YAML frontmatter~~ | Frontmatter is attacker-supplied and parsed on document create/update (`EfDocumentCommandContext.ExtractFrontmatterJson`), proposal approval, and static-site generation. Under YamlDotNet **16.3.0**, a few hundred levels of flow-style nesting (`key: [[[[…]]]]`) overflowed the stack inside `Parser.ParseNode`. `StackOverflowException` cannot be caught in .NET, so `FrontmatterService.Parse`'s catch-all was powerless — the entire ASP.NET Core process died. Single-process deployment, so one authenticated document write = full outage, repeatable at will | ~~3~~ | ~~4~~ | ~~**12**~~ | V5, V12 | **Resolved 2026-08-01** — YamlDotNet 18.1.0. YamlDotNet 17 added a deserializer recursion ceiling that raises a catchable `MaximumRecursionLevelReachedException`, which `Parse`'s existing catch absorbs into the "not frontmatter, treat as body" path. Verified empirically both ways: on 16.3.0 the test host itself dies with `Stack overflow.` (exit 127), on 18.1.0 it returns cleanly. Pinned by `FrontmatterServiceTests` |
 
-**Countermeasures in place:** surgical rate limits on auth (10/15min), content-create (30/15min), search (200/min), share-resolve (100/min), reports (5/hr), git refs (60/min) / objects (2000/min); password max 128 chars (bounds BCrypt input); 1 GiB export cap; bounded webhook queue with auto-disable.
+**Countermeasures in place:** surgical rate limits on auth (10/15min), content-create (30/15min), search (200/min), share-resolve (100/min), reports (5/hr), git refs (60/min) / objects (2000/min); password max 128 chars (bounds BCrypt input); 1 GiB export cap; bounded webhook queue with auto-disable; YamlDotNet recursion ceiling on frontmatter parsing.
 
 ### 2.6 Elevation of Privilege
 
@@ -139,6 +140,7 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 |---|---|---|---|---|
 | **S1** | Forged JWT / signature via leaked key file | 8 | Open — [#72](https://github.com/stevehansen/scribegate/issues/72) | Restrict key-file permissions (`0600`), support external secret storage, add rotation |
 | **E1** | Over-privileged (unscoped, admin-capable) API tokens | 8 | Open — [#73](https://github.com/stevehansen/scribegate/issues/73) | Enforce token scopes; issue least-privilege / read-only tokens |
+| ~~**D4**~~ | ~~Process kill via deeply nested YAML frontmatter~~ | ~~12~~ | **Resolved** 2026-08-01 | Done — YamlDotNet 16.3.0 → 18.1.0 brings a catchable recursion ceiling; regression-tested |
 
 ### Notable medium findings (Score 6)
 
@@ -173,6 +175,7 @@ S2 account enumeration · S3 no JWT revocation · S4 OIDC bypasses registration 
 |---|---|---|---|
 | 2026-07-09 | v1 | C. (Claude Code) | Initial STRIDE threat model. 16 threats across all six categories; 2 high-priority (S1 key-file permissions, E1 unscoped API tokens). Reviewed against commit `24bb57b`. |
 | 2026-08-01 | v1.1 | C. (Claude Code) | Reconciliation pass against `SECURITY.md`, which asserted four guarantees the code does not make (signature verify API, audit immutability, session inactivity expiry, image source allowlist). `SECURITY.md` corrected and cross-linked; no existing finding changed. Added **I5** (viewer IP disclosure via remote images), surfaced while checking the image-allowlist claim. 17 threats. |
+| 2026-08-01 | v1.2 | C. (Claude Code) | Added **D4** (process kill via deeply nested YAML frontmatter) and closed it in the same change. Surfaced while reviewing the YamlDotNet 16 → 18 dependency bump: v17's new deserializer recursion ceiling prompted a check of what v16 did without one, and the answer was an uncatchable `StackOverflowException`. Highest-scoring finding recorded to date (12) and the only one found already fixed by the change that surfaced it. 18 threats. |
 
 ## 6. References
 
