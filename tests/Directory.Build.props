@@ -1,5 +1,9 @@
 <Project>
 
+  <!-- MSBuild stops at the nearest Directory.Build.props, so without this the root
+       one never applies to test projects. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove($(MSBuildThisFileName)$(MSBuildThisFileExtension), $(MSBuildThisFileDirectory)../))" />
+
   <PropertyGroup>
     <!-- xUnit v3 recommends threading TestContext.Current.CancellationToken
          through every async call. For the seed tests we keep things minimal;

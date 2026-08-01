@@ -1,0 +1,17 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Commit a packages.lock.json per project. This is what lets GitHub build the
+         NuGet transitive graph — without it Dependabot raises no NuGet alerts at all,
+         and Renovate only ever sees top-level PackageReferences. CVE-2025-6965 sat
+         unflagged in a transitive SQLitePCLRaw for exactly that reason.
+
+         CI deliberately restores without locked mode: Renovate bumps the csproj but
+         does not always refresh the lock file, and a hard gate would fail every such
+         PR. Restore therefore updates the lock file in place when a reference changes;
+         run `dotnet restore /p:RestoreForceEvaluate=true` and commit the result when a
+         Renovate PR leaves one stale. -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+
+</Project>
