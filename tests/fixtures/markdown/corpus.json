@@ -118,5 +118,17 @@
     "description": "Thematic break — Markdig emits <hr />, marked emits <hr>",
     "markdown": "Before.\n\n---\n\nAfter.",
     "parity": "diverges"
+  },
+  {
+    "id": "list-loose",
+    "description": "Loose list — blank lines between items wrap each in <p>",
+    "markdown": "- alpha\n\n- beta\n\n- gamma",
+    "parity": "exact"
+  },
+  {
+    "id": "task-list-loose",
+    "description": "Loose GFM task list — exercises the list/checkbox token model marked 17 reworked",
+    "markdown": "- [x] done\n\n- [ ] todo",
+    "parity": "diverges"
   }
 ]
