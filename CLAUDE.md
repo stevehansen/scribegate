@@ -138,7 +138,8 @@ docs/
 | `docs/legal/terms.md` | Terms of Service for the managed service |
 | `docs/legal/acceptable-use.md` | Acceptable Use Policy — what's prohibited, reactive moderation stance |
 | `docs/legal/takedown.md` | Notice-and-action (EU DSA Art. 16) and DMCA-style copyright flow, DSA Art. 11 designated contact |
-| `SECURITY.md` | Security model, auth, validation, rate limiting philosophy, logging & retention |
+| `SECURITY.md` | Security **design** — auth, validation, rate limiting philosophy, logging & retention, vuln reporting |
+| `STRIDE.md` | Security **threat model** — enumerated threats scored L×I, ASVS citations, open findings. The adversarial counterpart to `SECURITY.md`; see the same-PR rule below |
 | `CONTRIBUTING.md` | Dev setup, coding conventions, commit format, agent guide |
 
 ## Conventions

@@ -1,6 +1,8 @@
 # Scribegate — STRIDE Threat Model
 
-> Scope: the self-hostable and managed (`scribegate.dev`) ASP.NET Core application in this repository — Core / Data / Web layers, the SPA, the `sg` CLI, and the operational boundaries (reverse proxy, SMTP, OIDC provider, outbound webhooks, git clients). Last reviewed against commit `24bb57b` on 2026-07-09.
+This document is the adversarial view — enumerated threats, scored risk, and open weaknesses. For the design view — what the system does and what it guarantees — see [SECURITY.md](SECURITY.md), which also carries the vulnerability-reporting process.
+
+> Scope: the self-hostable and managed (`scribegate.dev`) ASP.NET Core application in this repository — Core / Data / Web layers, the SPA, the `sg` CLI, and the operational boundaries (reverse proxy, SMTP, OIDC provider, outbound webhooks, git clients). Full review against commit `24bb57b` on 2026-07-09; last amended 2026-08-01 (v1.1 — see §5).
 
 ## 1. System Overview
 
@@ -105,6 +107,7 @@ Scoring: **Likelihood (1 Rare · 2 Unlikely · 3 Possible · 4 Likely) × Impact
 | I2 | Secrets / keys plaintext at rest | SMTP/OIDC/webhook secrets stored as plaintext DB rows; JWT + ECDSA keys plaintext on disk; SQLite file unencrypted. A DB or backup leak exposes all of it | 2 | 3 | 6 | V13, V14 | `.gitignore` excludes `data/` + `*.db`. **Recommend:** filesystem/volume encryption (managed hosting uses encrypted volumes); encrypt secret-typed settings |
 | I3 | JWT exfiltration from `localStorage` | Token in `localStorage['sg_token']` is readable by any script on the origin should an XSS bypass occur (`auth-state.ts:45`) | 2 | 3 | 6 | V3, V7 | Strong CSP (`script-src 'self'`) + strict sanitization make XSS hard. **Recommend:** consider `HttpOnly` cookie session |
 | I4 | Private-repo existence disclosure | Inline `403` role checks in webhooks/templates/membership endpoints leak existence, vs `AuthorizationHelper`'s `404` mask elsewhere (`WebhookEndpoints.cs:42-43`, `TemplateEndpoints.cs:91`, `MembershipEndpoints.cs:193`) | 2 | 1 | 2 | V8 | Read paths (docs/reviews/members/repos) use the 404 mask. **Recommend:** route all repo authz through `AuthorizationHelper` |
+| I5 | Viewer IP disclosure via remote images | Markdown may reference any `https:` host (`img-src 'self' data: blob: https:`; DOMPurify allows `img`/`src` with no host check). A tracking pixel in a document, comment, or proposal leaks every viewer's IP + User-Agent to a third party — including anonymous visitors on public repos and share links, who never authenticated | 3 | 1 | 3 | V3, V13 | None specific; CSP bounds the scheme but not the host. **Recommend:** optional `img-src` host allowlist setting, or proxy remote images through the instance. For managed hosting this is author-initiated, not operator-initiated, so it does not contradict the no-third-party-analytics stance in `docs/legal/privacy.md` — but it is worth disclosing |
 
 **Countermeasures in place:** structured errors with no stack traces in production; 404-vs-403 existence hiding on the primary read surface; no secrets in `appsettings.json`; JWT/OIDC token kept out of query strings/Referer; TLS in transit; audit IP pruned after 90 days.
 
@@ -147,6 +150,7 @@ S2 account enumeration · S3 no JWT revocation · S4 OIDC bypasses registration 
 - **SQLite unencrypted at rest (I2)** — self-hosted operators control disk encryption; managed hosting uses encrypted volumes. Accepted with operator guidance.
 - **Client-supplied media Content-Type, no magic-byte check (T2)** — neutralized by `Content-Disposition: attachment` + `nosniff`. Accepted.
 - **Anonymous read of public-repo media (no share token required)** — by design for public repositories.
+- **Remote images load from arbitrary hosts (I5)** — blocking them would break legitimate documents that embed external diagrams and badges. Accepted; revisit if an `img-src` allowlist is requested.
 
 ## 4. Security Controls Summary
 
@@ -168,6 +172,7 @@ S2 account enumeration · S3 no JWT revocation · S4 OIDC bypasses registration 
 | Date | Version | Reviewer | Notes |
 |---|---|---|---|
 | 2026-07-09 | v1 | C. (Claude Code) | Initial STRIDE threat model. 16 threats across all six categories; 2 high-priority (S1 key-file permissions, E1 unscoped API tokens). Reviewed against commit `24bb57b`. |
+| 2026-08-01 | v1.1 | C. (Claude Code) | Reconciliation pass against `SECURITY.md`, which asserted four guarantees the code does not make (signature verify API, audit immutability, session inactivity expiry, image source allowlist). `SECURITY.md` corrected and cross-linked; no existing finding changed. Added **I5** (viewer IP disclosure via remote images), surfaced while checking the image-allowlist claim. 17 threats. |
 
 ## 6. References
 

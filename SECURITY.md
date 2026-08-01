@@ -1,5 +1,7 @@
 # Security Policy
 
+This document describes the security **design** — what Scribegate does and what it guarantees. For the adversarial view — enumerated threats, scored risk, and open weaknesses — see [STRIDE.md](STRIDE.md).
+
 ## Design Principles
 
 Scribegate treats security as a core feature, not a bolt-on. Every design decision balances security with usability, with security winning when there's a conflict.
@@ -8,14 +10,14 @@ Scribegate treats security as a core feature, not a bolt-on. Every design decisi
 
 - All API endpoints require authentication unless explicitly marked public
 - New repositories default to **Private** visibility
-- Sessions expire after inactivity
+- Sessions expire on a fixed clock (JWT lifetime, 24h by default) — not on inactivity, and not revocable server-side ([STRIDE.md](STRIDE.md) S3)
 - HTTPS is enforced in production (the container trusts the reverse proxy for TLS)
 
 ### 2. Transparent Model
 
 The security model is simple enough to explain in one sentence per concept:
 
-- **Authentication** proves who you are (email + password, or OIDC in future milestones)
+- **Authentication** proves who you are (email + password, OIDC, or an API token)
 - **Authorization** determines what you can do (role-based, per repository)
 - **Validation** ensures your input is safe and well-formed (every request, every field)
 - **Audit** records what happened (who changed what, when)
@@ -44,7 +46,7 @@ Confusing security UX leads to workarounds that are worse than no security at al
 
 ## Authentication
 
-Scribegate uses dual-scheme authentication: JWT tokens for interactive users and API tokens for programmatic access. Both schemes produce the same identity, so the rest of the system doesn't care which was used.
+Scribegate uses triple-scheme authentication: JWT tokens for interactive users, API tokens for programmatic access, and OIDC for single sign-on (which issues a JWT on callback). All three produce the same identity, so the rest of the system doesn't care which was used.
 
 ### JWT Tokens (users)
 
@@ -72,10 +74,18 @@ The authentication middleware detects which scheme to use by inspecting the `Aut
 
 Both handlers produce the same `ClaimsPrincipal`, so downstream authorization checks work identically.
 
+### OIDC (single sign-on)
+
+Available to all tiers — no enterprise paywall. Configured at runtime through admin settings, not `appsettings.json`.
+
+- Standard authorization-code flow; on callback the server mints its own JWT and delivers it in the URL fragment, so it stays out of the `Referer` header and proxy logs, then scrubs it from browser history
+- Linking an OIDC identity to an **existing** local account requires a verified-email claim from the provider
+- Auto-provisioning of unknown users has its own toggle, independent of the `RegistrationEnabled` switch — turning registration off does not by itself close the OIDC path (see [STRIDE.md](STRIDE.md) S4)
+- The local account + API token system remains as a fallback
+
 ### Planned
 
-- OIDC / LDAP integration, available to all tiers (no enterprise paywall)
-- The local account + API token system remains as a fallback
+- LDAP integration
 
 ### Password Requirements
 
@@ -172,8 +182,8 @@ User-supplied markdown has two hardened rendering pipelines:
 ### XSS Prevention
 
 - Markdown rendering strips all JavaScript and event handlers
-- Links are validated (no `javascript:` URLs)
-- Images are allowed but only from approved sources (configurable)
+- Links are scheme-checked on both paths — `javascript:`, `vbscript:`, and `data:` URLs are scrubbed
+- Images may point at any `https:` host: the tag allowlist permits `img`/`src` and the CSP sets `img-src 'self' data: blob: https:`. There is **no** per-instance source allowlist. The tradeoff is that an embedded image discloses the viewer's IP to a third-party host
 - All user-generated content is HTML-encoded in non-markdown contexts
 
 ## Rate Limiting
@@ -202,9 +212,21 @@ Every response includes security headers that protect against common web attacks
 |---|---|---|
 | `X-Content-Type-Options` | `nosniff` | Prevents browsers from MIME-sniffing a response away from the declared type |
 | `X-Frame-Options` | `DENY` | Prevents the page from being embedded in iframes (clickjacking protection) |
-| `Content-Security-Policy` | `default-src 'self'; style-src 'self' 'unsafe-inline'` | Restricts which resources can be loaded. `unsafe-inline` is required for Lit's CSS-in-JS. |
+| `Content-Security-Policy` | See below | Restricts which resources can load. `script-src 'self'` — with no `unsafe-inline` — is the primary backstop behind markdown sanitization. |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Limits information sent in the Referer header |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` | Disables browser features the app never uses |
+| `X-XSS-Protection` | `1; mode=block` | Legacy browsers only; modern ones rely on the CSP above |
 | `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | Forces HTTPS for 1 year (only sent over HTTPS) |
+
+The full CSP:
+
+```
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self';
+frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+```
+
+`style-src` needs `unsafe-inline` for Lit's `css` tagged templates; `script-src` deliberately does not. `img-src` permits `https:` so markdown can reference external images.
 
 ## Cryptographic Signatures
 
@@ -213,7 +235,7 @@ Every revision is signed with **ECDSA P-256** at creation time. This provides ta
 The signing key is generated per instance and stored in the data directory. This means:
 - Self-hosted instances have their own signing key
 - Restoring a backup to a different instance may invalidate signatures (the audit trail remains intact regardless)
-- Signatures can be verified via the API for compliance checks
+- **Verification is not exposed over the API yet.** `SignatureService.VerifyRevision` exists but has no endpoint, so signatures today are tamper-*evidence* for out-of-band inspection, not a client-verifiable attestation. Tracked as [STRIDE.md](STRIDE.md) T3 (accepted for MVP)
 
 ## Audit Trail
 
@@ -225,7 +247,11 @@ Every mutation in the system is logged as an `AuditEvent` with:
 - **Where** — IP address of the request
 - **Details** — JSON with event-specific data
 
-Admins can view the audit log via `GET /api/v1/admin/audit` or the web UI's admin panel. The audit log is append-only — events cannot be modified or deleted.
+Admins can view the audit log via `GET /api/v1/admin/audit` or the web UI's admin panel.
+
+The audit log is append-only **by store convention**: `IAuditEventStore` exposes create, list, count, and the IP prune — there is no update or delete path, and no endpoint reaches one. The single write that touches an existing row is the 90-day IP prune, which nulls the `IpAddress` column and leaves the rest of the event intact.
+
+Append-only is *not* enforced at the database layer, so an actor with direct filesystem or SQLite access can still rewrite history. See [STRIDE.md](STRIDE.md) T3/R2.
 
 ## Data Protection
 
