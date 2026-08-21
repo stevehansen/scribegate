@@ -7,12 +7,14 @@ You are about to add or modify an API endpoint in Scribegate. Load the full vert
 
 ## Required reads (parallelize)
 
-1. `CLAUDE.md` — layer rule, conventions, existing endpoint list (check for duplicates)
-2. `docs/architecture.md` — error-handling philosophy, authorization model
-3. `src/Scribegate.Web/Api/` — pick 1–2 existing endpoint files closest to the target domain (e.g. `ShareLinkEndpoints.cs`, `TemplateEndpoints.cs`, `WebhookEndpoints.cs`) as templates
-4. `src/Scribegate.Web/Api/AuthorizationHelper.cs` and `UserContext.cs` — how auth/role gating is expressed
-5. `src/Scribegate.Web/Api/ApiResults.cs` — structured error helpers
-6. `src/Scribegate.Web/Program.cs` — endpoint registration wiring
+1. `CLAUDE.md` — layer rule, conventions, doc-sync rules
+2. `docs/api.md` — the complete endpoint index (check for duplicates)
+3. `docs/domains/index.md` → the living spec for the domain you're touching — its invariants and gotchas are what a new endpoint most often violates
+4. `docs/architecture.md` — error-handling philosophy, authorization model
+5. `src/Scribegate.Web/Api/` — pick 1–2 existing endpoint files closest to the target domain (e.g. `ShareLinkEndpoints.cs`, `TemplateEndpoints.cs`, `WebhookEndpoints.cs`) as templates
+6. `src/Scribegate.Web/Api/AuthorizationHelper.cs` and `UserContext.cs` — how auth/role gating is expressed
+7. `src/Scribegate.Web/Api/ApiResults.cs` — structured error helpers
+8. `src/Scribegate.Web/Program.cs` — endpoint registration wiring
 
 ## Vertical-slice checklist
 
@@ -28,7 +30,7 @@ For a new endpoint, work through (in order):
 5. **OpenAPI** — verify Swagger shows it; client libraries regenerate from the spec.
 6. **CLI** — if user-facing, add a `sg` command in `src/Scribegate.Cli/`.
 7. **Frontend** — if UI-visible, add API client method under `src/Scribegate.Web/Client/src/api/` and a component/page.
-8. **Docs** — update the endpoint table in `CLAUDE.md` and `docs/api.md`.
+8. **Docs** — add the route to `docs/api.md`, and update the owning `docs/domains/<domain>.md` spec in the **same PR** if the change touches an invariant or adds a gotcha.
 9. **Tests** — add coverage if a test project exists (check `Scribegate.slnx`).
 
 ## Must-ask-yourself

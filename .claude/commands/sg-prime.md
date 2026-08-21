@@ -9,10 +9,11 @@ You are starting (or resuming) work on **Scribegate**. Load the core context bef
 
 Read these in parallel:
 
-1. `CLAUDE.md` — project overview, architecture decisions, conventions, milestone checklist
-2. `docs/spec.md` — full PRD (skim for the section matching the current milestone in CLAUDE.md)
-3. `docs/design-decisions.md` — frontmatter schema, URL/ownership model, share links, CLI design
-4. `docs/architecture.md` — layered architecture, entity relationships, error handling
+1. `CLAUDE.md` — project overview, architecture decisions, conventions, current milestone
+2. `docs/domains/index.md` — the domain index. Once the user names a focus area, read that domain's living spec (`docs/domains/<domain>.md`) before anything else; it carries the invariants and gotchas
+3. `docs/spec.md` — full PRD (skim § 7 for the milestone checklists)
+4. `docs/design-decisions.md` — frontmatter schema, URL/ownership model, share links, CLI design
+5. `docs/architecture.md` — layered architecture, entity relationships, error handling
 
 Then call `eidet_context` to load persistent project memory, and `eidet_recall` with a query describing the user's stated focus (if any).
 
@@ -23,6 +24,7 @@ Then call `eidet_context` to load persistent project memory, and `eidet_recall` 
 - **Owner/repo URLs everywhere.** `{owner}/{slug}` in API, SPA, CLI, git clone.
 - **Errors are structured** (code, message, details, field). No stack traces in prod.
 - **Conventional commits** with scopes: `core`, `data`, `web`, `api`, `auth`, `cli`, `ui`, `docs`.
+- **Same-PR doc sync:** a change to a domain's behavior updates `docs/domains/<domain>.md` in the same PR; a security-relevant change updates `STRIDE.md` in the same PR.
 
 ## User focus
 

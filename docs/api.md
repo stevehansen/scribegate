@@ -58,8 +58,10 @@ All endpoints require authentication unless marked otherwise. Use either:
 | `POST` | `/api/v1/repositories/{owner}/{slug}/documents` | Yes | Create document |
 | `GET` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | No | Get document with content |
 | `PUT` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | Yes | Update document (creates revision) |
-| `DELETE` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | Yes | Delete document |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/documents/{path}` | Yes | Delete document (soft-archives it) |
 | `POST` | `/api/v1/repositories/{owner}/{slug}/documents/move/{path}` | Yes | Rename/move document |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/documents/archive/{path}` | Yes | Archive (soft-delete) document |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/documents/unarchive/{path}` | Yes | Restore an archived document |
 
 ### Revisions
 
@@ -114,6 +116,7 @@ All endpoints require authentication unless marked otherwise. Use either:
 | `GET` | `/api/v1/repositories/{owner}/{slug}/media` | No | List media assets |
 | `GET` | `/api/v1/repositories/{owner}/{slug}/media/{id}` | No | Get media asset info |
 | `GET` | `/api/v1/repositories/{owner}/{slug}/media/{id}/download` | No | Download media file |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/media/by-name/{fileName}` | No | Resolve media by filename (backs `![](foo.png)` refs; newest upload wins) |
 | `DELETE` | `/api/v1/repositories/{owner}/{slug}/media/{id}` | Owner/Admin | Delete media |
 
 ### Search
@@ -151,6 +154,59 @@ All endpoints require authentication unless marked otherwise. Use either:
 | `GET` | `/api/v1/reports` | Admin | List reports |
 | `GET` | `/api/v1/reports/{id}` | Admin | Get report |
 | `PUT` | `/api/v1/reports/{id}` | Admin | Resolve report |
+
+### Share links
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/repositories/{owner}/{slug}/shares` | Contributor+ | Create share link (raw token returned once) |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/shares` | Yes | List share links (`?path=` to scope to one document) |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/shares/{id}` | Creator/Repo admin | Revoke share link |
+| `GET` | `/api/v1/shares/{token}` | No | Resolve a public share link (rate-limited; 410 when revoked/expired) |
+| `GET` | `/api/v1/shares/{token}/media/by-name/{fileName}` | No | Resolve share-scoped media by filename (rate-limited) |
+
+### Webhooks
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/api/v1/repositories/{owner}/{slug}/webhooks` | Repo admin | Create webhook |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/webhooks` | Repo admin | List webhooks |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/webhooks/{id}` | Repo admin | Get webhook |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/webhooks/{id}` | Repo admin | Update webhook (`?resetSecret` to rotate) |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/webhooks/{id}` | Repo admin | Delete webhook |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/webhooks/{id}/deliveries` | Repo admin | Recent delivery attempts |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/webhooks/{id}/test` | Repo admin | Send a `ping` directly to this hook (rate-limited) |
+
+### Templates
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/repositories/{owner}/{slug}/templates` | No | List markdown templates |
+| `POST` | `/api/v1/repositories/{owner}/{slug}/templates` | Repo admin | Create template |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/templates/{id}` | No | Get template |
+| `PUT` | `/api/v1/repositories/{owner}/{slug}/templates/{id}` | Repo admin | Update template |
+| `DELETE` | `/api/v1/repositories/{owner}/{slug}/templates/{id}` | Repo admin | Delete template |
+
+### Export & static site
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/v1/repositories/{owner}/{slug}/export` | Member, or any authenticated user for public repos | Download the repository as a streamed zip of markdown |
+| `GET` | `/api/v1/repositories/{owner}/{slug}/site` | Member, or any authenticated user for public repos | Generate a static HTML site as a streamed zip |
+
+Both cap at 1 GiB and record what they skipped in the archive's manifest rather than truncating the stream.
+
+### Git clone (outside `/api/v1/`)
+
+Read-only [dumb-HTTP](https://git-scm.com/docs/http-protocol) transport, served at the repository's web path:
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/{owner}/{slug}.git/info/refs` | Public: none · Private: Basic | Ref advertisement (rate-limited 60/min/IP) |
+| `GET` | `/{owner}/{slug}.git/HEAD` | Public: none · Private: Basic | Symbolic HEAD |
+| `GET` | `/{owner}/{slug}.git/objects/...` | Public: none · Private: Basic | Loose objects, pack files, pack indexes (rate-limited 2000/min/IP) |
+
+Private repositories authenticate with HTTP **Basic**, using an `sg_` API token as the password (the username is ignored) — the git CLI does not send bearer tokens. Clones produce one synthetic commit per snapshot; they are not contribution history.
 
 ## Error Responses
 

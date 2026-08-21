@@ -5,7 +5,7 @@ Scribegate renders markdown on two surfaces:
 | Surface | Engine | Where |
 |---|---|---|
 | **Client** (SPA preview, document view, proposal preview, share view) | [`marked`](https://github.com/markedjs/marked) v15 + DOMPurify + Prism + Mermaid | `sg-markdown-view` |
-| **Server** (static-site export zip) | [Markdig](https://github.com/xoofx/markdig) 0.38 + curated extension set | `SiteEndpoints.RenderMarkdown` |
+| **Server** (static-site export zip) | [Markdig](https://github.com/xoofx/markdig) 0.38 + curated extension set | `SafeMarkdownRenderer` (invoked by `SiteEndpoints`) |
 
 Both are driven by the same raw markdown string — authors do not choose a renderer. This page documents which features work on **both** surfaces ("Core" — the safe path), and which work only on **one** ("Server-only" or "Client-only").
 
