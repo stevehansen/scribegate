@@ -18,7 +18,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.15" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="11.0.1" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />
     <PackageReference Include="DiffPlex" Version="1.9.0" />
     <PackageReference Include="Markdig" Version="1.6.0" />
